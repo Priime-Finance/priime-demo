@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://priime.finance/schema/journal.v1.schema.json",
+  "title": "NAV Strike Journal (v1)",
+  "description": "FROZEN v1 contract. One record per NAV strike. Produced by the backend (aggregator component's accumulated keyvalue + on-chain attestation readback) and consumed by the frontend (replay UI, then the identical-shape live-polling API). Do not change field names or types within v1; additive-only changes require a new $id (journal.v2) and a schema_version bump.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "strike_id",
+    "status",
+    "service_id",
+    "vault",
+    "component_digest",
+    "trigger",
+    "inputs_block",
+    "nav_unit",
+    "operators",
+    "quorum",
+    "attestation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0",
+      "description": "Frozen schema version. Bump only with a new $id."
+    },
+    "strike_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique id for this NAV strike. Convention: \"<service_id>:<trigger.block>\". Stable primary key for replay + the live API."
+    },
+    "status": {
+      "enum": ["pending", "settled", "stalled", "rejected"],
+      "description": "Lifecycle. pending: strike open, quorum not yet reached. settled: quorum reached and attestation landed on-chain. stalled: quorum unreachable (e.g. not enough honest operators). rejected: the settled result disagreed with an operator that never joined quorum (informational; a sabotage strike is 'settled' with a rejected operator inside operators[])."
+    },
+    "service_id": {
+      "type": "string",
+      "description": "WAVS service id (hex; hash of the service-manager chain+address). Identifies the vault/strategy's operator set."
+    },
+    "vault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chain_id", "address"],
+      "properties": {
+        "chain_id": { "type": "integer", "minimum": 1 },
+        "address": { "$ref": "#/$defs/evm_address" }
+      },
+      "description": "The vault whose NAV is being attested."
+    },
+    "component_digest": {
+      "$ref": "#/$defs/component_digest",
+      "description": "Content digest of the NAV wasm component every operator ran. With inputs_block, this is the full reproducibility recipe: re-run this exact component at this block and you MUST get result_hash."
+    },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "block"],
+      "properties": {
+        "type": { "enum": ["cron", "block_interval", "evm_event", "manual"] },
+        "block": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Chain block height at which the strike fired."
+        },
+        "tx_hash": {
+          "type": ["string", "null"],
+          "pattern": "^0x[a-fA-F0-9]{64}$",
+          "description": "Originating tx for evm_event triggers; null for cron/block_interval."
+        }
+      }
+    },
+    "inputs_block": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The block height the NAV was computed against (state pinned here). Determinism anchor: all operators read this block, so honest operators produce identical result_hash."
+    },
+    "nav_unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset", "decimals"],
+      "properties": {
+        "asset": { "type": "string", "minLength": 1, "description": "Denomination of every nav value, e.g. \"USDC\"." },
+        "decimals": { "type": "integer", "minimum": 0, "maximum": 36, "description": "Base-unit decimals for every nav value." }
+      },
+      "description": "Unit for all nav / nav_final fields. nav values are integer strings in these base units (no floats, ever)."
+    },
+    "operators": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One entry per operator that submitted for this strike. Honest operators share result_hash; a sabotaging operator has a different result_hash and accepted=false.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "result_hash", "nav", "signature", "timestamp", "accepted"],
+        "properties": {
+          "id": { "$ref": "#/$defs/evm_address", "description": "Operator signing address (recovered from signature; registered in the on-chain operator registry)." },
+          "result_hash": { "$ref": "#/$defs/hash32", "description": "keccak256 of result_payload. Equality across operators == agreement. THE hash the demo shows." },
+          "nav": { "$ref": "#/$defs/uint_string", "description": "NAV this operator computed, integer string in nav_unit base units." },
+          "signature": { "$ref": "#/$defs/signature", "description": "Operator's secp256k1 signature over the WAVS envelope (eip191). Readable back from the on-chain attestation's aggregated signature set." },
+          "timestamp": { "$ref": "#/$defs/unix_secs", "description": "When this operator's submission was observed (unix seconds, UTC)." },
+          "accepted": { "type": "boolean", "description": "True if this submission is part of the quorum-winning set (result_hash == quorum.winning_result_hash)." },
+          "result_payload": { "$ref": "#/$defs/hex_bytes", "description": "Optional. The abi-encoded result bytes that were hashed+signed. Included so anyone can independently recompute keccak256 and decode nav." }
+        }
+      }
+    },
+    "quorum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["threshold", "total", "reached", "winning_result_hash", "transitions"],
+      "properties": {
+        "threshold": { "type": "integer", "minimum": 1, "description": "Quorum threshold (operator weight; equals operator count in the equal-weight demo, e.g. 2 for 2-of-3)." },
+        "total": { "type": "integer", "minimum": 1, "description": "Total registered operator weight for the service (e.g. 3)." },
+        "reached": { "type": "boolean" },
+        "winning_result_hash": {
+          "oneOf": [{ "$ref": "#/$defs/hash32" }, { "type": "null" }],
+          "description": "The result_hash the quorum formed over; null if quorum never reached."
+        },
+        "transitions": {
+          "type": "array",
+          "description": "Ordered fill of the winning group: one entry as each accepted operator arrives, cumulative weight rising to threshold. Drives the 2-of-3 -> 3-of-3 UI animation.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cumulative", "operator_id", "result_hash", "reached", "timestamp"],
+            "properties": {
+              "cumulative": { "type": "integer", "minimum": 1, "description": "Running quorum weight after this operator joined." },
+              "operator_id": { "$ref": "#/$defs/evm_address" },
+              "result_hash": { "$ref": "#/$defs/hash32" },
+              "reached": { "type": "boolean", "description": "True once cumulative >= threshold." },
+              "timestamp": { "$ref": "#/$defs/unix_secs" }
+            }
+          }
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tx_hash", "chain_id", "block_number", "nav_final", "timestamp"],
+      "properties": {
+        "tx_hash": {
+          "oneOf": [{ "$ref": "#/$defs/hash32" }, { "type": "null" }],
+          "description": "On-chain attestation tx that landed the verified NAV; null until settled. Deep-linked to the block explorer via chain_id."
+        },
+        "chain_id": { "type": "integer", "minimum": 1 },
+        "block_number": {
+          "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }],
+          "description": "Block the attestation tx landed in; null until settled."
+        },
+        "nav_final": {
+          "oneOf": [{ "$ref": "#/$defs/uint_string" }, { "type": "null" }],
+          "description": "Settled NAV (== the winning group's nav), integer string in nav_unit base units; null until settled."
+        },
+        "timestamp": {
+          "oneOf": [{ "$ref": "#/$defs/unix_secs" }, { "type": "null" }]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evm_address": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "hash32": { "type": "string", "pattern": "^0x[a-fA-F0-9]{64}$" },
+    "signature": { "type": "string", "pattern": "^0x[a-fA-F0-9]{130}$" },
+    "component_digest": { "type": "string", "pattern": "^(sha256:)?[a-fA-F0-9]{64}$" },
+    "hex_bytes": { "type": "string", "pattern": "^0x([a-fA-F0-9]{2})*$" },
+    "uint_string": { "type": "string", "pattern": "^[0-9]+$" },
+    "unix_secs": { "type": "integer", "minimum": 0 }
+  }
+}

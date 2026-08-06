@@ -1,0 +1,79 @@
+{
+  "schema_version": "1.0.0",
+  "strike_id": "0x39612a013b80268403e871e604e092d7c3ff0c13:49480010",
+  "status": "settled",
+  "service_id": "0x39612a013b80268403e871e604e092d7c3ff0c13",
+  "vault": {
+    "chain_id": 8453,
+    "address": "0x21844Ad9343AC9Aac3d9bD951DD74e95dBcccb42"
+  },
+  "component_digest": "sha256:9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c",
+  "trigger": {
+    "type": "cron",
+    "block": 49480010,
+    "tx_hash": null
+  },
+  "inputs_block": 49480010,
+  "nav_unit": {
+    "asset": "USDC",
+    "decimals": 6
+  },
+  "operators": [
+    {
+      "id": "0x1111111111111111111111111111111111111111",
+      "result_hash": "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "nav": "500000000",
+      "signature": "0xababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "timestamp": 1785600100,
+      "accepted": true,
+      "result_payload": "0x000000000000000000000000000000000000000000000000000000001dcd6500"
+    },
+    {
+      "id": "0x2222222222222222222222222222222222222222",
+      "result_hash": "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "nav": "500000000",
+      "signature": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "timestamp": 1785600102,
+      "accepted": true,
+      "result_payload": "0x000000000000000000000000000000000000000000000000000000001dcd6500"
+    },
+    {
+      "id": "0x3333333333333333333333333333333333333333",
+      "result_hash": "0xdededededededededededededededededededededededededededededededede",
+      "nav": "750000000",
+      "signature": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+      "timestamp": 1785600103,
+      "accepted": false,
+      "result_payload": "0x000000000000000000000000000000000000000000000000000000002cb41780"
+    }
+  ],
+  "quorum": {
+    "threshold": 2,
+    "total": 3,
+    "reached": true,
+    "winning_result_hash": "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "transitions": [
+      {
+        "cumulative": 1,
+        "operator_id": "0x1111111111111111111111111111111111111111",
+        "result_hash": "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "reached": false,
+        "timestamp": 1785600100
+      },
+      {
+        "cumulative": 2,
+        "operator_id": "0x2222222222222222222222222222222222222222",
+        "result_hash": "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "reached": true,
+        "timestamp": 1785600102
+      }
+    ]
+  },
+  "attestation": {
+    "tx_hash": "0x7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b",
+    "chain_id": 8453,
+    "block_number": 49480013,
+    "nav_final": "500000000",
+    "timestamp": 1785600109
+  }
+}
