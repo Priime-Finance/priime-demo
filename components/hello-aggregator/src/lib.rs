@@ -40,11 +40,15 @@ fn submissions() -> Result<Vec<AggregatorAction>, String> {
         let addr: alloy_primitives::Address = handler_address
             .parse()
             .map_err(|e| format!("bad handler address for '{chain_key}': {e}"))?;
-        actions.push(AggregatorAction::Submit(SubmitAction::Evm(EvmSubmitAction {
-            chain: chain_key,
-            address: EvmAddress { raw_bytes: addr.to_vec() },
-            gas_price: None,
-        })));
+        actions.push(AggregatorAction::Submit(SubmitAction::Evm(
+            EvmSubmitAction {
+                chain: chain_key,
+                address: EvmAddress {
+                    raw_bytes: addr.to_vec(),
+                },
+                gas_price: None,
+            },
+        )));
     }
     Ok(actions)
 }
