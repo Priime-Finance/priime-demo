@@ -1,0 +1,22 @@
+[package]
+name = "priime-hello-aggregator"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal WAVS aggregator (wavs:aggregator@2.7.0) for the verifiable-vaults demo."
+license = "MIT"
+
+# Standalone workspace (wasm32-wasip2), detached from the repo-root workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.53.1"
+wit-bindgen-rt = { version = "0.44.0", features = ["bitflags"] }
+wasip2 = "1.0.2"
+alloy-primitives = "1.0.0"
+
+[profile.release]
+lto = true
+strip = true

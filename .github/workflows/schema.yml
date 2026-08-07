@@ -1,0 +1,25 @@
+name: Schema
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  seam:
+    name: journal seam (schema, samples, TS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21
+      - name: typecheck TS binding
+        working-directory: packages/journal-schema
+        run: npx --yes -p typescript@5.6 tsc --noEmit
+      - name: validate samples against schema
+        run: >
+          npx --yes ajv-cli@5 validate
+          -s schema/journal.v1.schema.json
+          -d "schema/samples/*.json"
+          --spec=draft2020 --strict=false
