@@ -136,11 +136,15 @@ mod tests {
 
     #[test]
     fn parses_settled_sample() {
-        let j: Journal = serde_json::from_str(SETTLED).expect("settled sample must match frozen schema");
+        let j: Journal =
+            serde_json::from_str(SETTLED).expect("settled sample must match frozen schema");
         assert_eq!(j.schema_version, SCHEMA_VERSION);
         assert_eq!(j.status, Status::Settled);
         assert_eq!(j.operators.len(), 3);
-        assert!(j.operators.iter().all(|o| o.accepted), "all honest operators accepted");
+        assert!(
+            j.operators.iter().all(|o| o.accepted),
+            "all honest operators accepted"
+        );
         assert!(j.quorum.reached);
         assert_eq!(j.attestation.nav_final.as_deref(), Some("500000000"));
         roundtrip(&j);
@@ -148,17 +152,28 @@ mod tests {
 
     #[test]
     fn parses_sabotage_sample() {
-        let j: Journal = serde_json::from_str(SABOTAGE).expect("sabotage sample must match frozen schema");
+        let j: Journal =
+            serde_json::from_str(SABOTAGE).expect("sabotage sample must match frozen schema");
         assert_eq!(j.status, Status::Settled);
         assert_eq!(j.operators.len(), 3);
 
         let rejected: Vec<&Operator> = j.operators.iter().filter(|o| !o.accepted).collect();
         assert_eq!(rejected.len(), 1, "exactly one sabotaging operator");
 
-        let win = j.quorum.winning_result_hash.as_deref().expect("quorum reached => winning hash");
-        assert_ne!(rejected[0].result_hash, win, "the liar's hash must differ from the quorum's");
+        let win = j
+            .quorum
+            .winning_result_hash
+            .as_deref()
+            .expect("quorum reached => winning hash");
+        assert_ne!(
+            rejected[0].result_hash, win,
+            "the liar's hash must differ from the quorum's"
+        );
         assert!(
-            j.operators.iter().filter(|o| o.accepted).all(|o| o.result_hash == win),
+            j.operators
+                .iter()
+                .filter(|o| o.accepted)
+                .all(|o| o.result_hash == win),
             "every accepted operator shares the winning hash",
         );
         // The vault settled the honest number despite the liar.

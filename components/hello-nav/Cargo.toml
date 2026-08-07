@@ -1,0 +1,25 @@
+[package]
+name = "priime-hello-nav"
+version = "0.1.0"
+edition = "2021"
+description = "Hello-world WAVS operator component (wavs:operator@2.7.0) for the verifiable-vaults demo."
+license = "MIT"
+
+# Standalone workspace: this wasm32-wasip2 component is intentionally detached
+# from the repo-root cargo workspace (which holds native crates) so a host-target
+# workspace build never tries to compile it.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.53.1"
+wit-bindgen-rt = { version = "0.44.0", features = ["bitflags"] }
+wasip2 = "1.0.2"
+alloy-primitives = "1.0.0"
+alloy-sol-types = "1.0.0"
+
+[profile.release]
+lto = true
+strip = true
