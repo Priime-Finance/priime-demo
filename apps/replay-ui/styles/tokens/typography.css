@@ -1,0 +1,42 @@
+/* Source: priime-design-system/project/tokens/typography.css — copied 2026-08-07. */
+/* ============================================================
+   PRIIME · TYPOGRAPHY TOKENS
+   Two families. Geist does all the work; Geist Mono is the
+   signature flourish (metrics, [UPPERCASE LABELS], `// 01`
+   section indices, module codes).
+   Note the inversion: base body is 16px, micro-labels are 12px
+   UPPERCASE mono — compactness reads as "engineered".
+   ============================================================ */
+
+:root {
+  /* ---------- Families ---------- */
+  --font-sans: "Geist", "Geist Placeholder", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ---------- Weights ---------- */
+  --fw-regular: 400; /* @kind font */
+  --fw-medium: 500;  /* @kind font */
+  --fw-semibold: 600;/* @kind font */
+  --fw-bold: 700;    /* @kind font */
+
+  /* ---------- Scale · size / line-height / tracking ---------- */
+  /* Display (hero) */
+  --fs-display: 48px;  --lh-display: 56px;  --ls-display: -.03em;
+  /* H1 */
+  --fs-h1: 36px;       --lh-h1: 44px;       --ls-h1: -.03em;
+  /* H2 (section) */
+  --fs-h2: 28px;       --lh-h2: 36px;       --ls-h2: -.03em;
+  /* H3 (sub) */
+  --fs-h3: 20px;       --lh-h3: 28px;       --ls-h3: -.02em;
+  /* Body */
+  --fs-body: 16px;     --lh-body: 24px;     --ls-body: -.01em;
+  /* Small / caption */
+  --fs-sm: 14px;       --lh-sm: 20px;       --ls-sm: -.01em;
+  /* Micro-label (mono UPPERCASE) */
+  --fs-micro: 12px;    --lh-micro: 16px;    --ls-micro: .08em;
+  /* Pixel / data metric (mono, large) */
+  --fs-metric: 42px;   --lh-metric: 44px;   --ls-metric: .02em;
+
+  /* OpenType: stylistic alternates keep Geist crisp */
+  --feat-sans: "cv03", "cv04", "cv09", "cv11"; /* @kind other */
+}

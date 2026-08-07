@@ -1,0 +1,40 @@
+/* Source: priime-design-system/project/tokens/spacing.css — copied 2026-08-07. */
+/* ============================================================
+   PRIIME · SPACING, RADIUS & LAYOUT TOKENS
+   8px base scale. Sections breathe. Everything snaps to the
+   blueprint grid (64px module) — a 1px misalignment is the
+   whole brand breaking.
+
+   RADIUS is binary by heritage: 0px for structure, 30px for
+   chips. The neumorphic hardware layer adds soft tactile radii
+   (6-22px) for keys, panels and devices.
+   ============================================================ */
+
+:root {
+  /* ---------- Space (8px base) ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+  --sp-9: 96px;
+  --sp-10: 128px;
+
+  /* ---------- Radius ---------- */
+  --r-0: 0px;          /* structural buttons/cards (brutalist heritage) */
+  --r-sm: 6px;         /* tabs, small buttons */
+  --r-key: 9px;        /* keys, buttons (neumorphic) */
+  --r-panel: 14px;     /* panels, cards */
+  --r-screen: 12px;    /* recessed screens */
+  --r-device: 22px;    /* full device body */
+  --r-pill: 30px;      /* chips */
+  --r-round: 50%;      /* knobs, screws, status dots */
+
+  /* ---------- Layout ---------- */
+  --grid-cell: 64px;   /* blueprint module — decoration shares this rhythm */
+  --container: 1180px; /* centered content column max-width */
+  --gutter: 32px;      /* outer page margin */
+}

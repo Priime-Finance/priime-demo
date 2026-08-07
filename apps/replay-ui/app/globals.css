@@ -1,0 +1,1623 @@
+@import "../styles/tokens/base.css";
+@import "../styles/tokens/colors.css";
+@import "../styles/tokens/elevation.css";
+@import "../styles/tokens/fonts.css";
+@import "../styles/tokens/motion.css";
+@import "../styles/tokens/spacing.css";
+@import "../styles/tokens/typography.css";
+
+/*
+ * Two registers, one token set. Dark is the default; light is presenter-
+ * selectable via `data-theme="light"` on <html>.
+ *
+ * colors.css (as shipped by priime-design-system) declares exactly one
+ * theme: the LIGHT aluminium chassis, wired through semantic aliases
+ * (--bg, --surface, --text, ...) at :root. There is no
+ * `@media (prefers-color-scheme: dark)` block and no `[data-theme]`
+ * switch in the token set to "honor" — it ships single-theme, so the app
+ * owns theming.
+ *
+ * DARK (default). This app is an instrument console (NAV strikes, quorum
+ * fills, attestations), not a marketing page, so the default register is
+ * the palette's own dark "hardware/screen" tokens — --k-900/--k-800 (the
+ * black keys/screens), --alu-0 (white-key highlight, used here as primary
+ * text), --ink-300/--g-600 (secondary/faint text), --dash-on-black
+ * (hairlines), --ok-dark (status green tuned for dark screens) — all of
+ * which already exist as raw tokens in the copied colors.css, just unused
+ * by its light-mode semantic layer. The chassis is black; the *controls*
+ * stay aluminium (the register switch is the only one left on the page),
+ * exactly as the kit draws them.
+ *
+ * The dark block is scoped `html:not([data-theme="light"])` rather than
+ * `:root` on purpose: it leaves the kit's own light values in place under
+ * `[data-theme="light"]`, so the light register IS the kit's default look
+ * (--surface-0 card surface, --ink-800/--ink-900 ink, --grad-card plate,
+ * --e-card elevation, --border/--dash hairlines) rather than an invented
+ * palette. Only the handful of aliases listed under [data-theme="light"]
+ * below are moved off the kit default, and each says why.
+ *
+ * LCD screens do NOT flip. Instrument consoles keep their readouts dark on
+ * a light chassis, and the LCD micro-palette (--lcd-red/--lcd-pink) plus
+ * --ok-dark are tuned for exactly that. `.screen` therefore re-declares the
+ * dark ink/status aliases locally in light mode, so everything inside a
+ * screen renders identically in both registers.
+ *
+ * Light still comes from directly above in both registers.
+ *
+ * ============================ CONTENTS ============================
+ *   1  REGISTERS ........ the two token remaps + the screen exception
+ *   2  CONSOLE SHELL .... page grid, content column, masthead, captions
+ *   3  PANEL ............ the plate every region sits on
+ *   4  PRIMITIVES ....... Badge, Chip
+ *   5  SCREEN ........... the recessed LCD field, Readout, Metric
+ *   6  FIELD ROW ........ the read-only parameter well
+ *   7  OPERATOR MODULE .. the per-node card in a strike detail
+ *   8  QUORUM METER ..... the weight ladder
+ *   9  SYSTEM CANVAS .... board, wires, plates, lamps, mini LCDs,
+ *                         the corrupt switch, the vault door
+ *  10  STRIKE TICKER .... the recent-strikes strip
+ *  11  STAGE LAYOUT ..... the two-column stage, DataList, peer rows
+ *  12  THEME SWITCH ..... the presenter's register control
+ *  13  LIGHT REGISTER ... the few rules a token remap cannot carry
+ *  14  RESPONSIVE ....... 1180 / 900 / 640 breakpoints
+ * ==================================================================
+ */
+
+/* ============================================================
+   1 · REGISTERS
+   ============================================================ */
+
+/* ---------- Dark: the default register (no attribute, or "dark") ---------- */
+html:not([data-theme="light"]) {
+  --bg: var(--k-900);
+  --surface: var(--k-800);
+  --text: var(--alu-0);
+  --text-strong: var(--surface-0);
+  --text-muted: var(--ink-300);
+  --text-faint: var(--g-600);
+  --border: var(--dash-on-black);
+
+  /* Console-local semantics, all composed from shipped tokens.
+     --e-plate is the kit's Panel tone="dark" shadow, lifted verbatim from
+     components/layout/Panel.jsx (the token set ships no dark-plate
+     elevation of its own). */
+  --e-plate: 0 26px 46px -18px rgba(0, 0, 0, 0.5);
+  --plate: var(--k-800);
+  --plate-raised: var(--k-700);
+  --grid-ink: color-mix(in srgb, var(--dash-on-black) 55%, transparent);
+  --wash: color-mix(in srgb, var(--surface-0) 4%, transparent);
+  --accent-ink: var(--o-500);
+  --status-ok: var(--ok-dark);
+  --status-warn: var(--warn);
+  --status-bad: var(--lcd-red);
+
+  /* Canvas hardware. SVG `fill` cannot take a CSS gradient, so the canvas
+     gets its own SOLID aliases rather than reusing --plate (which resolves to
+     --grad-card in the light register and would silently paint nothing). */
+  --canvas-bg: var(--k-900);
+  --canvas-plate: var(--k-700);
+  --canvas-plate-edge: var(--dash-on-black);
+  --canvas-wire: var(--dash-on-black);
+  --canvas-ink: var(--alu-0);
+  --canvas-ink-dim: var(--g-600);
+  --vault-face-a: #2f2f2f;
+  --vault-face-b: #101010;
+  --vault-rim-a: #3f3f3f;
+  --vault-rim-b: #191919;
+  --vault-hub-a: #3c3c3c;
+  --vault-hub-b: #1d1d1d;
+  --vault-line: var(--dash-on-black);
+  --vault-spoke: var(--g-500);
+}
+
+/* ---------- Light: the kit's own aluminium chassis ---------- */
+html[data-theme="light"] {
+  /* --surface, --text, --text-strong, --accent, --on-accent are NOT
+     declared here: they keep the values colors.css ships (--surface-0,
+     --ink-800, --ink-900, --o-500, #FFF). That is the point. */
+
+  /* The console draws the kit's .blueprint-grid motif, which pairs
+     --alu-50 with --alu-200 rules (base.css), not --paper with dots. */
+  --bg: var(--alu-50);
+
+  /* The kit's default --text-muted/--text-faint are --ink-500/--ink-300.
+     --ink-300 is documented in colors.css as "faint labels (large/label
+     use only, 2.6:1)" and --ink-500 measures 4.1-4.4:1 on the aluminium
+     page and on the plate's dark gradient end — both under AA, and every
+     faint string in this console (small print, registry labels, peer ids)
+     is 10-14px body/mono text. Both steps therefore take the kit's own
+     doc register, the ink it ships for readable copy on light:
+     --doc-prose (9.3:1) and --doc-callout (5.7-6.2:1). */
+  --text-muted: var(--doc-prose);
+  --text-faint: var(--doc-callout);
+
+  /* Almost every rule in this console is a dashed registration line, which
+     is what --dash is for; the kit's flat --border (#E7E4DD) is too faint
+     to survive dashing on an aluminium page. */
+  --border: var(--dash);
+
+  --e-plate: var(--e-card);
+  --plate: var(--grad-card);
+  --plate-raised: var(--surface-0);
+  --grid-ink: color-mix(in srgb, var(--alu-200) 70%, transparent);
+  --wash: color-mix(in srgb, var(--ink-900) 4%, transparent);
+
+  /* Coloured INK on a light chassis. The kit's light-register colours
+     (--o-600 "orange-text-on-light", --neg, --ok, --warn) are drawn as
+     fills and indicators, and as 10-12px type on aluminium they measure
+     3.4-4.4:1 — just under AA. Each is therefore dropped a step onto the
+     kit's own ink ramp by mixing toward --ink-900: same hue, same role,
+     enough contrast. Percentages are the measured minimum that clears 4.5:1
+     on the surface each one actually lands on (page, plate, or its own
+     wash), with margin. Nothing here is a literal colour.
+     Note these are chassis inks only: the LCD reds and --ok-dark stay
+     inside the screens, re-declared below. */
+  --accent-ink: color-mix(in srgb, var(--o-600) 86%, var(--ink-900));
+  --status-ok: color-mix(in srgb, var(--ok) 52%, var(--ink-900));
+  --status-warn: color-mix(in srgb, var(--warn) 62%, var(--ink-900));
+  --status-bad: color-mix(in srgb, var(--neg) 78%, var(--ink-900));
+
+  /* The canvas is chassis, not screen: it flips with the register. Only the
+     mini LCDs inside it stay dark (see `.lcd` below). */
+  --canvas-bg: var(--alu-50);
+  --canvas-plate: var(--surface-0);
+  --canvas-plate-edge: var(--border-strong);
+  /* A step darker than the plate edge: a dashed 1.6px wire on aluminium needs
+     more than a hairline token to read as a connection. */
+  --canvas-wire: var(--g-300);
+  --canvas-ink: var(--ink-800);
+  --canvas-ink-dim: var(--doc-callout);
+  --vault-face-a: #fbfbf9;
+  --vault-face-b: #d9d9d3;
+  --vault-rim-a: #f2f2ef;
+  --vault-rim-b: #c4c4bf;
+  --vault-hub-a: #ffffff;
+  --vault-hub-b: #d4d4cf;
+  --vault-line: var(--border-strong);
+  --vault-spoke: var(--g-600);
+}
+
+/* The recessed screens are dark hardware in both registers, so they carry the
+   dark register's ink and the LCD micro-palette wherever they sit. Everything
+   inside a `.screen` renders identically in light and dark. */
+html[data-theme="light"] .screen {
+  --text: var(--alu-0);
+  --text-strong: var(--surface-0);
+  --text-muted: var(--ink-300);
+  --text-faint: var(--g-600);
+  --border: var(--dash-on-black);
+  --wash: color-mix(in srgb, var(--surface-0) 4%, transparent);
+  --accent-ink: var(--o-500);
+  --status-ok: var(--ok-dark);
+  --status-warn: var(--warn);
+  --status-bad: var(--lcd-red);
+}
+
+/* ============================================================
+   2 · CONSOLE SHELL
+   ============================================================ */
+
+.console {
+  min-height: 100vh;
+  /* The kit's .blueprint-grid motif: --alu-200 rules on --alu-50 in the light
+     register (base.css), --dash-on-black on --k-900 in the dark one. Both at
+     part strength (--grid-ink) so the plates stay the subject and the grid
+     stays structure. */
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid-ink) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-ink) 1px, transparent 1px);
+  background-size: var(--grid-cell) var(--grid-cell);
+}
+
+.console__inner {
+  /* Content column: the 1180px token plus four blueprint modules, so the
+     three operator plates and the side rail sit side by side when projected. */
+  max-width: calc(var(--container) + var(--grid-cell) * 4);
+  margin: 0 auto;
+  padding: var(--sp-4) var(--gutter) var(--sp-8);
+}
+
+/* ---------- Header ---------- */
+
+.hdr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px dashed var(--border);
+}
+
+.hdr__mark {
+  /* Clearspace >= the height of the ∞ in the wordmark. */
+  display: block;
+  height: 26px;
+  width: auto;
+  margin-right: var(--sp-2);
+}
+
+/* The official wordmark is never recoloured, so each register gets the asset
+   drawn for its background and the other one is simply not rendered. */
+.hdr__mark--light {
+  display: none;
+}
+
+[data-theme="light"] .hdr__mark--dark {
+  display: none;
+}
+
+[data-theme="light"] .hdr__mark--light {
+  display: block;
+}
+
+.hdr__titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.hdr__title {
+  margin: 0;
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+  letter-spacing: var(--ls-h3);
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+
+.hdr__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+}
+
+/* ---------- Page heading + captions ---------- */
+
+.beat__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-4);
+  margin: var(--sp-5) 0 var(--sp-2);
+}
+
+.beat__title {
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  letter-spacing: var(--ls-h2);
+  font-weight: var(--fw-medium);
+  color: var(--text-strong);
+}
+
+.beat__kicker {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  max-width: 78ch;
+}
+
+.caption {
+  margin: var(--sp-3) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  letter-spacing: 0;
+  color: var(--text-muted);
+  border-left: 1px solid var(--o-500);
+  padding-left: var(--sp-3);
+}
+
+.caption--quiet {
+  border-left-color: var(--border);
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  line-height: var(--lh-micro);
+}
+
+.smallprint {
+  margin: var(--sp-3) 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  border-top: 1px dashed var(--border);
+  padding-top: var(--sp-2);
+}
+
+/* ============================================================
+   3 · PANEL (kit: layout/Panel, tone="dark")
+   ============================================================ */
+
+.panel {
+  position: relative;
+  border-radius: var(--r-panel);
+  background: var(--plate);
+  border: 1px solid var(--border);
+  box-shadow: var(--e-plate);
+  padding: var(--sp-5);
+}
+
+.panel--tight {
+  padding: var(--sp-4);
+}
+
+.panel__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.panel__title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: var(--lh-micro);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.panel__idx {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-micro);
+  color: var(--accent-ink);
+}
+
+.panel__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.panel__kicker {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   4 · PRIMITIVES — Badge, Chip (kit: primitives/)
+   ============================================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 26px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-pill);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  background: var(--wash);
+  color: var(--text-muted);
+}
+
+.badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-round);
+  background: currentColor;
+  flex: none;
+}
+
+.badge--ok {
+  color: var(--status-ok);
+  border-color: color-mix(in srgb, var(--status-ok) 55%, transparent);
+  background: color-mix(in srgb, var(--status-ok) 12%, transparent);
+}
+
+.badge--warn {
+  color: var(--status-warn);
+  border-color: color-mix(in srgb, var(--status-warn) 55%, transparent);
+  background: color-mix(in srgb, var(--status-warn) 12%, transparent);
+}
+
+.badge--bad {
+  color: var(--status-bad);
+  border-color: var(--status-bad);
+  background: color-mix(in srgb, var(--status-bad) 16%, transparent);
+}
+
+.badge--accent {
+  color: var(--o-400);
+  border-color: color-mix(in srgb, var(--o-500) 65%, transparent);
+  background: var(--o-wash);
+}
+
+.badge--ghost {
+  color: var(--text-muted);
+  border-style: dashed;
+  background: transparent;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 30px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--wash);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color var(--dur) var(--ease);
+}
+
+a.chip:hover {
+  border-color: var(--o-500);
+}
+
+.chip__label {
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+.chip__arrow {
+  color: var(--accent-ink);
+}
+
+/* ============================================================
+   5 · SCREEN (kit: data/Screen) + METRIC (kit: data/Metric)
+   ============================================================ */
+
+.screen {
+  position: relative;
+  background: var(--lcd-bg);
+  border-radius: var(--r-screen);
+  box-shadow: var(--e-screen);
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  color: var(--text-strong);
+}
+
+.screen__scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--tex-scanline);
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+}
+
+.screen__inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.screen__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.screen__label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--surface-0) 45%, transparent);
+}
+
+.screen__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.screen__status i {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-round);
+  background: currentColor;
+}
+
+/* Readout rows inside a screen: label left, mono value right. */
+.readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 2px 0;
+}
+
+.readout + .readout {
+  border-top: 1px dashed color-mix(in srgb, var(--surface-0) 8%, transparent);
+}
+
+.readout__label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--surface-0) 40%, transparent);
+  flex: none;
+}
+
+.readout__value {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.readout__value--dim {
+  color: color-mix(in srgb, var(--surface-0) 28%, transparent);
+}
+
+.readout__value--ok {
+  color: var(--status-ok);
+}
+
+.readout__value--bad {
+  color: var(--status-bad);
+}
+
+.readout__value--hash {
+  font-size: 14px;
+  font-weight: var(--fw-semibold);
+}
+
+.metric__label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--surface-0) 45%, transparent);
+  margin-bottom: var(--sp-1);
+}
+
+.metric__value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-metric);
+  line-height: var(--lh-metric);
+  letter-spacing: var(--ls-metric);
+  font-weight: var(--fw-semibold);
+  color: var(--lcd-red);
+}
+
+.metric__value--md {
+  font-size: 26px;
+  line-height: 30px;
+}
+
+.metric__value--ok {
+  color: var(--status-ok);
+}
+
+.metric__value--bad {
+  color: var(--status-bad);
+}
+
+.metric__value--idle {
+  color: color-mix(in srgb, var(--surface-0) 26%, transparent);
+}
+
+.metric__unit {
+  color: var(--lcd-pink);
+}
+
+.metric__value--ok .metric__unit {
+  color: color-mix(in srgb, var(--status-ok) 70%, transparent);
+}
+
+.metric__value--bad .metric__unit {
+  color: color-mix(in srgb, var(--status-bad) 70%, transparent);
+}
+
+.metric__value--idle .metric__unit {
+  color: inherit;
+}
+
+.metric__caption {
+  margin-top: var(--sp-1);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--surface-0) 35%, transparent);
+}
+
+/* ============================================================
+   6 · FIELD ROW (kit: primitives/Field, read-only register)
+   ============================================================ */
+
+.fieldrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-1) var(--sp-4);
+  padding: var(--sp-4) 0;
+  /* Rule above each row, never below: the row is not the panel's last child
+     (the facts list is), so a bottom rule would double up with its own. */
+  border-top: 1px dashed var(--border);
+}
+
+.fieldrow__label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Read-only well: the kit's recessed Field input, in the dark register and
+   without the focus state, because these values are scripted config. */
+.fieldrow__value {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 128px;
+  height: 44px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-sm);
+  background: var(--k-900);
+  border: 1px solid var(--border);
+  box-shadow: var(--e-groove);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  color: var(--text-strong);
+}
+
+.fieldrow__help {
+  grid-column: 1;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-faint);
+  max-width: 62ch;
+}
+
+/* ============================================================
+   7 · OPERATOR MODULE (kit: layout/Module)
+   ============================================================ */
+
+.opgrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+.op {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
+  border-radius: var(--r-panel);
+  background: var(--plate);
+  border: 1px solid var(--border);
+  box-shadow: var(--e-plate);
+  transition: border-color var(--dur) var(--ease);
+}
+
+.op--live {
+  border-color: color-mix(in srgb, var(--o-500) 45%, transparent);
+}
+
+.op--rejected {
+  border-color: var(--status-bad);
+}
+
+/* An honest node in a strike that never reached quorum: drift, not alarm. */
+.op--stalled {
+  border-color: var(--status-warn);
+}
+
+.op__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.op__name {
+  font-size: 15px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+
+.op__idx {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--accent-ink);
+}
+
+.op__addr {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.op__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: auto;
+}
+
+/* Operator cards stack badge over registry line so all three plates share the
+   same footer baseline, however long the status copy runs. */
+.op__foot--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+
+.op__weight {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* ============================================================
+   8 · QUORUM METER (kit: data/BarMeter, as a weight ladder)
+   ============================================================ */
+
+.quorum {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.quorum__bar {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-1);
+  height: 30px;
+}
+
+.quorum__seg {
+  flex: 1;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--surface-0) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--surface-0) 10%, transparent);
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.quorum__seg--lit {
+  background: var(--o-500);
+  border-color: var(--o-400);
+}
+
+.quorum__seg--reached {
+  background: var(--status-ok);
+  border-color: var(--status-ok);
+}
+
+/* A weight that never entered the bar: hatched and outlined in alarm red. */
+.quorum__seg--excluded {
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--status-bad) 45%, transparent) 0 2px,
+    transparent 2px 7px
+  );
+  border-color: var(--status-bad);
+}
+
+.quorum__scale {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--surface-0) 40%, transparent);
+}
+
+/* ============================================================
+   9 · SYSTEM CANVAS — the living topology
+   ============================================================ */
+
+/* The canvas is a recessed board dropped into a panel: the console's own
+   blueprint grid, one step darker (or lighter) than the plate around it. */
+.canvaspanel {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+}
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--r-screen);
+  box-shadow: var(--e-groove);
+  overflow: visible;
+}
+
+.canvas__board {
+  fill: var(--canvas-bg);
+}
+
+.canvasgrid {
+  fill: none;
+  stroke: var(--grid-ink);
+  stroke-width: 1;
+}
+
+/* Gradient stops, coloured from CSS because `stop-color` as an SVG attribute
+   does not resolve var(). */
+.vaultstop--face-a {
+  stop-color: var(--vault-face-a);
+}
+.vaultstop--face-b {
+  stop-color: var(--vault-face-b);
+}
+.vaultstop--rim-a {
+  stop-color: var(--vault-rim-a);
+}
+.vaultstop--rim-b {
+  stop-color: var(--vault-rim-b);
+}
+.vaultstop--hub-a {
+  stop-color: var(--vault-hub-a);
+}
+.vaultstop--hub-b {
+  stop-color: var(--vault-hub-b);
+}
+
+/* ---------- Wires ---------- */
+
+.wire {
+  fill: none;
+  stroke: var(--canvas-wire);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wire--read,
+.wire--submit {
+  stroke-width: 1.6;
+  stroke-dasharray: 7 6;
+}
+
+.wire--mesh {
+  stroke-width: 1.2;
+  stroke-dasharray: 2 8;
+  opacity: 0.7;
+}
+
+/* A hot wire is the same route drawn again in the status colour. It travels
+   only when motion is allowed; under reduced motion it simply stays lit. */
+.wire--hot {
+  stroke-width: 2.2;
+  stroke-dasharray: 7 6;
+  animation: wireFlow 700ms linear infinite;
+}
+
+.pulse {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+@keyframes wireFlow {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+
+/* ---------- Node plates ---------- */
+
+.canvasnode {
+  cursor: pointer;
+}
+
+.canvasnode:focus {
+  outline: none;
+}
+
+.plate {
+  fill: var(--canvas-plate);
+  stroke: var(--canvas-plate-edge);
+  stroke-width: 1;
+}
+
+.canvasnode--selected .plate {
+  stroke: var(--o-500);
+  stroke-width: 2;
+}
+
+.canvasnode:focus-visible .plate {
+  stroke: var(--o-500);
+  stroke-width: 2.5;
+}
+
+.canvasnode--sick .plate {
+  stroke: var(--status-bad);
+  stroke-width: 2;
+}
+
+/* A corrupted node buzzes in its socket. The transform lives on an inner
+   group so it never fights the node's own translate. */
+.canvasnode--buzzing .canvasnode__body {
+  animation: nodeBuzz 160ms steps(2, end) infinite;
+}
+
+@keyframes nodeBuzz {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(1.4px, -0.9px);
+  }
+  50% {
+    transform: translate(-1.2px, 1px);
+  }
+  75% {
+    transform: translate(0.9px, 0.7px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+.plate__name {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semibold);
+  fill: var(--canvas-ink);
+}
+
+.plate__index {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  fill: var(--accent-ink);
+}
+
+.plate__addr {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  fill: var(--canvas-ink-dim);
+}
+
+.plate__kicker,
+.plate__foot {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: var(--canvas-ink-dim);
+}
+
+/* ---------- Lamps ---------- */
+
+.lamp {
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.lamp--breathing {
+  animation: lampBreathe 3.6s var(--ease) infinite;
+}
+
+.lamp--alarm {
+  animation: lampAlarm 520ms steps(1, end) infinite;
+}
+
+@keyframes lampBreathe {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes lampAlarm {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+/* ---------- Mini LCDs (dark in BOTH registers, like every screen) ---------- */
+
+.lcd {
+  fill: var(--lcd-bg);
+  stroke: #000;
+  stroke-width: 1;
+}
+
+.lcd__label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: color-mix(in srgb, var(--surface-0) 42%, transparent);
+}
+
+.lcd__value {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  fill: var(--alu-0);
+}
+
+.lcd__metric {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-metric);
+  fill: var(--lcd-red);
+}
+
+.lcd__sim {
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+  fill: var(--warn);
+}
+
+/* Status registers inside a screen use the LCD palette, never the chassis
+   inks, in both light and dark. */
+.lcd__label[data-tone="accepted"],
+.lcd__value[data-tone="accepted"],
+.lcd__metric[data-tone="accepted"] {
+  fill: var(--ok-dark);
+}
+
+.lcd__label[data-tone="bad"],
+.lcd__value[data-tone="bad"],
+.lcd__metric[data-tone="bad"] {
+  fill: var(--lcd-red);
+}
+
+.lcd__label[data-tone="warn"],
+.lcd__value[data-tone="warn"],
+.lcd__metric[data-tone="warn"] {
+  fill: var(--warn);
+}
+
+.lcd__label[data-tone="idle"],
+.lcd__value[data-tone="idle"],
+.lcd__metric[data-tone="idle"] {
+  fill: color-mix(in srgb, var(--surface-0) 30%, transparent);
+}
+
+.lcd__label[data-tone="computing"],
+.lcd__value[data-tone="computing"],
+.lcd__metric[data-tone="computing"],
+.lcd__label[data-tone="submitted"],
+.lcd__value[data-tone="submitted"],
+.lcd__metric[data-tone="submitted"] {
+  fill: var(--o-400);
+}
+
+/* ---------- The corrupt switch ---------- */
+
+.corrupt {
+  cursor: pointer;
+}
+
+.corrupt__track {
+  fill: var(--canvas-bg);
+  stroke: var(--canvas-plate-edge);
+  stroke-width: 1;
+  transition: fill var(--dur) var(--ease);
+}
+
+.corrupt--on .corrupt__track {
+  fill: color-mix(in srgb, var(--lcd-red) 30%, transparent);
+  stroke: var(--status-bad);
+}
+
+.corrupt__thumb {
+  fill: var(--vault-hub-a);
+  stroke: var(--canvas-plate-edge);
+  stroke-width: 1;
+  transition: cx var(--dur) var(--ease);
+}
+
+.corrupt--on .corrupt__thumb {
+  fill: var(--lcd-red);
+  stroke: var(--lcd-red);
+}
+
+.corrupt__label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+  fill: var(--canvas-ink-dim);
+}
+
+.corrupt--on .corrupt__label {
+  fill: var(--status-bad);
+}
+
+.corrupt:focus {
+  outline: none;
+}
+
+.corrupt:focus-visible .corrupt__track {
+  stroke: var(--o-500);
+  stroke-width: 2;
+}
+
+/* ---------- The vault door ---------- */
+
+.vaultdoor__bezel {
+  fill: url(#vaultBezel);
+  stroke: var(--vault-line);
+  stroke-width: 1.5;
+}
+
+/* The vault has no `.plate`, so it carries the selection ring on its bezel. */
+.canvasnode--selected .vaultdoor__bezel,
+.canvasnode:focus-visible .vaultdoor__bezel {
+  stroke: var(--o-500);
+  stroke-width: 2.5;
+}
+
+.vaultdoor__face {
+  fill: url(#vaultFace);
+  stroke: var(--vault-line);
+  stroke-width: 1;
+}
+
+.vaultdoor__ring {
+  fill: none;
+  stroke: var(--vault-line);
+  stroke-width: 1;
+  stroke-dasharray: 4 7;
+}
+
+.vaultdoor__bolt {
+  fill: var(--vault-spoke);
+  opacity: 0.8;
+}
+
+.vaultdoor__hinge {
+  fill: url(#vaultBezel);
+  stroke: var(--vault-line);
+  stroke-width: 1;
+}
+
+.vaultdoor__spoke {
+  fill: var(--vault-spoke);
+}
+
+.vaultdoor__hub {
+  fill: url(#vaultHub);
+  stroke: var(--vault-line);
+  stroke-width: 1;
+}
+
+.vaultdoor__hubcap {
+  fill: none;
+  stroke: var(--vault-spoke);
+  stroke-width: 1;
+  opacity: 0.7;
+}
+
+.vaultdoor__wheel {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.vaultdoor__wheel--turning {
+  animation: wheelTurn 5s var(--ease-linear) infinite;
+}
+
+@keyframes wheelTurn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The door's readout is a screen, so it keeps the LCD register in both
+   chassis colours, exactly like every other screen in the console. */
+.vaultdoor__caption {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  fill: var(--ok-dark);
+}
+
+.vaultdoor__sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  fill: color-mix(in srgb, var(--surface-0) 45%, transparent);
+}
+
+.vaultdoor[data-tone="stalled"] .vaultdoor__caption {
+  fill: var(--warn);
+}
+
+/* ============================================================
+   10 · STRIKE TICKER
+   ============================================================ */
+
+.ticker__rail {
+  display: flex;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  padding-bottom: var(--sp-2);
+}
+
+.ticker__empty {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.ticker__cell {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 104px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-sm);
+  background: var(--wash);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-mono);
+}
+
+.ticker__cell[data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--status-warn) 60%, transparent);
+}
+
+.ticker__cell[data-live="true"] {
+  border-style: solid;
+  border-color: var(--o-500);
+}
+
+.ticker__cell[aria-pressed="true"] {
+  background: var(--o-wash);
+  border-style: solid;
+  border-color: var(--o-500);
+}
+
+.ticker__ordinal {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.ticker__nav {
+  font-size: 14px;
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+
+.ticker__meta {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ticker__cell[data-tone="warn"] .ticker__meta {
+  color: var(--status-warn);
+}
+
+/* ============================================================
+   11 · STAGE LAYOUT — the two-column stage and its rows
+   ============================================================ */
+
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--sp-4);
+  align-items: start;
+  margin-top: var(--sp-4);
+}
+
+.stage__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.stage__rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.stage__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: stretch;
+}
+
+.stage__pair > * {
+  min-width: 0;
+}
+
+/* Data list — registry / peer / strike facts rows. */
+.datalist {
+  display: flex;
+  flex-direction: column;
+}
+
+.datarow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.datarow:last-child {
+  border-bottom: 0;
+}
+
+.datarow__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.datarow__value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.datarow__value--ok {
+  color: var(--status-ok);
+}
+
+.node {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.node:last-of-type {
+  border-bottom: 0;
+}
+
+.node__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-1);
+}
+
+.node__name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.node__peer {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 0;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+/* Badge row above an inspector body (venue / market / chain, health state). */
+.deploy__venue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+/* ============================================================
+   12 · THEME SWITCH (kit: layout/SegmentedTabs, at control size)
+   ============================================================ */
+
+/* An aluminium control in both registers: the chassis changes, the machined
+   controls do not. */
+.themesw {
+  display: inline-flex;
+  align-items: stretch;
+  height: 30px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: var(--alu-50);
+  box-shadow: var(--e-key);
+}
+
+.themesw__opt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
+  border: 0;
+  background: var(--grad-key);
+  color: var(--ink-700);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.themesw__opt + .themesw__opt {
+  border-left: 1px solid var(--border-strong);
+}
+
+/* The live segment is a key that is DOWN: recessed into the strip, darker
+   aluminium, max-contrast ink, with the orange indicator carried by the lamp
+   rather than by the label. (The kit lights an active tab orange; here the
+   label is 11px, where --on-accent on --grad-orange measures 3.0:1, so the
+   state moves to the key itself and the type stays legible.) */
+.themesw__opt[aria-pressed="true"] {
+  background: var(--alu-100);
+  color: var(--ink-900);
+  box-shadow: var(--e-groove);
+}
+
+.themesw__lamp {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-round);
+  background: var(--g-300);
+  flex: none;
+}
+
+.themesw__opt[aria-pressed="true"] .themesw__lamp {
+  background: var(--o-500);
+  box-shadow: 0 0 5px var(--o-glow);
+}
+
+.themesw__opt:focus-visible {
+  outline: 2px solid var(--o-500);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   13 · LIGHT REGISTER — the handful of rules a token remap cannot carry
+   ============================================================ */
+
+/* The kit's Field is a cool recessed well on aluminium (--surface-150 +
+   --border-strong), not a groove cut into black. */
+[data-theme="light"] .fieldrow__value {
+  background: var(--surface-150);
+  border-color: var(--border-strong);
+}
+
+/* Orange ink that carries meaning rides --accent-ink. These two do not: the
+   accent badge uses the lighter --o-400 in the dark register, and
+   `.kicker .idx` is base.css, which stays pristine. */
+[data-theme="light"] .badge--accent {
+  color: var(--accent-ink);
+}
+
+[data-theme="light"] .kicker .idx {
+  color: var(--accent-ink);
+}
+
+/* A live plate needs a firmer orange edge to read against a white card. */
+[data-theme="light"] .op--live {
+  border-color: color-mix(in srgb, var(--o-500) 70%, transparent);
+}
+
+/* ============================================================
+   14 · RESPONSIVE — desktop is primary; hold together at 390px.
+   ============================================================ */
+
+@media (max-width: 1180px) {
+  .stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stage__rail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .opgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stage__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stage__rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .console__inner {
+    padding: var(--sp-4) var(--sp-4) var(--sp-7);
+  }
+
+  .hdr__meta {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .canvaspanel {
+    padding: var(--sp-3);
+  }
+
+  .beat__title {
+    font-size: var(--fs-h3);
+    line-height: var(--lh-h3);
+  }
+
+  .fieldrow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fieldrow__value {
+    grid-row: auto;
+    grid-column: 1;
+    justify-content: flex-start;
+    margin-top: var(--sp-2);
+  }
+
+  .fieldrow__help {
+    order: 3;
+  }
+
+  .metric__value {
+    font-size: 32px;
+    line-height: 36px;
+  }
+}

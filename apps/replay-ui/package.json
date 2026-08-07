@@ -1,0 +1,26 @@
+{
+  "name": "@priime-demo/replay-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Replay UI for the verifiable-vault demo: captured NAV-strike journals with live explorer links (spec M5).",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@priime-demo/journal-schema": "workspace:*",
+    "next": "15.4.10",
+    "react": "19.2.1",
+    "react-dom": "19.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "5.5.4",
+    "vitest": "^3.2.4"
+  }
+}
