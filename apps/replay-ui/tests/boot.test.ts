@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_BOOT, parseBootFrom, resolveOperatorId } from "@/lib/boot";
 import { demoEnvironment } from "@/lib/environment";
+import { MAX_PRE_STRIKES } from "@/lib/simulate";
 
 const NODE_1 = demoEnvironment.registry.operators[0]!;
 
@@ -34,11 +35,30 @@ describe("parseBootFrom", () => {
     expect(boot.corrupt).toEqual([]);
   });
 
-  it("reads a present-but-empty numeric param as 0, not as absent", () => {
-    // Number("") is 0 and 0 is finite, so `?sim-interval=` is a *request* for
-    // zero, which the hook then floors at its own 1 s minimum. Documented
-    // rather than special-cased: nothing drives the page that way.
-    expect(parseBootFrom("?sim-interval=").intervalMs).toBe(0);
+  it("treats a present-but-empty numeric param as absent", () => {
+    // Number("") is 0 and 0 is finite, so an empty value used to read as a
+    // *request* for zero. A templated headless URL drops one of these easily,
+    // and `?sim-freeze=` freezing the canvas at offset 0 with no strikes ever
+    // scheduled is a dead page, not a default.
+    expect(parseBootFrom("?sim-interval=").intervalMs).toBe(DEFAULT_BOOT.intervalMs);
+    expect(parseBootFrom("?sim-seed=").seed).toBe(DEFAULT_BOOT.seed);
+    expect(parseBootFrom("?sim-strikes=").preStrikes).toBe(DEFAULT_BOOT.preStrikes);
+    expect(parseBootFrom("?sim-freeze=").freezeMs).toBeNull();
+    expect(parseBootFrom("?sim-freeze=%20").freezeMs).toBeNull();
+  });
+
+  it("rejects a non-finite value rather than passing it through", () => {
+    // Infinity parses and is not NaN, so the old NaN-only guard let it past.
+    expect(parseBootFrom("?sim-freeze=Infinity").freezeMs).toBeNull();
+    expect(parseBootFrom("?sim-seed=Infinity").seed).toBe(DEFAULT_BOOT.seed);
+  });
+
+  it("clamps sim-strikes so a typo cannot hang the tab", () => {
+    // The warmup loop is synchronous: ?sim-strikes=1000000000 would run a
+    // billion strikes on mount. Only HISTORY_LIMIT survive into the ticker.
+    expect(parseBootFrom("?sim-strikes=1000000000").preStrikes).toBe(MAX_PRE_STRIKES);
+    expect(parseBootFrom("?sim-strikes=-5").preStrikes).toBe(0);
+    expect(parseBootFrom("?sim-strikes=6.7").preStrikes).toBe(6);
   });
 
   it("distinguishes a missing sim-freeze from sim-freeze=0", () => {
