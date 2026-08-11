@@ -77,6 +77,14 @@ describe("truncateHash / truncateAddress", () => {
     expect(truncateHash("-")).toBe("-");
   });
 
+  it("keeps no tail when asked for none", () => {
+    // `slice(-0)` is `slice(0)`, so tail = 0 used to return the lead, the
+    // ellipsis, and then the entire string again.
+    const hash = strikeSettled.operators[0]!.result_hash;
+    expect(truncateHash(hash, 6, 0)).toBe("0xa1a1…");
+    expect(truncateHash(hash, 6, 0)).not.toContain(hash);
+  });
+
   it("honours custom lead/tail", () => {
     expect(truncateHash(strikeSettled.operators[0]!.result_hash, 10, 6)).toBe(
       "0xa1a1a1a1…a1a1a1",

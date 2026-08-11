@@ -80,7 +80,10 @@ export function formatNavPct(nav: string, baseline: string, decimals = 2): strin
  */
 export function truncateHash(value: string, lead = 6, tail = 4): string {
   if (value.length <= lead + tail + 1) return value;
-  return `${value.slice(0, lead)}…${value.slice(-tail)}`;
+  // Not `slice(-tail)`: `-0` is `0`, so `tail = 0` would return the lead, the
+  // ellipsis, and then the whole string again. No call site passes 0 today,
+  // but lead/tail are exported API.
+  return `${value.slice(0, lead)}…${value.slice(value.length - tail)}`;
 }
 
 /**
