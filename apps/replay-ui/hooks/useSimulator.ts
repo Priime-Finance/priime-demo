@@ -87,6 +87,14 @@ export interface SimulatorFeed {
   sim: SimState;
   /** Operator ids currently flipped to corrupt, lowercased. */
   corrupt: ReadonlySet<string>;
+  /**
+   * Operator ids that were flipped to corrupt when the live strike fired.
+   *
+   * Diverges from `corrupt` in exactly the window a flip opens: the switch has
+   * moved, the strike on screen predates it. Anything describing that strike
+   * reads this; only the switches themselves read `corrupt`.
+   */
+  strikeCorrupt: ReadonlySet<string>;
   /** Flip one operator. Takes effect from the next strike. */
   toggleCorrupt: (operatorId: string) => void;
   /** True when the OS asks for reduced motion: no pulses, no shake. */
@@ -122,6 +130,9 @@ export function useSimulator(options: SimulatorOptions): SimulatorFeed {
   );
   const [tMs, setTMs] = useState(options.freezeMs ?? 0);
   const [reducedMotion, setReducedMotion] = useState(false);
+  // The flags as they stood when the live strike fired, frozen until the next
+  // one. `sim.corrupt` moves the instant a switch is flipped; this does not.
+  const [strikeCorrupt, setStrikeCorrupt] = useState<readonly string[]>([]);
 
   /* ------------------------------------------------------------- strikes */
 
@@ -135,6 +146,9 @@ export function useSimulator(options: SimulatorOptions): SimulatorFeed {
     );
     simRef.current = result.state;
     setSim(result.state);
+    // Snapshot before any later flip: `nextStrike` never touches `corrupt`, so
+    // the flags this strike was actually computed under are `current.corrupt`.
+    setStrikeCorrupt(current.corrupt);
     setHistory((previous) => pushHistory(previous, result.journal));
     startedAtRef.current =
       typeof performance === "undefined" ? Date.now() : performance.now();
@@ -156,6 +170,7 @@ export function useSimulator(options: SimulatorOptions): SimulatorFeed {
     const live = nextStrike({ ...state, unixSeconds: now }, config);
     simRef.current = live.state;
     setSim(live.state);
+    setStrikeCorrupt(state.corrupt);
     setHistory([live.journal, ...warmup].slice(0, HISTORY_LIMIT));
     startedAtRef.current =
       typeof performance === "undefined" ? Date.now() : performance.now();
@@ -225,6 +240,7 @@ export function useSimulator(options: SimulatorOptions): SimulatorFeed {
   );
 
   const corrupt = useMemo(() => new Set(sim.corrupt), [sim.corrupt]);
+  const strikeCorruptSet = useMemo(() => new Set(strikeCorrupt), [strikeCorrupt]);
 
   return {
     history,
@@ -234,6 +250,7 @@ export function useSimulator(options: SimulatorOptions): SimulatorFeed {
     tMs,
     sim,
     corrupt,
+    strikeCorrupt: strikeCorruptSet,
     toggleCorrupt,
     reducedMotion,
     frozen: options.freezeMs !== null,

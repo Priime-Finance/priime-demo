@@ -58,8 +58,22 @@ export interface StageInput {
   tMs: number;
   /** Simulator state after the live strike (NAV, LTV, ordinal). */
   sim: SimState;
-  /** Operator ids currently flipped to corrupt, lowercased. */
+  /**
+   * Operator ids currently flipped to corrupt, lowercased.
+   *
+   * The switch positions as they are *now*. Drives the toggles on the plates
+   * and nothing else: a switch renders its own state, not the strike's.
+   */
   corrupt: ReadonlySet<string>;
+  /**
+   * Operator ids that were flipped to corrupt when `journal` fired, lowercased.
+   *
+   * A flip takes effect from the *next* strike, so anything that describes what
+   * happened in the strike on screen must read this and never `corrupt`.
+   * Otherwise flipping a switch mid-strike relabels a node the journal beneath
+   * it says did nothing wrong.
+   */
+  strikeCorrupt: ReadonlySet<string>;
   /** True when the OS asks for reduced motion: no travelling dots. */
   reducedMotion: boolean;
   /** Strikes newest first, live one at index 0. */
@@ -123,7 +137,8 @@ export interface AttestationView {
  * @returns everything the page hands to its components.
  */
 export function buildStageView(input: StageInput): StageView {
-  const { registry, journal, timeline, state, tMs, sim, corrupt, reducedMotion, history } = input;
+  const { registry, journal, timeline, state, tMs, sim, corrupt, strikeCorrupt, reducedMotion, history } =
+    input;
 
   const stalled = state?.status === "stalled";
 
@@ -147,6 +162,10 @@ export function buildStageView(input: StageInput): StageView {
    * The stalled case matters: with 2+ liars nobody is accepted, but the honest
    * node was not *outvoted* — no hash reached the threshold at all. Calling
    * that "rejected" would slander the one node that told the truth.
+   *
+   * Reads `strikeCorrupt`, not `corrupt`: the switches as they stood when this
+   * strike fired. A flip made while a stalled strike is on screen must not
+   * repaint a node the journal beneath it shows as honest.
    */
   const operatorStatus = (operatorId: string): OperatorStatus => {
     const live = liveFor(operatorId);
@@ -154,7 +173,7 @@ export function buildStageView(input: StageInput): StageView {
     if (live.accepted) {
       return settled.has(operatorId.toLowerCase()) ? "accepted" : "submitted";
     }
-    if (stalled) return corrupt.has(operatorId.toLowerCase()) ? "rejected" : "no-quorum";
+    if (stalled) return strikeCorrupt.has(operatorId.toLowerCase()) ? "rejected" : "no-quorum";
     return "rejected";
   };
 
@@ -247,8 +266,11 @@ export function buildStageView(input: StageInput): StageView {
   const rejectedLabels = refused.map(
     (op) => registryEntryFor(op.id)?.label ?? truncateAddress(op.id),
   );
+  // Names the nodes that diverged in THIS strike, so it reads `strikeCorrupt`.
+  // Quoting the live switches here would put a node in the sentence before it
+  // has told its first lie.
   const corruptLabels = registry
-    .filter((entry) => corrupt.has(entry.id.toLowerCase()))
+    .filter((entry) => strikeCorrupt.has(entry.id.toLowerCase()))
     .map((entry) => entry.label);
 
   const threshold = state?.quorum.threshold ?? 2;

@@ -15,8 +15,19 @@ import { buildStageView, type StageInput } from "@/lib/stage-view";
 
 const REGISTRY = demoEnvironment.registry.operators;
 
-/** Run `count` strikes with `corrupt` flipped, and derive the frame at `tMs`. */
-function frame(corrupt: readonly string[], tMs: number, count = 1): ReturnType<typeof buildStageView> {
+/**
+ * Run `count` strikes with `corrupt` flipped, and derive the frame at `tMs`.
+ *
+ * `liveCorrupt` is the switch positions *now*, which default to the ones the
+ * strike ran under. Pass it explicitly to model a flip made while the strike is
+ * still on screen: switches moved, journal did not.
+ */
+function frame(
+  corrupt: readonly string[],
+  tMs: number,
+  count = 1,
+  liveCorrupt: readonly string[] = corrupt,
+): ReturnType<typeof buildStageView> {
   let state: SimState = initialSimState(7, 1_760_000_000, corrupt);
   let journal = nextStrike(state).journal;
   for (let i = 1; i < count; i += 1) {
@@ -32,7 +43,8 @@ function frame(corrupt: readonly string[], tMs: number, count = 1): ReturnType<t
     state: deriveReplayState(journal, tMs, timeline),
     tMs,
     sim: state,
-    corrupt: new Set(corrupt.map((id) => id.toLowerCase())),
+    corrupt: new Set(liveCorrupt.map((id) => id.toLowerCase())),
+    strikeCorrupt: new Set(corrupt.map((id) => id.toLowerCase())),
     reducedMotion: false,
     history: [journal],
   };
@@ -100,6 +112,37 @@ describe("buildStageView", () => {
     expect(view.quorumNote).toContain("stalled and nothing was attested");
   });
 
+  it("keeps a mid-strike flip out of the strike already on screen", () => {
+    // A flip takes effect from the NEXT strike. Reading the live switches here
+    // relabelled honest node-1 "rejected" over a journal that shows it did
+    // nothing wrong, and named it in the note as having diverged.
+    const view = frame([NODE_2, NODE_3], 20_000, 1, [
+      REGISTRY[0]!.id.toLowerCase(),
+      NODE_2,
+      NODE_3,
+    ]);
+
+    const lamps = new Map(view.operators.map((operator) => [operator.id.toLowerCase(), operator.lamp]));
+    expect(lamps.get(REGISTRY[0]!.id.toLowerCase())).toBe("stalled");
+    expect(view.quorumNote).not.toContain(REGISTRY[0]!.label);
+    expect(view.quorumNote).toContain(REGISTRY[1]!.label);
+    expect(view.quorumNote).toContain(REGISTRY[2]!.label);
+  });
+
+  it("still draws the flipped switch as on, even mid-strike", () => {
+    // The switch is the one thing that must track the live set: it renders its
+    // own position, not the strike's.
+    const view = frame([], 20_000, 1, [NODE_3]);
+    const switches = new Map(
+      view.operators.map((operator) => [operator.id.toLowerCase(), operator.corrupt]),
+    );
+    expect(switches.get(NODE_3)).toBe(true);
+    expect(switches.get(NODE_2)).toBe(false);
+    // ...while the strike beneath it still reads as the clean strike it was.
+    expect(view.stalled).toBe(false);
+    expect(view.excludedWeight).toBe(0);
+  });
+
   it("blanks every readout before the strike triggers", () => {
     const view = frame([], 0);
     expect(view.operators.every((operator) => operator.hash === "awaiting")).toBe(true);
@@ -136,6 +179,7 @@ describe("buildStageView", () => {
       tMs: 0,
       sim: initialSimState(7, 0),
       corrupt: new Set(),
+      strikeCorrupt: new Set(),
       reducedMotion: false,
       history: [],
     });
