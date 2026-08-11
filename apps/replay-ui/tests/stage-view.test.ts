@@ -221,5 +221,15 @@ describe("buildStageView", () => {
     expect(view.ticker).toEqual([]);
     expect(view.quorumNote).toBeUndefined();
     expect(view.chain.quorum).toBe("0-of-3");
+    // The vault sat spinning here: with no timeline the trigger fell back to 0,
+    // so `tMs >= triggerAtMs` was trivially true and the SSR frame plus the
+    // first client paint showed the door reading a position that did not exist.
+    expect(view.vault.reading).toBe(false);
+    expect(view.vault.tone).toBe("idle");
+  });
+
+  it("holds the vault idle right up to the trigger, then reads", () => {
+    expect(frame([], 0).vault.reading).toBe(false);
+    expect(frame([], REPLAY_PACING.leadInMs).vault.reading).toBe(true);
   });
 });

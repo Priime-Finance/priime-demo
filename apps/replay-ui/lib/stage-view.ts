@@ -209,7 +209,15 @@ export function buildStageView(input: StageInput): StageView {
   const healthFactorValue = healthFactor(sim, SIM_CONFIG);
   const ltvPct = sim.ltvBps / 100;
   const vaultNavPct = formatNavPct(sim.nav, NAV_BASELINE);
-  const reading = !reducedMotion && tMs >= triggerAtMs && tMs < triggerAtMs + PULSE_MS * 1.8;
+  // `triggerAtMs` falls back to 0 with no timeline, which made `tMs >= 0`
+  // trivially true and spun the vault on the empty frame — the server render
+  // and the first client paint, since the boot effect only runs after paint.
+  // Gate on a strike having actually triggered, not on the clock alone.
+  const reading =
+    !reducedMotion &&
+    state?.triggered === true &&
+    tMs >= triggerAtMs &&
+    tMs < triggerAtMs + PULSE_MS * 1.8;
 
   const vault: CanvasVaultView = {
     tone: stalled ? "stalled" : reading ? "reading" : state?.done === true ? "settled" : "idle",
