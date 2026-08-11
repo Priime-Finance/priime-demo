@@ -9,7 +9,7 @@
  * server and testable without a browser.
  */
 import { demoEnvironment } from "@/lib/environment";
-import { STRIKE_INTERVAL_MS } from "@/lib/simulate";
+import { MAX_PRE_STRIKES, STRIKE_INTERVAL_MS } from "@/lib/simulate";
 
 /** Boot config parsed from the URL once, before the simulator starts. */
 export interface Boot {
@@ -50,12 +50,29 @@ export function resolveOperatorId(token: string): string | null {
   return entry?.id.toLowerCase() ?? null;
 }
 
+/**
+ * Read a finite number from a param, or `null` for "this param said nothing".
+ *
+ * Present-but-empty counts as nothing. `Number("")` is `0`, so a bare
+ * `?sim-freeze=` (easy to produce from a templated headless URL) would
+ * otherwise freeze the canvas at offset 0 and schedule no strikes at all,
+ * while `?sim-seed=` would silently become seed 0 rather than the documented
+ * default. `Infinity` parses fine and is finite-checked out here too.
+ *
+ * @param params the parsed query string.
+ * @param key param name.
+ * @returns the number, or null when absent, empty or not finite.
+ */
+function numberParam(params: URLSearchParams, key: string): number | null {
+  const raw = params.get(key);
+  if (raw === null || raw.trim() === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
 /** Read a numeric param, or fall back. */
 function intParam(params: URLSearchParams, key: string, fallback: number): number {
-  const raw = params.get(key);
-  if (raw === null) return fallback;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : fallback;
+  return numberParam(params, key) ?? fallback;
 }
 
 /**
@@ -66,12 +83,16 @@ function intParam(params: URLSearchParams, key: string, fallback: number): numbe
  */
 export function parseBootFrom(search: string): Boot {
   const params = new URLSearchParams(search);
-  const freeze = params.get("sim-freeze");
   return {
     seed: intParam(params, "sim-seed", DEFAULT_BOOT.seed),
     intervalMs: intParam(params, "sim-interval", DEFAULT_BOOT.intervalMs),
-    preStrikes: intParam(params, "sim-strikes", DEFAULT_BOOT.preStrikes),
-    freezeMs: freeze === null || Number.isNaN(Number(freeze)) ? null : Number(freeze),
+    // Clamped here so the URL cannot ask for a hang, and again inside
+    // bootSession so the synchronous loop defends itself.
+    preStrikes: Math.min(
+      MAX_PRE_STRIKES,
+      Math.max(0, Math.floor(intParam(params, "sim-strikes", DEFAULT_BOOT.preStrikes))),
+    ),
+    freezeMs: numberParam(params, "sim-freeze"),
     corrupt: (params.get("corrupt") ?? "")
       .split(",")
       .map(resolveOperatorId)

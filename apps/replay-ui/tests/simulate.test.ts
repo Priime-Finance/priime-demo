@@ -17,6 +17,7 @@ import {
   healthFactor,
   initialSimState,
   isCorrupt,
+  MAX_PRE_STRIKES,
   NAV_BASELINE,
   nextStrike,
   setCorrupt,
@@ -423,5 +424,19 @@ describe("bootSession", () => {
     const corrupt = [NODES[2]!.id.toLowerCase()];
     const boot = bootSession(7, NOW, corrupt, 3);
     expect(boot.strikeCorrupt).toEqual(corrupt);
+  });
+});
+
+describe("bootSession — warmup clamp", () => {
+  it("refuses to run more warmup strikes than the ceiling", () => {
+    // The loop is synchronous: unclamped, ?sim-strikes=1e9 hangs the tab.
+    const boot = bootSession(7, 1_760_000_000, [], 1_000_000_000);
+    expect(boot.history).toHaveLength(MAX_PRE_STRIKES + 1);
+  });
+
+  it("treats a non-finite or negative count as no pre-history", () => {
+    expect(bootSession(7, 1_760_000_000, [], Number.POSITIVE_INFINITY).history).toHaveLength(1);
+    expect(bootSession(7, 1_760_000_000, [], Number.NaN).history).toHaveLength(1);
+    expect(bootSession(7, 1_760_000_000, [], -5).history).toHaveLength(1);
   });
 });

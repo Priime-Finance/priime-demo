@@ -491,6 +491,16 @@ export function nextStrike(
 
 /* -------------------------------------------------------------- session */
 
+/**
+ * Ceiling on warmup strikes, whatever the URL asks for.
+ *
+ * The warmup loop is synchronous, so `?sim-strikes=1000000000` would run a
+ * billion strikes on mount and hang the tab. Only `HISTORY_LIMIT` journals
+ * survive into the ticker anyway, so a few hundred costs nothing and a typo in
+ * a templated headless URL cannot freeze a demo.
+ */
+export const MAX_PRE_STRIKES = 200;
+
 /** A booted session: warmed-up history plus the state that follows it. */
 export interface SessionBoot {
   /** Strikes newest first, live one at index 0. */
@@ -515,7 +525,7 @@ export interface SessionBoot {
  * @param seed PRNG seed.
  * @param unixSeconds unix seconds the LIVE strike triggers at.
  * @param corrupt operator ids to start corrupted.
- * @param preStrikes strikes of pre-history; negatives are treated as zero.
+ * @param preStrikes strikes of pre-history; clamped to `[0, MAX_PRE_STRIKES]`.
  * @param config service description.
  * @returns history newest first, the successor state, and the live flags.
  */
@@ -526,7 +536,11 @@ export function bootSession(
   preStrikes: number,
   config: SimConfig = SIM_CONFIG,
 ): SessionBoot {
-  const warmupCount = Math.max(0, Math.floor(preStrikes));
+  // Clamped here as well as in boot.ts: this loop is the thing that would
+  // actually hang, so it defends itself rather than trusting its caller.
+  const warmupCount = Number.isFinite(preStrikes)
+    ? Math.min(MAX_PRE_STRIKES, Math.max(0, Math.floor(preStrikes)))
+    : 0;
   const stepSeconds = Math.round(STRIKE_INTERVAL_MS / 1_000);
 
   let state = initialSimState(
