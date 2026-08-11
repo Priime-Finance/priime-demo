@@ -1,0 +1,40 @@
+name: Replay UI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    name: replay-ui (typecheck, lint, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/replay-ui
+    steps:
+      - uses: actions/checkout@v4
+      # Version pinned explicitly: there is no root package.json for
+      # action-setup to read a `packageManager` field from.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21
+          cache: pnpm
+      - name: install
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+      - name: typecheck
+        run: pnpm typecheck
+      - name: lint
+        run: pnpm lint
+      - name: test
+        run: pnpm test
+      # Last, and in its own dist dir: the build is the slowest gate and the
+      # one the "link to try" deliverable actually depends on.
+      - name: build
+        run: pnpm build
+        env:
+          NEXT_DIST_DIR: .next-ci

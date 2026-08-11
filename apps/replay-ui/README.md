@@ -179,15 +179,26 @@ the second is a handful of pixels in the attestation panel.
 ## Verification
 
 ```bash
-pnpm --filter @priime-demo/replay-ui test    # vitest run  (pure lib/ only)
-npx tsc --noEmit                             # noUnusedLocals/Parameters are ON
-pnpm --filter @priime-demo/replay-ui lint
+pnpm --filter @priime-demo/replay-ui typecheck  # tsc --noEmit
+pnpm --filter @priime-demo/replay-ui lint       # eslint .
+pnpm --filter @priime-demo/replay-ui test       # vitest run  (pure lib/ only)
 pnpm --filter @priime-demo/replay-ui build
 ```
 
-`noUnusedLocals` / `noUnusedParameters` are enabled in `tsconfig.json`, so
-`tsc --noEmit` is also the dead-import check. There is no `knip`; for dead
-*exports*, grep.
+All four run on every push and PR via `.github/workflows/replay-ui.yml`, in
+that order: cheapest gate first, the build last.
+
+`noUnusedLocals`, `noUnusedParameters` and `noUncheckedIndexedAccess` are
+enabled in `tsconfig.json`, so `tsc --noEmit` is also the dead-import check
+and the reason every `arr[0]!` in the codebase is load-bearing rather than
+decoration. There is no `knip`; for dead *exports*, grep.
+
+Lint is ESLint 9 flat config (`eslint.config.mjs`), running
+`next/core-web-vitals` plus `next/typescript` plus the `typescript-eslint`
+*type-checked* presets. The type-aware rules are the point: floating
+promises, unsafe `any` crossing a boundary and misused async handlers are
+invisible to both `tsc` and a syntax-only lint. Run `eslint` directly rather
+than `next lint`, which is deprecated upstream and needs no wrapper here.
 
 ### Verification builds
 
@@ -304,7 +315,8 @@ project, set **root directory to `apps/replay-ui`**.
 
 ```bash
 pnpm --filter @priime-demo/replay-ui dev
-pnpm --filter @priime-demo/replay-ui test    # vitest run
+pnpm --filter @priime-demo/replay-ui typecheck  # tsc --noEmit
+pnpm --filter @priime-demo/replay-ui lint       # eslint .
+pnpm --filter @priime-demo/replay-ui test       # vitest run
 pnpm --filter @priime-demo/replay-ui build
-pnpm --filter @priime-demo/replay-ui lint
 ```
