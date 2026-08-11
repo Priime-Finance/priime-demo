@@ -19,9 +19,13 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10
+      # 22, not the 21 the other workflows use. Vite 7 is ESM-only and
+      # vitest reaches it through a CJS shim, so `vitest run` dies with
+      # ERR_REQUIRE_ESM on anything older than Node 22.12 / 20.19. Matches the
+      # `@types/node: ^22` the app already declares.
       - uses: actions/setup-node@v4
         with:
-          node-version: 21
+          node-version: 22
           cache: pnpm
       - name: install
         working-directory: .
