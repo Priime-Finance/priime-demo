@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 export const metadata: Metadata = {
   title: "Priime — The Vault That Cannot Lie",
   description:
-    "Replay UI for the verifiable-vault demo: captured NAV-strike journals replayed beautifully, with live explorer links.",
+    "Replay UI for the verifiable-vault demo: NAV-strike journals replayed beautifully. Nothing simulated is deep-linked to an explorer.",
 };
 
 export const viewport: Viewport = {
