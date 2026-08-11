@@ -32,3 +32,7 @@ deploy/components/*.wasm
 # priime-pools (which re-fetches WIT via clone-wit-repo + a wkg registry config),
 # this demo is self-contained: `wkg wit fetch` cannot resolve wasi:tls (draft) or
 # the custom wavs:types packages from the public registry, so the deps must ship.
+
+# GSD .planning folder
+
+.planning/
