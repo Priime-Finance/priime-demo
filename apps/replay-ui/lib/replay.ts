@@ -511,20 +511,19 @@ export function deriveReplayState(
   const attestationEvent = fired.find(
     (event): event is AttestationReplayEvent => event.kind === "attestation",
   );
+  const attested = attestationEvent?.attestation ?? null;
+  const txHash = attested?.tx_hash ?? null;
+
   const attestation: ReplayAttestationState =
-    // Written long-hand on purpose. The optional-chain form the rule prefers
-    // does not narrow `attestationEvent` in the else branch, so every field
-    // read below it fails to compile.
-    // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
-    attestationEvent === undefined || attestationEvent.attestation.tx_hash === null
+    attested === null || txHash === null
       ? { status: "not-landed", chainId: journal.attestation.chain_id }
       : {
           status: "landed",
-          chainId: attestationEvent.attestation.chain_id,
-          txHash: attestationEvent.attestation.tx_hash,
-          blockNumber: attestationEvent.attestation.block_number,
-          navFinal: attestationEvent.attestation.nav_final,
-          timestamp: attestationEvent.attestation.timestamp,
+          chainId: attested.chain_id,
+          txHash,
+          blockNumber: attested.block_number,
+          navFinal: attested.nav_final,
+          timestamp: attested.timestamp,
         };
 
   const finished = done ? terminalPhase(journal.status) : null;
