@@ -262,7 +262,13 @@ export function SystemCanvas({
     <svg
       className="canvas"
       viewBox={`0 0 ${layout.viewWidth} ${layout.viewHeight}`}
-      role="img"
+      // Not `img`: that makes every descendant presentational, so assistive
+      // tech prunes the node buttons and the corrupt switch out of the
+      // accessibility tree. Keyboard focus still lands on them (tabIndex is
+      // honoured), leaving a screen reader user with one opaque image and a
+      // row of mystery tab stops. `group` keeps the label and keeps the
+      // controls reachable.
+      role="group"
       aria-label="Vault, three operator nodes and the Base attestation node, with the NAV strike flowing between them"
       data-testid="system-canvas"
       data-mode={layout.mode}
