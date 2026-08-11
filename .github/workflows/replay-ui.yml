@@ -42,11 +42,17 @@ jobs:
 
       # The store is cached by hand rather than via setup-node's `cache: pnpm`,
       # which has to run before pnpm exists under the ordering above.
+      #
+      # Published as a step output rather than through $GITHUB_ENV: both work
+      # at runtime, but a variable written to $GITHUB_ENV is invisible to
+      # static analysis, so editors flag the `env.` reference as possibly
+      # undefined. `steps.<id>.outputs` resolves statically.
       - name: locate pnpm store
-        run: echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
-          path: ${{ env.PNPM_STORE }}
+          path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-
 
