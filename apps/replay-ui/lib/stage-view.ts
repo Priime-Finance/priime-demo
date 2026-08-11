@@ -258,7 +258,20 @@ export function buildStageView(input: StageInput): StageView {
 
   /* --------------------------------------------------------------- quorum */
 
-  const refused = state === null ? [] : state.operators.filter((op) => !op.accepted);
+  // "Not accepted" is true of EVERY node in a stalled strike, honest one
+  // included, so taking it at face value painted all three slots in the alarm
+  // register — contradicting the operator panel two inches away, which is
+  // careful to draw the honest node amber rather than outvoted. When stalled,
+  // count only the nodes that actually diverged and leave the honest slot
+  // empty. A stalled strike with no known liar (what a real journal looks
+  // like) drains the bar instead of accusing everyone: no weight entered it,
+  // which is true, and it names nobody.
+  const refused =
+    state === null
+      ? []
+      : state.operators.filter((op) =>
+          stalled ? strikeCorrupt.has(op.id.toLowerCase()) : !op.accepted,
+        );
   const excludedWeight = refused.reduce(
     (sum, op) => sum + (registryEntryFor(op.id)?.weight ?? 1),
     0,

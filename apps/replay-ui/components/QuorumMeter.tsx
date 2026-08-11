@@ -19,7 +19,13 @@ export interface QuorumMeterProps {
   cumulative: number;
   /** True once a transition with `reached` has fired. */
   reached: boolean;
-  /** Weights that submitted and were not accepted (never enter the bar). */
+  /**
+   * Weight that diverged onto a hash of its own, and so never enters the bar.
+   *
+   * Deliberately *not* "weight that was not accepted": in a stalled strike
+   * nothing is accepted, and counting the honest node here would paint it in
+   * the alarm register over a journal that shows it told the truth.
+   */
   excluded: number;
   /** Caption under the ladder, e.g. the "settled without node-3" line. */
   note?: string;

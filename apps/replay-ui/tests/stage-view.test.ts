@@ -15,19 +15,34 @@ import { buildStageView, type StageInput } from "@/lib/stage-view";
 
 const REGISTRY = demoEnvironment.registry.operators;
 
+/** Switch positions to override, when they differ from the ones the run used. */
+interface FrameOverrides {
+  /**
+   * The switch positions *now*. Pass it to model a flip made while the strike
+   * is still on screen: switches moved, journal did not.
+   */
+  liveCorrupt?: readonly string[];
+  /**
+   * The positions the strike is *known* to have run under. Pass `[]` to model
+   * a source that does not record who lied, which is what a real journal is.
+   */
+  strikeCorrupt?: readonly string[];
+}
+
 /**
  * Run `count` strikes with `corrupt` flipped, and derive the frame at `tMs`.
  *
- * `liveCorrupt` is the switch positions *now*, which default to the ones the
- * strike ran under. Pass it explicitly to model a flip made while the strike is
- * still on screen: switches moved, journal did not.
+ * Both switch sets default to `corrupt`, the honest case where nothing has been
+ * touched since the strike fired.
  */
 function frame(
   corrupt: readonly string[],
   tMs: number,
   count = 1,
-  liveCorrupt: readonly string[] = corrupt,
+  overrides: FrameOverrides = {},
 ): ReturnType<typeof buildStageView> {
+  const liveCorrupt = overrides.liveCorrupt ?? corrupt;
+  const strikeCorrupt = overrides.strikeCorrupt ?? corrupt;
   let state: SimState = initialSimState(7, 1_760_000_000, corrupt);
   let journal = nextStrike(state).journal;
   for (let i = 1; i < count; i += 1) {
@@ -44,7 +59,7 @@ function frame(
     tMs,
     sim: state,
     corrupt: new Set(liveCorrupt.map((id) => id.toLowerCase())),
-    strikeCorrupt: new Set(corrupt.map((id) => id.toLowerCase())),
+    strikeCorrupt: new Set(strikeCorrupt.map((id) => id.toLowerCase())),
     reducedMotion: false,
     history: [journal],
   };
@@ -112,15 +127,34 @@ describe("buildStageView", () => {
     expect(view.quorumNote).toContain("stalled and nothing was attested");
   });
 
+  it("leaves the honest slot out of the excluded weight when a strike stalls", () => {
+    // Nobody is accepted in a stalled strike, so reading "not accepted" put all
+    // three weights in the alarm register — including the node the operator
+    // panel draws amber. The bar and the panel have to agree about the same
+    // node in the same frame.
+    const view = frame([NODE_2, NODE_3], 20_000);
+    expect(view.stalled).toBe(true);
+    expect(view.quorumWeight).toBe(0);
+    expect(view.excludedWeight).toBe(2);
+  });
+
+  it("drains the bar rather than accusing everyone when no liar is known", () => {
+    // What a stalled strike off a real journal looks like: three hashes, no
+    // winner, and nothing in the record naming the honest node. Empty is true
+    // and blames nobody; all-red would be neither.
+    const view = frame([NODE_2, NODE_3], 20_000, 1, { strikeCorrupt: [] });
+    expect(view.stalled).toBe(true);
+    expect(view.excludedWeight).toBe(0);
+    expect(view.quorumWeight).toBe(0);
+  });
+
   it("keeps a mid-strike flip out of the strike already on screen", () => {
     // A flip takes effect from the NEXT strike. Reading the live switches here
     // relabelled honest node-1 "rejected" over a journal that shows it did
     // nothing wrong, and named it in the note as having diverged.
-    const view = frame([NODE_2, NODE_3], 20_000, 1, [
-      REGISTRY[0]!.id.toLowerCase(),
-      NODE_2,
-      NODE_3,
-    ]);
+    const view = frame([NODE_2, NODE_3], 20_000, 1, {
+      liveCorrupt: [REGISTRY[0]!.id.toLowerCase(), NODE_2, NODE_3],
+    });
 
     const lamps = new Map(view.operators.map((operator) => [operator.id.toLowerCase(), operator.lamp]));
     expect(lamps.get(REGISTRY[0]!.id.toLowerCase())).toBe("stalled");
@@ -132,7 +166,7 @@ describe("buildStageView", () => {
   it("still draws the flipped switch as on, even mid-strike", () => {
     // The switch is the one thing that must track the live set: it renders its
     // own position, not the strike's.
-    const view = frame([], 20_000, 1, [NODE_3]);
+    const view = frame([], 20_000, 1, { liveCorrupt: [NODE_3] });
     const switches = new Map(
       view.operators.map((operator) => [operator.id.toLowerCase(), operator.corrupt]),
     );
