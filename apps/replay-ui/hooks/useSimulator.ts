@@ -25,6 +25,7 @@ import {
   type ReplayTimeline,
 } from "@/lib/replay";
 import {
+  bootSession,
   initialSimState,
   nextStrike,
   setCorrupt,
@@ -156,22 +157,16 @@ export function useSimulator(options: SimulatorOptions): SimulatorFeed {
   }, [config]);
 
   // Boot: seed the session, optionally pre-run history, fire the first strike.
+  // The sequencing (including seeding the warmup in the past so the ticker's
+  // clock runs forwards) lives in `bootSession`, pure and unit-tested.
   useEffect(() => {
     const now = Math.floor(Date.now() / 1_000);
-    let state = initialSimState(options.seed, now, options.corrupt);
+    const boot = bootSession(options.seed, now, options.corrupt, options.preStrikes, config);
 
-    const warmup: Journal[] = [];
-    for (let i = 0; i < Math.max(0, options.preStrikes); i += 1) {
-      const result = nextStrike(state, config);
-      warmup.unshift(result.journal);
-      state = result.state;
-    }
-
-    const live = nextStrike({ ...state, unixSeconds: now }, config);
-    simRef.current = live.state;
-    setSim(live.state);
-    setStrikeCorrupt(state.corrupt);
-    setHistory([live.journal, ...warmup].slice(0, HISTORY_LIMIT));
+    simRef.current = boot.state;
+    setSim(boot.state);
+    setStrikeCorrupt(boot.strikeCorrupt);
+    setHistory(boot.history.slice(0, HISTORY_LIMIT));
     startedAtRef.current =
       typeof performance === "undefined" ? Date.now() : performance.now();
     setTMs(options.freezeMs ?? 0);

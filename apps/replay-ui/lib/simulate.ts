@@ -489,6 +489,70 @@ export function nextStrike(
   };
 }
 
+/* -------------------------------------------------------------- session */
+
+/** A booted session: warmed-up history plus the state that follows it. */
+export interface SessionBoot {
+  /** Strikes newest first, live one at index 0. */
+  history: readonly Journal[];
+  /** State after the live strike. */
+  state: SimState;
+  /** Corruption flags the live strike ran under. */
+  strikeCorrupt: readonly string[];
+}
+
+/**
+ * Boot a session: run `preStrikes` of pre-history, then the live strike.
+ *
+ * The pre-history is seeded in the **past**, one interval per warmup strike,
+ * so the run ends at `unixSeconds` rather than starting there. Seeding at
+ * `unixSeconds` instead would stamp every warmup entry *after* the live strike
+ * that follows it, and a history strip whose clock runs backwards is the sort
+ * of detail that costs a demo its credibility.
+ *
+ * Pure, so the ordering is testable without a clock or a mounted hook.
+ *
+ * @param seed PRNG seed.
+ * @param unixSeconds unix seconds the LIVE strike triggers at.
+ * @param corrupt operator ids to start corrupted.
+ * @param preStrikes strikes of pre-history; negatives are treated as zero.
+ * @param config service description.
+ * @returns history newest first, the successor state, and the live flags.
+ */
+export function bootSession(
+  seed: number,
+  unixSeconds: number,
+  corrupt: readonly string[],
+  preStrikes: number,
+  config: SimConfig = SIM_CONFIG,
+): SessionBoot {
+  const warmupCount = Math.max(0, Math.floor(preStrikes));
+  const stepSeconds = Math.round(STRIKE_INTERVAL_MS / 1_000);
+
+  let state = initialSimState(
+    seed,
+    unixSeconds - warmupCount * stepSeconds,
+    corrupt,
+  );
+
+  const warmup: Journal[] = [];
+  for (let i = 0; i < warmupCount; i += 1) {
+    const result = nextStrike(state, config);
+    warmup.unshift(result.journal);
+    state = result.state;
+  }
+
+  // No reset: the warmup has walked the clock forward to exactly `unixSeconds`.
+  const strikeCorrupt = state.corrupt;
+  const live = nextStrike(state, config);
+
+  return {
+    history: [live.journal, ...warmup],
+    state: live.state,
+    strikeCorrupt,
+  };
+}
+
 /* ------------------------------------------------------------ derived view */
 
 /** How a strike came out, for the history strip. */

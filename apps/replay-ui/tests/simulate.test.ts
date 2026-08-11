@@ -13,6 +13,7 @@ import type { Journal } from "@priime-demo/journal-schema";
 import { demoEnvironment } from "@/lib/environment";
 import { deriveReplayState } from "@/lib/replay";
 import {
+  bootSession,
   healthFactor,
   initialSimState,
   isCorrupt,
@@ -20,6 +21,7 @@ import {
   nextStrike,
   setCorrupt,
   SIM_CONFIG,
+  STRIKE_INTERVAL_MS,
   summariseStrike,
   type SimState,
 } from "@/lib/simulate";
@@ -365,5 +367,61 @@ describe("summariseStrike", () => {
     expect(summary.cumulative).toBe(0);
     expect(summary.divergent).toBe(3);
     expect(summary.nav).toBeNull();
+  });
+});
+
+describe("bootSession", () => {
+  const NOW = 1_760_000_000;
+  const STEP = Math.round(STRIKE_INTERVAL_MS / 1_000);
+
+  /** Latest moment anything in this strike happened. */
+  function observedAt(journal: Journal): number {
+    return Math.max(...journal.operators.map((operator) => operator.timestamp));
+  }
+
+  it("returns the live strike first, then the warmup newest-first", () => {
+    const boot = bootSession(7, NOW, [], 6);
+    expect(boot.history).toHaveLength(7);
+    expect(boot.history[0]!.strike_id).toBe(
+      boot.history.reduce((newest, entry) =>
+        observedAt(entry) > observedAt(newest) ? entry : newest,
+      ).strike_id,
+    );
+  });
+
+  it("runs the ticker's clock forwards, so no warmup entry post-dates the live strike", () => {
+    // The bug this replaces seeded the warmup at `now` and then reset the live
+    // strike back to `now`, stamping every older entry up to STEP*(N-1) seconds
+    // AFTER the one below it. Opening a warmup strike showed Observed/Landed
+    // readouts running backwards, in exactly the ?sim-strikes=6 frames the
+    // README advertises.
+    const stamps = bootSession(7, NOW, [], 6).history.map(observedAt);
+    for (let i = 1; i < stamps.length; i += 1) {
+      expect(stamps[i]!).toBeLessThan(stamps[i - 1]!);
+    }
+  });
+
+  it("lands the live strike at the requested moment, not one warmup ahead of it", () => {
+    const withWarmup = observedAt(bootSession(7, NOW, [], 6).history[0]!);
+    const withNone = observedAt(bootSession(7, NOW, [], 0).history[0]!);
+    expect(withWarmup).toBe(withNone);
+  });
+
+  it("reaches back one interval per warmup strike", () => {
+    const history = bootSession(7, NOW, [], 6).history;
+    const oldest = observedAt(history[history.length - 1]!);
+    const live = observedAt(history[0]!);
+    expect(live - oldest).toBe(6 * STEP);
+  });
+
+  it("is a single live strike when no pre-history is asked for", () => {
+    expect(bootSession(7, NOW, [], 0).history).toHaveLength(1);
+    expect(bootSession(7, NOW, [], -3).history).toHaveLength(1);
+  });
+
+  it("reports the flags the live strike actually ran under", () => {
+    const corrupt = [NODES[2]!.id.toLowerCase()];
+    const boot = bootSession(7, NOW, corrupt, 3);
+    expect(boot.strikeCorrupt).toEqual(corrupt);
   });
 });
