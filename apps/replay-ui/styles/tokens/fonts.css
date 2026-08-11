@@ -1,0 +1,61 @@
+/* Source: priime-design-system/project/tokens/fonts.css — copied 2026-08-07. */
+/* TRIMMED 2026-08-07 (owner-approved, the one edit this copy carries): the
+   kit's two Noto Sans JP @font-face blocks were dropped along with their
+   11.0 MB of TTFs. Nothing in this app sets font-family: "Noto Sans JP" —
+   typography.css only names Geist and Geist Mono. Restore both from the
+   design system if Priime ever ships Japanese copy. */
+/* ============================================================
+   PRIIME · WEBFONTS — official brand TTFs (assets/fonts/, OFL)
+   Geist 400/500/600/700 · Geist Mono 400/500/600
+   ============================================================ */
+
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}

@@ -1,0 +1,73 @@
+name: Replay UI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    name: replay-ui (typecheck, lint, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/replay-ui
+    steps:
+      - uses: actions/checkout@v4
+
+      # setup-node BEFORE pnpm/action-setup, which is the reverse of the usual
+      # recipe. pnpm/action-setup emits ::add-path::, and `act` rebuilds PATH
+      # from that rather than prepending, dropping its own node out of PATH and
+      # failing every later step with "node: not found". Running setup-node
+      # first puts node somewhere that survives. Behaviour on the real runner
+      # is identical either way, so the ordering costs nothing and buys a
+      # workflow that can be verified locally with:
+      #
+      #   act pull_request -W .github/workflows/replay-ui.yml \
+      #     -P ubuntu-latest=catthehacker/ubuntu:act-latest
+      #
+      # 22, not the 21 the other workflows use: vite 7 is ESM-only and vitest
+      # reaches it through a CJS shim, so `vitest run` dies with
+      # ERR_REQUIRE_ESM on anything older than Node 22.12 / 20.19. Matches the
+      # `@types/node: ^22` the app already declares.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Version pinned explicitly: there is no root package.json for
+      # action-setup to read a `packageManager` field from.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      # The store is cached by hand rather than via setup-node's `cache: pnpm`,
+      # which has to run before pnpm exists under the ordering above.
+      #
+      # Published as a step output rather than through $GITHUB_ENV: both work
+      # at runtime, but a variable written to $GITHUB_ENV is invisible to
+      # static analysis, so editors flag the `env.` reference as possibly
+      # undefined. `steps.<id>.outputs` resolves statically.
+      - name: locate pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: install
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+      - name: typecheck
+        run: pnpm typecheck
+      - name: lint
+        run: pnpm lint
+      - name: test
+        run: pnpm test
+      # Last, and in its own dist dir: the build is the slowest gate and the
+      # one the "link to try" deliverable actually depends on.
+      - name: build
+        run: pnpm build
+        env:
+          NEXT_DIST_DIR: .next-ci

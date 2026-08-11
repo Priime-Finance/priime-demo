@@ -1,0 +1,28 @@
+/* Source: priime-design-system/project/tokens/motion.css — copied 2026-08-07. */
+/* ============================================================
+   PRIIME · MOTION TOKENS
+   Calm and mechanical. Linear / ease-out, 120-280ms.
+   No springs, no bounce. Hover = a one-step state change,
+   never a transform pile-up. Reserved energy: the ASCII field
+   animates continuously but slowly; accent dots travel dashed
+   connectors. Everything else is still.
+   ============================================================ */
+
+:root {
+  --ease: cubic-bezier(.2, .6, .2, 1); /* @kind other */
+  --ease-linear: linear; /* @kind other */
+  --dur-fast: 120ms; /* @kind other */
+  --dur: 200ms; /* @kind other */
+  --dur-slow: 280ms; /* @kind other */
+}
+
+/* Respect reduced motion everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
