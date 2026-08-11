@@ -14,19 +14,42 @@ jobs:
         working-directory: apps/replay-ui
     steps:
       - uses: actions/checkout@v4
-      # Version pinned explicitly: there is no root package.json for
-      # action-setup to read a `packageManager` field from.
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      # 22, not the 21 the other workflows use. Vite 7 is ESM-only and
-      # vitest reaches it through a CJS shim, so `vitest run` dies with
+
+      # setup-node BEFORE pnpm/action-setup, which is the reverse of the usual
+      # recipe. pnpm/action-setup emits ::add-path::, and `act` rebuilds PATH
+      # from that rather than prepending, dropping its own node out of PATH and
+      # failing every later step with "node: not found". Running setup-node
+      # first puts node somewhere that survives. Behaviour on the real runner
+      # is identical either way, so the ordering costs nothing and buys a
+      # workflow that can be verified locally with:
+      #
+      #   act pull_request -W .github/workflows/replay-ui.yml \
+      #     -P ubuntu-latest=catthehacker/ubuntu:act-latest
+      #
+      # 22, not the 21 the other workflows use: vite 7 is ESM-only and vitest
+      # reaches it through a CJS shim, so `vitest run` dies with
       # ERR_REQUIRE_ESM on anything older than Node 22.12 / 20.19. Matches the
       # `@types/node: ^22` the app already declares.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
+
+      # Version pinned explicitly: there is no root package.json for
+      # action-setup to read a `packageManager` field from.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      # The store is cached by hand rather than via setup-node's `cache: pnpm`,
+      # which has to run before pnpm exists under the ordering above.
+      - name: locate pnpm store
+        run: echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_STORE }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
       - name: install
         working-directory: .
         run: pnpm install --frozen-lockfile
