@@ -97,6 +97,11 @@ export class StaticJournalSource implements JournalSource {
   }
 
   /** @inheritdoc */
+  // Async with nothing to await, deliberately: the interface is async so a
+  // polling source can implement it, and `async` also turns the throw in
+  // `get` into a rejected promise rather than a synchronous one. Dropping it
+  // would change what callers have to catch.
+  // eslint-disable-next-line @typescript-eslint/require-await
   async list(): Promise<readonly StrikeRef[]> {
     return this.#entries.map((entry) => ({
       strikeId: entry.journal.strike_id,
@@ -106,6 +111,7 @@ export class StaticJournalSource implements JournalSource {
   }
 
   /** @inheritdoc */
+  // eslint-disable-next-line @typescript-eslint/require-await -- see `list`
   async get(strikeId: string): Promise<Journal> {
     const entry = this.#entries.find((e) => e.journal.strike_id === strikeId);
     if (entry === undefined) throw new StrikeNotFoundError(strikeId);

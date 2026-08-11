@@ -329,7 +329,7 @@ export function buildTimeline(
 ): ReplayTimeline {
   const triggerAt = earliestTimestamp(journal);
 
-  const unpaced: Array<{ event: UnpacedEvent; rank: number; seq: number }> = [];
+  const unpaced: { event: UnpacedEvent; rank: number; seq: number }[] = [];
   let seq = 0;
 
   unpaced.push({
@@ -407,9 +407,9 @@ export function buildTimeline(
       );
     }
     previousSource = event.sourceTimestamp;
-    // Spread distributes over the union; the assertion only re-attaches the
-    // discriminant TS drops when spreading a union member.
-    events.push({ ...event, atMs: cursor } as ReplayEvent);
+    // The spread distributes over the union and keeps the discriminant, so no
+    // assertion is needed to re-attach it.
+    events.push({ ...event, atMs: cursor });
   }
 
   const lastAt = events.length === 0 ? 0 : events[events.length - 1]!.atMs;
@@ -512,6 +512,10 @@ export function deriveReplayState(
     (event): event is AttestationReplayEvent => event.kind === "attestation",
   );
   const attestation: ReplayAttestationState =
+    // Written long-hand on purpose. The optional-chain form the rule prefers
+    // does not narrow `attestationEvent` in the else branch, so every field
+    // read below it fails to compile.
+    // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
     attestationEvent === undefined || attestationEvent.attestation.tx_hash === null
       ? { status: "not-landed", chainId: journal.attestation.chain_id }
       : {

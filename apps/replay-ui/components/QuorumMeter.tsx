@@ -86,7 +86,6 @@ export function QuorumMeter({
           {kinds.map((kind, index) => (
             <span
               // Segments are fixed positions in the ladder, not a reorderable list.
-              // eslint-disable-next-line react/no-array-index-key
               key={index}
               className={`quorum__seg quorum__seg--${kind}`}
               data-kind={kind}

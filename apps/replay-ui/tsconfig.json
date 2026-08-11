@@ -12,6 +12,7 @@
     "noEmit": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -36,8 +37,10 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
-    "next-env.d.ts"
+    "next-env.d.ts",
+    ".next-ci/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

@@ -73,7 +73,7 @@ export function HeaderBar({
       />
       <div className="hdr__titles">
         <span className="kicker">
-          Verifiable vaults <span className="idx">// 01</span>
+          Verifiable vaults <span className="idx">{"// 01"}</span>
         </span>
         <h1 className="hdr__title">{title}</h1>
       </div>
