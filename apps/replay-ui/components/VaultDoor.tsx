@@ -121,7 +121,7 @@ export function VaultDoor({
       {/* Status lamp, top of the door. */}
       <g transform={`translate(0 ${-radius + 30})`}>
         <circle
-          className={reducedMotion ? "vaultdoor__lamp" : "vaultdoor__lamp vaultdoor__lamp--breathing"}
+          className={reducedMotion ? "lamp" : "lamp lamp--breathing"}
           r={5}
           style={{ fill: lamp }}
         />
