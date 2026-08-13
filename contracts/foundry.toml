@@ -1,7 +1,10 @@
 [profile.default]
 src = "src"
 out = "out"
-libs = ["lib"]
+libs = ["lib", "../node_modules"]
+# OZ's parent 4626 bodies are dead code behind our reverting preview* overrides
+# (the ERC-7540 pattern); solc flags them as unreachable inside the vendored lib.
+ignored_warnings_from = ["../node_modules"]
 solc = "0.8.27"
 optimizer = true
 optimizer_runs = 200
