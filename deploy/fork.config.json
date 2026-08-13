@@ -51,6 +51,13 @@
     "fee_ppm": 100,
     "provenance": "GeckoTerminal USDe pools on Base (deepest USDe/USDC pool); Basescan label 'Aerodrome: SlipStream Swap Router'; pool token0/token1/balances/liquidity and router.factory==pool.factory confirmed on-chain at pinned block"
   },
+  "service": {
+    "_comment": "Vault WAVS service (one service manager, one workflow: cron -> vault-nav -> aggregator -> PriimeVault). twap_window_secs bounds the Aerodrome TWAP used for min(par, TWAP) collateral pricing; inputs_block_lag is how far behind head the component pins its reads (NAV-03 self-determined height); observation_cardinality is the pool ring-buffer size ensured at bring-up so the TWAP window stays answerable across the loop-entry swaps (cardinality is 1 on mainnet at the pinned block).",
+    "cron_schedule": "*/10 * * * * *",
+    "twap_window_secs": 1800,
+    "inputs_block_lag": 2,
+    "observation_cardinality": 64
+  },
   "deploy_params": {
     "_comment": "Placeholder strategy parameters surfaced by the deploy beat (spec UI-01). Loop entry and vault deploy scripts must take these as inputs.",
     "_comment_turns": "max_loop_turns raised 4 -> 7: without a flash loan each borrow is health-checked against already-supplied collateral (D_k <= LLTV * C_{k-1}), so N borrow turns cap final LTV at LLTV*S_N/(1+LLTV*S_N), S_N = 1+LLTV+...+LLTV^{N-1}. N=4 caps at 76.3% even with ZERO margin at the full 91.5% LLTV; landing on 80% while keeping health factor >= health_factor_floor at every intermediate state (borrow cap per turn = lltv/health_factor_floor) takes 7 turns. enter-loop.sh solves the minimum turn count and fails if it exceeds this ceiling.",
