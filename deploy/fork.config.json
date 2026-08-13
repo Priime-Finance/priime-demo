@@ -53,11 +53,15 @@
   },
   "deploy_params": {
     "_comment": "Placeholder strategy parameters surfaced by the deploy beat (spec UI-01). Loop entry and vault deploy scripts must take these as inputs.",
+    "_comment_turns": "max_loop_turns raised 4 -> 7: without a flash loan each borrow is health-checked against already-supplied collateral (D_k <= LLTV * C_{k-1}), so N borrow turns cap final LTV at LLTV*S_N/(1+LLTV*S_N), S_N = 1+LLTV+...+LLTV^{N-1}. N=4 caps at 76.3% even with ZERO margin at the full 91.5% LLTV; landing on 80% while keeping health factor >= health_factor_floor at every intermediate state (borrow cap per turn = lltv/health_factor_floor) takes 7 turns. enter-loop.sh solves the minimum turn count and fails if it exceeds this ceiling.",
     "target_leverage": 5.0,
     "target_ltv": 0.80,
-    "max_loop_turns": 4,
+    "max_loop_turns": 7,
     "health_factor_floor": 1.05,
     "min_net_spread_bps": 20,
-    "initial_deposit_usdc": 500
+    "initial_deposit_usdc": 500,
+    "max_slippage_bps": 30,
+    "_comment_carry": "collateral_incentive_apr_bps is a fork-track placeholder for the incentive-paid carry on the USDe collateral leg (Merkl-paid in production, deliberately excluded from NAV per NAV-02). Used only by the enter-loop.sh net-spread entry gate: net = incentive APR - Morpho borrow APR (from the IRM view) must be >= min_net_spread_bps.",
+    "collateral_incentive_apr_bps": 550
   }
 }

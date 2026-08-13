@@ -30,15 +30,19 @@ import {IWavsServiceManager} from "./interfaces/wavs/IWavsServiceManager.sol";
 ///      acceptable only at demo participant counts.
 ///
 ///      Payload encoding (must stay in lockstep with the NAV component):
-///      `envelope.payload = abi.encode(uint256 nav, uint256 inputsBlock)`,
-///      exactly the bytes of the component's abi-encoded
-///      `NavResult { uint256 nav; uint256 blockNumber; }` struct (see
-///      `components/hello-nav/src/lib.rs`). The first word is the attested
-///      NAV in asset base units (USDC, 6 decimals); the second is the
-///      journal's `inputs_block`, the block height whose state the operators
-///      read (NAV-03: the component self-reports it, since cron triggers
-///      carry no height). Every operator signs these exact bytes, so the
-///      quorum is over (nav, inputsBlock) as a pair.
+///      `envelope.payload = abi.encode(address handler, uint256 nav,
+///      uint256 inputsBlock)`. The first word binds the envelope to its
+///      intended handler: the component signs the address of the contract
+///      the attestation is meant for (this vault, delivered as workflow
+///      config), and `handleSignedEnvelope` accepts only payloads bound to
+///      `address(this)`. A service manager is shared service-wide across
+///      workflows, so the binding is what scopes an attestation to one
+///      handler. The second word is the attested NAV in asset base units
+///      (USDC, 6 decimals); the third is the journal's `inputs_block`, the
+///      block height whose state the operators read (NAV-03: the component
+///      self-reports it, since cron triggers carry no height). Every
+///      operator signs these exact bytes, so the quorum is over
+///      (handler, nav, inputsBlock) as a triple.
 ///
 ///      Accounting coherence (this defines what the NAV component must
 ///      measure): the stored `nav` is what backs outstanding shares, and
@@ -129,6 +133,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     error EscrowFloorBreached(uint256 balance, uint256 floor);
     error ZeroAmount();
     error ZeroNav();
+    error HandlerMismatch(address handler);
     error AlreadyProcessed(bytes20 eventId);
     error StaleInputsBlock(uint256 inputsBlock, uint256 lastInputsBlock);
     error NotOwnerOrOperator();
@@ -446,10 +451,13 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     // ------------------------------------------------------------------------
 
     /// @inheritdoc IWavsServiceHandler
-    /// @dev The only way NAV moves. Guards, in order: (1) the service manager
-    ///      reverts unless the registered operator quorum signed these exact
-    ///      envelope bytes (VAULT-02); (2) each `eventId` is accepted at most
-    ///      once (VAULT-03 replay); (3) `inputsBlock` must strictly increase,
+    /// @dev The only way NAV moves. Guards, in order: (0) the payload's
+    ///      handler field must be this vault — an attestation is scoped to
+    ///      exactly one handler, even though the service manager validating
+    ///      it is shared service-wide; (1) the service manager reverts unless
+    ///      the registered operator quorum signed these exact envelope bytes
+    ///      (VAULT-02); (2) each `eventId` is accepted at most once
+    ///      (VAULT-03 replay); (3) `inputsBlock` must strictly increase,
     ///      so a delayed-but-valid envelope can never move NAV back to an
     ///      earlier read of the position (VAULT-03 staleness). An accepted
     ///      update then records the attested NAV and fulfills ALL pending
@@ -458,13 +466,16 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      fulfillment with zero share supply prices 1 share per USDC base
     ///      unit.
     function handleSignedEnvelope(Envelope calldata envelope, SignatureData calldata signatureData) external override {
+        (address handler, uint256 attestedNav, uint256 inputsBlock) =
+            abi.decode(envelope.payload, (address, uint256, uint256));
+        if (handler != address(this)) revert HandlerMismatch(handler);
+
         // Reverts unless the operator quorum signed this exact envelope.
         serviceManager.validate(envelope, signatureData);
 
         if (processed[envelope.eventId]) revert AlreadyProcessed(envelope.eventId);
         processed[envelope.eventId] = true;
 
-        (uint256 attestedNav, uint256 inputsBlock) = abi.decode(envelope.payload, (uint256, uint256));
         if (inputsBlock <= lastInputsBlock) revert StaleInputsBlock(inputsBlock, lastInputsBlock);
 
         nav = attestedNav;

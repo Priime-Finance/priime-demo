@@ -110,14 +110,15 @@ contract PriimeVaultTest {
 
     function _envelope(bytes20 eventId, uint256 nav, uint256 inputsBlock)
         internal
-        pure
+        view
         returns (IWavsServiceHandler.Envelope memory)
     {
         return IWavsServiceHandler.Envelope({
             eventId: eventId,
             ordering: bytes12(0),
-            // Same bytes the NAV component signs: abi.encode(nav, inputsBlock).
-            payload: abi.encode(nav, inputsBlock)
+            // Same bytes the NAV component signs:
+            // abi.encode(handler, nav, inputsBlock), bound to this vault.
+            payload: abi.encode(address(vault), nav, inputsBlock)
         });
     }
 
@@ -484,6 +485,25 @@ contract PriimeVaultTest {
 
         require(vault.totalAssets() == 1_000 * ONE_USDC, "nav unchanged after replay");
         require(vault.updateCount() == 1, "replay not counted");
+    }
+
+    function test_EnvelopeBoundToOtherHandlerRejected() public {
+        // Payload names a handler that is not this vault; must be rejected
+        // before any state is touched, regardless of quorum validity.
+        address other = address(0xDEAD);
+        IWavsServiceHandler.Envelope memory env = IWavsServiceHandler.Envelope({
+            eventId: bytes20(uint160(1)),
+            ordering: bytes12(0),
+            payload: abi.encode(other, uint256(1_000 * ONE_USDC), uint256(100))
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.HandlerMismatch.selector, other));
+        vault.handleSignedEnvelope(env, _sigs());
+
+        require(vault.totalAssets() == 0, "nav untouched");
+        require(vault.lastInputsBlock() == 0, "inputs block untouched");
+        require(vault.updateCount() == 0, "no update recorded");
+        require(!vault.processed(bytes20(uint160(1))), "eventId not consumed");
     }
 
     function test_StaleInputsBlockRejected() public {
