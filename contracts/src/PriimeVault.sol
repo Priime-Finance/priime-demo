@@ -24,10 +24,11 @@ import {IWavsServiceManager} from "./interfaces/wavs/IWavsServiceManager.sol";
 ///         the differentiation is that fulfillment prices come from
 ///         quorum-attested re-execution, not a trusted updater.
 ///
-/// @dev Demo scale, own capital only: no caps, no fees, no cancelation flow,
-///      not audited, not for public depositors. Fulfillment iterates every
-///      pending controller in one transaction; that is unbounded gas and
-///      acceptable only at demo participant counts.
+/// @dev Demo scale, own capital only: no fees, no cancelation flow, not
+///      audited, not for public depositors. Fulfillment iterates every pending
+///      controller in one transaction, so each queue is capped at
+///      `MAX_QUEUE_LENGTH` distinct controllers; the gas is bounded but still
+///      sized for demo participant counts only.
 ///
 ///      Payload encoding (must stay in lockstep with the NAV component):
 ///      `envelope.payload = abi.encode(address handler, uint256 nav,
@@ -64,12 +65,24 @@ import {IWavsServiceManager} from "./interfaces/wavs/IWavsServiceManager.sol";
 ///      `deposit`/`mint` are claim-only (assets moved at `requestDeposit`);
 ///      `redeem`/`withdraw` are claim-only (shares moved at `requestRedeem`)
 ///      and their `owner` parameter is the 7540 `controller`. All `preview*`
-///      revert. Partial claims use floor division; dust favors the vault.
+///      revert. Partial claims use floor division, and the claim that empties
+///      either side of a bucket settles the whole bucket, so rounding dust
+///      goes to the final claimer rather than stranding in the vault.
 contract PriimeVault is ERC4626, IWavsServiceHandler {
     using SafeERC20 for IERC20;
 
     /// @notice Fungible request model: every request is requestId 0.
     uint256 public constant REQUEST_ID = 0;
+
+    /// @notice Maximum number of distinct controllers queued per side.
+    ///         Fulfillment iterates the whole queue inside `handleSignedEnvelope`,
+    ///         so an unbounded queue is a NAV update that cannot fit in a block:
+    ///         the vault would be bricked by its own backlog. At demo scale
+    ///         (own capital, a handful of participants) 100 controllers per side
+    ///         is far above expected use and still settles well inside the block
+    ///         gas limit. Only new controllers consume a slot; a controller
+    ///         already queued can always top up.
+    uint256 public constant MAX_QUEUE_LENGTH = 100;
 
     /// @notice Service manager (POA stake registry) that validates operator sigs.
     IWavsServiceManager public immutable serviceManager;
@@ -125,6 +138,15 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     event NavUpdated(bytes20 indexed eventId, uint256 nav, uint256 inputsBlock, uint256 updateCount);
     event DepositRequestFulfilled(address indexed controller, uint256 assets, uint256 shares);
     event RedeemRequestFulfilled(address indexed controller, uint256 shares, uint256 assets);
+    /// @notice A pending deposit could not be priced at the attested NAV
+    ///         (zero NAV against outstanding shares, or an amount too small to
+    ///         buy one share) and was returned to its controller.
+    event DepositRequestRefunded(address indexed controller, uint256 assets);
+    /// @notice A strategist call left the vault above the escrow floor. The
+    ///         full calldata is logged: `execute` is the vault's only arbitrary
+    ///         call path, so this is the audit trail for every strategy action
+    ///         taken between NAV strikes.
+    event Executed(address indexed target, bytes data);
 
     error ZeroServiceManager();
     error ZeroStrategist();
@@ -132,13 +154,14 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     error SelfCallForbidden();
     error EscrowFloorBreached(uint256 balance, uint256 floor);
     error ZeroAmount();
-    error ZeroNav();
     error HandlerMismatch(address handler);
     error AlreadyProcessed(bytes20 eventId);
     error StaleInputsBlock(uint256 inputsBlock, uint256 lastInputsBlock);
+    error FutureInputsBlock(uint256 inputsBlock, uint256 blockNumber);
     error NotOwnerOrOperator();
     error NotControllerOrOperator();
     error ExceedsClaimable(uint256 requested, uint256 claimable);
+    error QueueFull();
     error AsyncFlowOnly();
 
     constructor(IWavsServiceManager _serviceManager, IERC20 _asset, address _strategist)
@@ -173,7 +196,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      The floor is evaluated at the end of this call only. Allowances
     ///      granted through `execute` persist beyond it, so approvals are
     ///      expected to be exact-amount and revoked once the entry sequence
-    ///      completes.
+    ///      completes. Emits `Executed` once the floor check passes.
     /// @param target Contract to call (never this vault).
     /// @param data   Full calldata for the target.
     /// @return result The target's raw return data.
@@ -193,6 +216,8 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
         uint256 balance = IERC20(asset()).balanceOf(address(this));
         if (balance < floor) revert EscrowFloorBreached(balance, floor);
+
+        emit Executed(target, data);
     }
 
     // ------------------------------------------------------------------------
@@ -201,13 +226,18 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
 
     /// @notice Escrow `assets` from `owner` and queue a deposit request for
     ///         `controller`. Fulfilled at the next accepted NAV strike.
+    /// @dev Reverts with `QueueFull` when `controller` is not already queued
+    ///      and the deposit queue holds `MAX_QUEUE_LENGTH` controllers.
     function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256) {
         if (assets == 0) revert ZeroAmount();
         if (msg.sender != owner && !_operators[owner][msg.sender]) revert NotOwnerOrOperator();
 
         IERC20(asset()).safeTransferFrom(owner, address(this), assets);
 
-        if (_pendingDepositAssets[controller] == 0) _depositQueue.push(controller);
+        if (_pendingDepositAssets[controller] == 0) {
+            if (_depositQueue.length >= MAX_QUEUE_LENGTH) revert QueueFull();
+            _depositQueue.push(controller);
+        }
         _pendingDepositAssets[controller] += assets;
         totalPendingDepositAssets += assets;
 
@@ -233,6 +263,8 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     /// @notice Escrow `shares` from `owner` and queue a redemption request for
     ///         `controller`. Non-owner callers need operator approval or ERC-20
     ///         share allowance. Fulfilled at the next accepted NAV strike.
+    /// @dev Reverts with `QueueFull` when `controller` is not already queued
+    ///      and the redeem queue holds `MAX_QUEUE_LENGTH` controllers.
     function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256) {
         if (shares == 0) revert ZeroAmount();
         if (msg.sender != owner && !_operators[owner][msg.sender]) {
@@ -241,7 +273,10 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
 
         _transfer(owner, address(this), shares);
 
-        if (_pendingRedeemShares[controller] == 0) _redeemQueue.push(controller);
+        if (_pendingRedeemShares[controller] == 0) {
+            if (_redeemQueue.length >= MAX_QUEUE_LENGTH) revert QueueFull();
+            _redeemQueue.push(controller);
+        }
         _pendingRedeemShares[controller] += shares;
         totalPendingRedeemShares += shares;
 
@@ -310,14 +345,15 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
 
         uint256 claimableShares = _claimableRedeemShares[controller];
         if (shares > claimableShares) revert ExceedsClaimable(shares, claimableShares);
-        uint256 assets = (shares * _claimableRedeemAssets[controller]) / claimableShares;
+        (uint256 sharesClaimed, uint256 assets) =
+            _splitClaim(shares, claimableShares, _claimableRedeemAssets[controller]);
 
-        _claimableRedeemShares[controller] = claimableShares - shares;
+        _claimableRedeemShares[controller] = claimableShares - sharesClaimed;
         _claimableRedeemAssets[controller] -= assets;
         totalClaimableRedeemAssets -= assets;
 
         IERC20(asset()).safeTransfer(receiver, assets);
-        emit Withdraw(msg.sender, receiver, controller, assets, shares);
+        emit Withdraw(msg.sender, receiver, controller, assets, sharesClaimed);
         return assets;
     }
 
@@ -329,14 +365,15 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
 
         uint256 claimableAssets = _claimableRedeemAssets[controller];
         if (assets > claimableAssets) revert ExceedsClaimable(assets, claimableAssets);
-        uint256 shares = (assets * _claimableRedeemShares[controller]) / claimableAssets;
+        (uint256 assetsClaimed, uint256 shares) =
+            _splitClaim(assets, claimableAssets, _claimableRedeemShares[controller]);
 
-        _claimableRedeemAssets[controller] = claimableAssets - assets;
+        _claimableRedeemAssets[controller] = claimableAssets - assetsClaimed;
         _claimableRedeemShares[controller] -= shares;
-        totalClaimableRedeemAssets -= assets;
+        totalClaimableRedeemAssets -= assetsClaimed;
 
-        IERC20(asset()).safeTransfer(receiver, assets);
-        emit Withdraw(msg.sender, receiver, controller, assets, shares);
+        IERC20(asset()).safeTransfer(receiver, assetsClaimed);
+        emit Withdraw(msg.sender, receiver, controller, assetsClaimed, shares);
         return shares;
     }
 
@@ -346,13 +383,14 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
 
         uint256 claimableAssets = _claimableDepositAssets[controller];
         if (assets > claimableAssets) revert ExceedsClaimable(assets, claimableAssets);
-        uint256 shares = (assets * _claimableDepositShares[controller]) / claimableAssets;
+        (uint256 assetsClaimed, uint256 shares) =
+            _splitClaim(assets, claimableAssets, _claimableDepositShares[controller]);
 
-        _claimableDepositAssets[controller] = claimableAssets - assets;
+        _claimableDepositAssets[controller] = claimableAssets - assetsClaimed;
         _claimableDepositShares[controller] -= shares;
 
         _transfer(address(this), receiver, shares);
-        emit Deposit(controller, receiver, assets, shares);
+        emit Deposit(controller, receiver, assetsClaimed, shares);
         return shares;
     }
 
@@ -362,14 +400,40 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
 
         uint256 claimableShares = _claimableDepositShares[controller];
         if (shares > claimableShares) revert ExceedsClaimable(shares, claimableShares);
-        uint256 assets = (shares * _claimableDepositAssets[controller]) / claimableShares;
+        (uint256 sharesClaimed, uint256 assets) =
+            _splitClaim(shares, claimableShares, _claimableDepositAssets[controller]);
 
-        _claimableDepositShares[controller] = claimableShares - shares;
+        _claimableDepositShares[controller] = claimableShares - sharesClaimed;
         _claimableDepositAssets[controller] -= assets;
 
-        _transfer(address(this), receiver, shares);
-        emit Deposit(controller, receiver, assets, shares);
+        _transfer(address(this), receiver, sharesClaimed);
+        emit Deposit(controller, receiver, assets, sharesClaimed);
         return assets;
+    }
+
+    /// @dev Price a partial claim against one of a controller's claimable
+    ///      buckets. `requested` is denominated in the side the caller chose
+    ///      (`ownTotal`); `counterTotal` is the other side of the same bucket,
+    ///      priced pro rata off it.
+    ///
+    ///      Both sides floor, so a claim that empties one side must empty the
+    ///      other in the same call. Otherwise the leftover reports as claimable
+    ///      forever — a phantom `maxDeposit`/`maxMint`/`maxWithdraw`/`maxRedeem`
+    ///      that no later claim can consume — and on the redeem side it strands
+    ///      real reserved USDC inside `totalClaimableRedeemAssets`. Rounding
+    ///      dust therefore settles to whoever closes the bucket, not to the
+    ///      vault. Callers must have already rejected `requested > ownTotal`,
+    ///      which also rules out `ownTotal == 0`.
+    /// @return own     Amount consumed from the requested side.
+    /// @return counter Amount consumed from the other side.
+    function _splitClaim(uint256 requested, uint256 ownTotal, uint256 counterTotal)
+        private
+        pure
+        returns (uint256 own, uint256 counter)
+    {
+        counter = (requested * counterTotal) / ownTotal;
+        if (requested == ownTotal || counter == counterTotal) return (ownTotal, counterTotal);
+        return (requested, counter);
     }
 
     function _requireControllerOrOperator(address controller) internal view {
@@ -457,8 +521,11 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      it is shared service-wide; (1) the service manager reverts unless
     ///      the registered operator quorum signed these exact envelope bytes
     ///      (VAULT-02); (2) each `eventId` is accepted at most once
-    ///      (VAULT-03 replay); (3) `inputsBlock` must strictly increase,
-    ///      so a delayed-but-valid envelope can never move NAV back to an
+    ///      (VAULT-03 replay); (3) `inputsBlock` must be a height the chain
+    ///      has actually reached, so a single corrupt quorum cannot sign an
+    ///      unreachable height and freeze NAV behind the staleness floor
+    ///      forever; (4) `inputsBlock` must strictly increase, so a
+    ///      delayed-but-valid envelope can never move NAV back to an
     ///      earlier read of the position (VAULT-03 staleness). An accepted
     ///      update then records the attested NAV and fulfills ALL pending
     ///      deposit and redemption requests at that price in this same
@@ -476,6 +543,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         if (processed[envelope.eventId]) revert AlreadyProcessed(envelope.eventId);
         processed[envelope.eventId] = true;
 
+        if (inputsBlock > block.number) revert FutureInputsBlock(inputsBlock, block.number);
         if (inputsBlock <= lastInputsBlock) revert StaleInputsBlock(inputsBlock, lastInputsBlock);
 
         nav = attestedNav;
@@ -497,6 +565,17 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      are escrowed in the vault until claimed; each fulfilled deposit
     ///      folds its assets into `nav`, which keeps the share price invariant
     ///      across the loop (nav and supply scale together).
+    ///
+    ///      Unpriceable deposits are refunded, never reverted and never minted
+    ///      at zero shares. With shares outstanding, a deposit has no price if
+    ///      the attested NAV is zero (total loss) or if the amount is too small
+    ///      to buy one share at the attested price. Reverting would brick every
+    ///      future NAV update, since there is no cancelation flow to drain the
+    ///      queue; minting zero shares would donate the deposit to existing
+    ///      holders. Both are worse than handing the assets back, so the
+    ///      escrowed USDC returns to the controller and the request closes.
+    ///      The bootstrap branch never refunds: shares equal assets, which
+    ///      `requestDeposit` already forces to be non-zero.
     function _fulfillDeposits() private {
         uint256 n = _depositQueue.length;
         for (uint256 i = 0; i < n; i++) {
@@ -506,13 +585,25 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
             uint256 supply = totalSupply();
             uint256 shares;
             if (supply == 0) {
-                shares = assets; // bootstrap: 1 share per USDC base unit
-                // Bootstrap replaces any pre-supply NAV: the share pool is
-                // backed only by assets actually folded in.
-                nav = assets;
+                // Bootstrap: 1 share per USDC base unit. The deposit is folded
+                // into `nav` exactly as in the priced branch, so any attested
+                // value already standing (a residual position left behind by a
+                // full exit) survives the re-bootstrap and belongs to the
+                // incoming holder, who is by definition the whole pool.
+                shares = assets;
+                nav += assets;
             } else {
-                if (nav == 0) revert ZeroNav();
-                shares = (assets * supply) / nav;
+                shares = nav == 0 ? 0 : (assets * supply) / nav;
+                if (shares == 0) {
+                    // Unpriceable: release the escrow back to the controller.
+                    _pendingDepositAssets[controller] = 0;
+                    totalPendingDepositAssets -= assets;
+
+                    IERC20(asset()).safeTransfer(controller, assets);
+
+                    emit DepositRequestRefunded(controller, assets);
+                    continue;
+                }
                 nav += assets;
             }
 

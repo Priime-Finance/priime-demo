@@ -1,11 +1,12 @@
 //! WAVS operator component attesting PriimeVault's NAV (wavs:operator@2.7.0).
 //!
-//! Each cron cycle: self-determine `inputs_block` (chain head minus a
-//! configured lag; cron triggers carry no height, NAV-03), read the vault's
-//! Morpho Blue position, the market state, the pool TWAP, and the vault's
-//! escrow views, all pinned to that one block, then return the abi-encoded
-//! payload `(handler, nav, inputsBlock)` that operators sign and the
-//! aggregator submits to `PriimeVault.handleSignedEnvelope`.
+//! Each cron cycle: derive `inputs_block` from the trigger's `trigger_time`
+//! (cron triggers carry no height, NAV-03; the shared trigger time is what
+//! makes the derived height identical across operators - see [`blocks`]),
+//! read the vault's Morpho Blue position, the market state, the pool TWAP,
+//! and the vault's escrow views, all pinned to that one block, then return
+//! the abi-encoded payload `(handler, nav, inputsBlock)` that operators sign
+//! and the aggregator submits to `PriimeVault.handleSignedEnvelope`.
 //!
 //! Valuation: collateral USDe is priced at min(par, pool TWAP), debt at
 //! Morpho share math with interest accrued to the block timestamp and
@@ -13,9 +14,11 @@
 //! reserved redemption payouts (the vault's public views). Integer math
 //! only; no HTTP; any failed or undecodable read fails the cycle.
 //!
-//! Pure math lives in [`nav`] (host-testable); chain reads in [`adapters`]
+//! Pure math lives in [`nav`] and the deterministic block search in
+//! [`blocks`] (both host-testable); chain reads in [`adapters`]
 //! (wasm32-only).
 
+pub mod blocks;
 pub mod nav;
 
 #[cfg(target_arch = "wasm32")]
@@ -35,7 +38,25 @@ mod component {
         features: ["tls"],
     });
 
+    use self::wavs::types::events::TriggerData;
+
     struct Component;
+
+    /// The cron trigger time, in whole seconds.
+    ///
+    /// This is the only chain-independent value every operator in the quorum
+    /// receives identically, so it - not the local chain head - is what
+    /// `inputs_block` is derived from. WIT carries it as nanos since the
+    /// epoch; block timestamps are seconds, and truncating is safe because
+    /// the same nanos truncate to the same seconds everywhere. A non-cron
+    /// trigger has no trigger time and must fail rather than fall back to a
+    /// per-operator value.
+    fn trigger_time_secs(data: &TriggerData) -> Result<u64, String> {
+        match data {
+            TriggerData::Cron(c) => Ok(c.trigger_time.nanos / 1_000_000_000),
+            _ => Err("vault-nav requires a cron trigger (no trigger_time otherwise)".to_string()),
+        }
+    }
 
     fn cfg(key: &str) -> Result<String, String> {
         host::config_var(key).ok_or_else(|| format!("missing workflow config var: {key}"))
@@ -56,7 +77,7 @@ mod component {
         chain.http_endpoint.ok_or_else(|| format!("no HTTP endpoint for chain {chain_id}"))
     }
 
-    fn run_cycle() -> Result<Vec<u8>, String> {
+    fn run_cycle(trigger_time_secs: u64) -> Result<Vec<u8>, String> {
         let vault = cfg_address("vault_address")?;
         let market_id: FixedBytes<32> = cfg("market_id")?
             .parse()
@@ -75,11 +96,16 @@ mod component {
             pool: cfg_address("pool_address")?,
             usdc,
             vault,
-            twap_window_secs: cfg_u64("twap_window_secs")? as u32,
+            // observe() takes uint32 secondsAgos, so an out-of-range window
+            // must fail the cycle rather than silently truncate to a
+            // different (and per-config wrong) TWAP.
+            twap_window_secs: u32::try_from(cfg_u64("twap_window_secs")?).map_err(|_| {
+                "twap_window_secs exceeds u32 (observe secondsAgos is uint32)".to_string()
+            })?,
             inputs_block_lag: cfg_u64("inputs_block_lag")?,
         };
 
-        let s = fetch_state(rpc_url()?, &targets)?;
+        let s = fetch_state(rpc_url()?, &targets, trigger_time_secs)?;
 
         // Degenerate market clock states fail the cycle (idiom: a zero or
         // future-dated lastUpdate cannot support a sound accrual).
@@ -94,7 +120,10 @@ mod component {
         let accrued = nav::accrued_total_borrow(s.total_borrow_assets, s.borrow_rate_wad, elapsed);
         let debt = nav::borrow_assets_up(s.borrow_shares, accrued, s.total_borrow_shares);
 
-        let tick = nav::avg_tick(s.tick_cum_old, s.tick_cum_new, targets.twap_window_secs)?;
+        // The effective window, not the configured one: the adapter clamps to
+        // what the pool's observation ring can actually answer, and the
+        // divisor must match the secondsAgos that produced the cumulatives.
+        let tick = nav::avg_tick(s.tick_cum_old, s.tick_cum_new, s.twap_window_effective_secs)?;
         let price = nav::bounded_price_1e24(nav::price_1e24_at_tick(tick)?);
 
         let value = nav::nav_usdc(
@@ -110,8 +139,8 @@ mod component {
     }
 
     impl Guest for Component {
-        fn run(_action: TriggerAction) -> Result<Vec<WasmResponse>, String> {
-            let payload = run_cycle()?;
+        fn run(action: TriggerAction) -> Result<Vec<WasmResponse>, String> {
+            let payload = run_cycle(trigger_time_secs(&action.data)?)?;
             Ok(vec![WasmResponse { payload, ordering: None, event_id_salt: None }])
         }
     }

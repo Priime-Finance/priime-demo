@@ -30,7 +30,11 @@ alloy-provider = { version = "1.0.0", default-features = false, features = ["rpc
 alloy-network = "1.0.0"
 alloy-rpc-types = "1.0.0"
 
+# overflow-checks stays ON in release: a wrapped integer must fail the cycle,
+# never sign a wrong NAV. The cost is a branch per arithmetic op on a
+# component that runs once per cron beat.
 [profile.release]
+overflow-checks = true
 codegen-units = 1
 opt-level = "s"
 debug = false

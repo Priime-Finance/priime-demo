@@ -102,6 +102,9 @@ for cand in "http://localhost:$FORK_PORT" "http://host.docker.internal:$FORK_POR
 done
 [ -n "$DOCKER_RPC" ] || { echo "FATAL: fork not reachable from inside docker"; exit 1; }
 DOCKER_WS="${DOCKER_RPC/http/ws}"
+# host[:port] the components actually dial (wavs.toml http_endpoint below);
+# scopes component --http-hosts instead of the chain being wide open.
+DOCKER_RPC_HOST="${DOCKER_RPC#http://}"
 # The IPFS gateway must be reachable from the same container vantage point;
 # reuse the host that worked for the RPC (kubo's gateway listens on 0.0.0.0).
 DOCKER_HOST_NAME="${DOCKER_RPC#http://}"; DOCKER_HOST_NAME="${DOCKER_HOST_NAME%:*}"
@@ -188,7 +191,7 @@ START=$(date +%s%N); END=$(( START + 3600000000000 ))
 WID=$("${CLI[@]}" workflow add | jq -r '.workflow_id')
 "${CLI[@]}" workflow trigger  --id "$WID" set-cron --schedule "$CRON" --start-time "$START" --end-time "$END" >/dev/null
 "${CLI[@]}" workflow component --id "$WID" set-source-uri --uri "ipfs://$NAV_CID" >/dev/null
-"${CLI[@]}" workflow component --id "$WID" permissions --http-hosts '*' --file-system true >/dev/null
+"${CLI[@]}" workflow component --id "$WID" permissions --http-hosts "$DOCKER_RPC_HOST" --file-system false >/dev/null
 "${CLI[@]}" workflow component --id "$WID" fuel-limit --fuel 1000000000000 >/dev/null
 "${CLI[@]}" workflow component --id "$WID" time-limit --seconds 30 >/dev/null
 jq -n \
@@ -202,7 +205,7 @@ jq -n \
 "${CLI[@]}" workflow component --id "$WID" config --config-file /data/component-config.json >/dev/null
 "${CLI[@]}" workflow submit    --id "$WID" set-aggregator >/dev/null
 "${CLI[@]}" workflow submit    --id "$WID" component set-source-uri --uri "ipfs://$AGG_CID" >/dev/null
-"${CLI[@]}" workflow submit    --id "$WID" component permissions --http-hosts '*' --file-system true >/dev/null
+"${CLI[@]}" workflow submit    --id "$WID" component permissions --http-hosts "$DOCKER_RPC_HOST" --file-system false >/dev/null
 "${CLI[@]}" workflow submit    --id "$WID" component config --values "$CHAIN=$VAULT" >/dev/null
 "${CLI[@]}" manager set-evm --chain "$CHAIN" --address "$SM" >/dev/null
 "${CLI[@]}" validate >/dev/null || true   # warns on registry availability; IPFS-sourced, safe

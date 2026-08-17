@@ -48,8 +48,13 @@ if [ -f "$FORKDIR/anvil.pid" ]; then
   kill "$(cat "$FORKDIR/anvil.pid")" >/dev/null 2>&1 || true
   sleep 1
 fi
+# --block-time 2 (Base's own cadence): vault-nav now derives inputs_block from
+# the cron trigger_time (wall clock), not the operator's chain head, and
+# FAILS the strike outright if head timestamp < trigger_time. On-demand
+# mining (anvil's default) only stamps a new block when a tx lands, so the
+# head would go stale between strikes and every cron cycle would miss.
 anvil --fork-url "$BASE_RPC_URL" --fork-block-number "$FORK_BLOCK" \
-  --chain-id "$FORK_CHAIN_ID" --host 0.0.0.0 --port "$FORK_PORT" \
+  --chain-id "$FORK_CHAIN_ID" --host 0.0.0.0 --port "$FORK_PORT" --block-time 2 \
   > "$FORKDIR/anvil.log" 2>&1 &
 echo $! > "$FORKDIR/anvil.pid"
 for i in $(seq 1 30); do
@@ -58,6 +63,21 @@ for i in $(seq 1 30); do
   sleep 1
 done
 echo "fork up: block $(cast block-number --rpc-url "$RPC"), chainId $(cast chain-id --rpc-url "$RPC")"
+
+# The pinned block's own timestamp (fork.config.json .fork.block_timestamp)
+# is ~30h behind wall clock. --block-time alone won't close that gap: interval
+# mining just adds 2s per block from wherever the clock starts, it never
+# snaps forward to catch up on its own. Jump the head to now in one RPC round
+# trip so the very first cron trigger_time already resolves, then interval
+# mining keeps the clock in lockstep with wall time from here (verified: once
+# synced, anvil's block-time miner tracks real elapsed time closely).
+# Side effect: this one jump block accrues ~30h of Morpho interest in a
+# single step, which the NAV component correctly reflects -- not a bug.
+say "sync fork clock to wall time"
+NOW=$(date +%s)
+cast rpc evm_setNextBlockTimestamp "$NOW" --rpc-url "$RPC" >/dev/null
+cast rpc evm_mine --rpc-url "$RPC" >/dev/null
+echo "head timestamp now $(cast block latest -f timestamp --rpc-url "$RPC") (wall $NOW)"
 
 # --- 2. smoke: Morpho market ------------------------------------------------
 say "Morpho Blue market $MKT"

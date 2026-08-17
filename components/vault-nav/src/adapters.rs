@@ -3,7 +3,13 @@
 //! Every read in a cycle is pinned to the same `inputs_block`, so all
 //! operators observe one snapshot and produce identical bytes. Any RPC or
 //! decode failure fails the cycle rather than attesting a guessed value.
+//!
+//! `inputs_block` itself is derived from the cron `trigger_time` (see
+//! [`crate::blocks`]), NOT from this operator's chain head: the head is the
+//! one input that differs between nodes, and a differing height means a
+//! differing signed payload and a silently missed quorum.
 
+use crate::blocks::resolve_inputs_block;
 use alloy_primitives::{Address, FixedBytes, U256};
 use alloy_provider::Provider;
 use alloy_rpc_types::TransactionRequest;
@@ -30,6 +36,19 @@ sol! {
     function observe(uint32[] secondsAgos) external view returns (
         int56[] tickCumulatives, uint160[] secondsPerLiquidityCumulativeX128s
     );
+    // Aerodrome Slipstream CLPool keeps Uniswap v3's observation layout, but
+    // its Slot0 drops v3's `feeProtocol` (protocol/unstaked fees live
+    // elsewhere), so this is six fields, not seven. Verified against the
+    // live pool: slot0() returns exactly six words.
+    function slot0() external view returns (
+        uint160 sqrtPriceX96, int24 tick, uint16 observationIndex,
+        uint16 observationCardinality, uint16 observationCardinalityNext,
+        bool unlocked
+    );
+    function observations(uint256 index) external view returns (
+        uint32 blockTimestamp, int56 tickCumulative,
+        uint160 secondsPerLiquidityCumulativeX128, bool initialized
+    );
     function balanceOf(address account) external view returns (uint256);
     function totalPendingDepositAssets() external view returns (uint256);
     function totalClaimableRedeemAssets() external view returns (uint256);
@@ -47,9 +66,14 @@ pub struct ChainState {
     pub market_last_update: u64,
     /// IRM average borrow rate, WAD per second, at `inputs_block`.
     pub borrow_rate_wad: u128,
-    /// Pool tick cumulatives at [now - window, now] as of `inputs_block`.
+    /// Pool tick cumulatives at [now - window, now] as of `inputs_block`,
+    /// where `window` is [`ChainState::twap_window_effective_secs`].
     pub tick_cum_old: i64,
     pub tick_cum_new: i64,
+    /// The TWAP window actually observed: the configured
+    /// `twap_window_secs` clamped to the age of the pool's oldest
+    /// initialized observation. Must be the divisor in `avg_tick`.
+    pub twap_window_effective_secs: u32,
     pub vault_usdc_balance: u128,
     pub total_pending_deposit: u128,
     pub total_claimable_redeem: u128,
@@ -73,27 +97,41 @@ fn u128_of(v: U256, what: &str) -> AdapterResult<u128> {
     v.try_into().map_err(|_| format!("{what} overflows u128: {v}"))
 }
 
-/// Read the full snapshot. Self-determines `inputs_block` as the chain head
-/// minus the configured lag (cron triggers carry no height), then pins every
-/// call to it.
-pub fn fetch_state(rpc_url: String, t: &ReadTargets) -> AdapterResult<ChainState> {
+/// Read the full snapshot. Derives `inputs_block` from the cron
+/// `trigger_time_secs` (the one value every operator in the quorum shares),
+/// applies `inputs_block_lag` for reorg depth, then pins every call to it.
+pub fn fetch_state(
+    rpc_url: String,
+    t: &ReadTargets,
+    trigger_time_secs: u64,
+) -> AdapterResult<ChainState> {
     block_on(async move {
         let provider = new_evm_provider::<alloy_network::Ethereum>(rpc_url);
+
+        // Header timestamp lookup, shared by the block search below and the
+        // snapshot pin. Borrows the provider rather than moving it so the
+        // returned future outlives the call (same idiom as `call`).
+        let timestamp_of = |n: u64| {
+            let provider = &provider;
+            async move {
+                provider
+                    .get_block_by_number(n.into())
+                    .await
+                    .map_err(|e| format!("get_block {n} failed: {e}"))?
+                    .ok_or_else(|| format!("block {n} not found"))
+                    .map(|b| b.header.timestamp)
+            }
+        };
 
         let latest = provider
             .get_block_number()
             .await
             .map_err(|e| format!("get_block_number failed: {e}"))?;
-        let inputs_block = latest
-            .checked_sub(t.inputs_block_lag)
-            .ok_or_else(|| format!("chain head {latest} below inputs_block_lag"))?;
+        let inputs_block =
+            resolve_inputs_block(latest, trigger_time_secs, t.inputs_block_lag, &timestamp_of)
+                .await?;
 
-        let block = provider
-            .get_block_by_number(inputs_block.into())
-            .await
-            .map_err(|e| format!("get_block {inputs_block} failed: {e}"))?
-            .ok_or_else(|| format!("block {inputs_block} not found"))?;
-        let block_timestamp = block.header.timestamp;
+        let block_timestamp = timestamp_of(inputs_block).await?;
 
         let call = |to: Address, data: Vec<u8>| {
             let provider = &provider;
@@ -134,9 +172,60 @@ pub fn fetch_state(rpc_url: String, t: &ReadTargets) -> AdapterResult<ChainState
         let rate = borrowRateViewCall::abi_decode_returns(&rate_raw)
             .map_err(|e| format!("decode borrowRateView failed: {e}"))?;
 
+        // The pool's observation ring may be younger than the configured TWAP
+        // window: `increaseObservationCardinalityNext` allocates slots but
+        // nothing backfills them, and the mainnet pool sits at cardinality 1
+        // at the fork pin. Asking `observe` for a secondsAgo older than the
+        // oldest initialized observation reverts (`OLD`), which would kill
+        // bring-up with an opaque eth_call error. Clamp instead.
+        let slot0_raw = call(t.pool, slot0Call {}.abi_encode()).await?;
+        let slot0 = slot0Call::abi_decode_returns(&slot0_raw)
+            .map_err(|e| format!("decode slot0 failed: {e}"))?;
+        if slot0.observationCardinality == 0 {
+            return Err("pool observation cardinality is zero".to_string());
+        }
+        // Uniswap v3 ring convention: the newest observation sits at
+        // `observationIndex`, so the oldest is the next slot round the ring.
+        // While the ring is still growing that slot is uninitialized and
+        // index 0 holds the oldest one (widen to u32 first: the +1 would wrap
+        // a u16 index of 65535).
+        let oldest_index =
+            (u32::from(slot0.observationIndex) + 1) % u32::from(slot0.observationCardinality);
+        let read_obs = |index: u32| {
+            let call = &call;
+            async move {
+                let raw =
+                    call(t.pool, observationsCall { index: U256::from(index) }.abi_encode()).await?;
+                observationsCall::abi_decode_returns(&raw)
+                    .map_err(|e| format!("decode observations({index}) failed: {e}"))
+            }
+        };
+        let mut oldest = read_obs(oldest_index).await?;
+        if !oldest.initialized {
+            oldest = read_obs(0).await?;
+            if !oldest.initialized {
+                return Err("pool has no initialized observation".to_string());
+            }
+        }
+        // Observation clocks are uint32 (Uniswap's truncated timestamp), so
+        // the age is computed in that width, wrapping exactly as the pool
+        // does. The `as` cast truncates rather than overflowing.
+        let observable_secs =
+            (block_timestamp as u32).wrapping_sub(oldest.blockTimestamp);
+        let twap_window_effective_secs = t.twap_window_secs.min(observable_secs);
+        if twap_window_effective_secs == 0 {
+            return Err(format!(
+                "pool TWAP window clamps to zero: oldest observation timestamp {} is not \
+                 older than block {inputs_block} (timestamp {block_timestamp}); the \
+                 observation ring needs time to fill after \
+                 increaseObservationCardinalityNext",
+                oldest.blockTimestamp
+            ));
+        }
+
         let obs_raw = call(
             t.pool,
-            observeCall { secondsAgos: vec![t.twap_window_secs, 0] }.abi_encode(),
+            observeCall { secondsAgos: vec![twap_window_effective_secs, 0] }.abi_encode(),
         )
         .await?;
         let obs = observeCall::abi_decode_returns(&obs_raw)
@@ -171,6 +260,7 @@ pub fn fetch_state(rpc_url: String, t: &ReadTargets) -> AdapterResult<ChainState
             borrow_rate_wad: u128_of(rate, "borrow rate")?,
             tick_cum_old: obs.tickCumulatives[0].as_i64(),
             tick_cum_new: obs.tickCumulatives[1].as_i64(),
+            twap_window_effective_secs,
             vault_usdc_balance: u128_of(bal, "vault USDC balance")?,
             total_pending_deposit: u128_of(pending, "totalPendingDepositAssets")?,
             total_claimable_redeem: u128_of(claimable, "totalClaimableRedeemAssets")?,

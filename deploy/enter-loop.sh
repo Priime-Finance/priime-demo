@@ -177,6 +177,16 @@ exec_vault() { # exec_vault <target> <sig> [args...]
 usde_bal()  { cast call "$USDE" 'balanceOf(address)(uint256)' "$VAULT" --rpc-url "$RPC" | awk '{print $1}'; }
 usdc_bal()  { cast call "$USDC" 'balanceOf(address)(uint256)' "$VAULT" --rpc-url "$RPC" | awk '{print $1}'; }
 oracle_p()  { cast call "$ORACLE" 'price()(uint256)' --rpc-url "$RPC" | awk '{print $1}'; }
+# Pool spot price at slot0, same 1e24 scale as oracle_p (USDC value per 1e18
+# USDe): price_1e24 = sqrtPriceX96^2 * 1e36 / 2^192 (token0=USDe, token1=USDC;
+# same formula as components/vault-nav/src/nav.rs price_1e24_at_tick). Spot,
+# not oracle_p's min(par,TWAP): oracle_p caps at par, which is exactly what
+# breaks min_out below when USDe trades above par.
+pool_p() {
+  local sqrtp
+  sqrtp=$(cast call "$POOL" 'slot0()(uint160,int24,uint16,uint16,uint16,bool)' --rpc-url "$RPC" | awk 'NR==1{print $1}')
+  ibc "$sqrtp * $sqrtp * 10^36 / 2^192"
+}
 # Position reads: collateral (1e18) and debt (1e6, borrow shares -> assets
 # rounded up with Morpho's virtual-shares convention).
 read_pos() { # sets COLL, DEBT, COLLVAL
@@ -190,9 +200,14 @@ read_pos() { # sets COLL, DEBT, COLLVAL
   COLLVAL=$(ibc "$COLL * $P / 1000000000000000000000000000000000000")   # 1e24 scale -> USDC 1e6
 }
 swap_supply() { # swap the vault's whole USDC amount $1 -> USDe, supply it all
-  local amt="$1" min_out deadline got
-  # USDC (6 dec) -> USDe (18 dec): scale by 1e12, bound by max_slippage_bps.
-  min_out=$(ibc "$amt * 1000000000000 * (10000 - $SLIP_BPS) / 10000")
+  local amt="$1" price min_out deadline got
+  # USDC (6 dec) -> USDe (18 dec) at the pool's current spot price, bound by
+  # max_slippage_bps: out ~= amt * 1e36 / price_1e24 (inverse of nav.rs's
+  # collateral_value = collateral_1e18 * price_1e24 / 1e36). Par-only pricing
+  # (old: amt * 1e12) overstates min_out whenever USDe trades above par and
+  # halts entry on a real premium.
+  price=$(pool_p)
+  min_out=$(ibc "$amt * 10^36 * (10000 - $SLIP_BPS) / ($price * 10000)")
   deadline=$(( $(cast block latest -f timestamp --rpc-url "$RPC") + 600 ))
   exec_vault "$USDC" "approve(address,uint256)" "$ROUTER" "$amt"                     # exact-amount
   exec_vault "$ROUTER" "exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))" \
