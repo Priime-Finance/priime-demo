@@ -128,10 +128,27 @@ pub fn fetch_state(
             }
         };
 
-        let latest = provider
-            .get_block_number()
-            .await
-            .map_err(|e| format!("get_block_number failed: {e}"))?;
+        // The cron fires at a wall-clock boundary the chain has usually not
+        // minted past yet: at trigger second N the newest block's timestamp
+        // is N minus zero-to-block-time. That is not an error, it is a race
+        // the component must wait out (bounded well inside the workflow's
+        // 30s time limit); failing immediately would kill essentially every
+        // cycle on a 2s chain. Determinism is unaffected: blocks.rs still
+        // requires head_ts >= trigger_time before it finalizes the answer,
+        // this loop only gives the chain time to get there.
+        let mut latest = 0u64;
+        for attempt in 0..30u32 {
+            if attempt > 0 {
+                wstd::task::sleep(wstd::time::Duration::from_millis(500)).await;
+            }
+            latest = provider
+                .get_block_number()
+                .await
+                .map_err(|e| format!("get_block_number failed: {e}"))?;
+            if timestamp_of(latest).await? >= trigger_time_secs {
+                break;
+            }
+        }
         let inputs_block =
             resolve_inputs_block(latest, trigger_time_secs, t.inputs_block_lag, &timestamp_of)
                 .await?;
