@@ -63,18 +63,24 @@ mod component {
     }
 
     fn cfg_address(key: &str) -> Result<Address, String> {
-        cfg(key)?.parse().map_err(|e| format!("bad address in config {key}: {e}"))
+        cfg(key)?
+            .parse()
+            .map_err(|e| format!("bad address in config {key}: {e}"))
     }
 
     fn cfg_u64(key: &str) -> Result<u64, String> {
-        cfg(key)?.parse().map_err(|e| format!("bad u64 in config {key}: {e}"))
+        cfg(key)?
+            .parse()
+            .map_err(|e| format!("bad u64 in config {key}: {e}"))
     }
 
     fn rpc_url() -> Result<String, String> {
         let chain_id = cfg("chain_id")?;
         let chain = host::get_evm_chain_config(&chain_id)
             .ok_or_else(|| format!("no chain config for {chain_id}"))?;
-        chain.http_endpoint.ok_or_else(|| format!("no HTTP endpoint for chain {chain_id}"))
+        chain
+            .http_endpoint
+            .ok_or_else(|| format!("no HTTP endpoint for chain {chain_id}"))
     }
 
     fn run_cycle(trigger_time_secs: u64) -> Result<Vec<u8>, String> {
@@ -141,7 +147,11 @@ mod component {
     impl Guest for Component {
         fn run(action: TriggerAction) -> Result<Vec<WasmResponse>, String> {
             let payload = run_cycle(trigger_time_secs(&action.data)?)?;
-            Ok(vec![WasmResponse { payload, ordering: None, event_id_salt: None }])
+            Ok(vec![WasmResponse {
+                payload,
+                ordering: None,
+                event_id_salt: None,
+            }])
         }
     }
 

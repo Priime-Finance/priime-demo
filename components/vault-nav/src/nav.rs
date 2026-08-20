@@ -72,6 +72,37 @@ pub fn accrued_total_borrow(
     tba + tba * taylor / wad
 }
 
+/// Floor on the effective TWAP averaging window, in seconds. Below this a
+/// clamped window has degraded from an average toward a spot price, which is
+/// cheap to move for the one block a cycle reads — the cycle must fail
+/// rather than attest on it.
+pub const MIN_TWAP_WINDOW_SECS: u32 = 300;
+
+/// The TWAP window this cycle can actually use: `configured_secs` (workflow
+/// config `twap_window_secs`) clamped to `observable_secs` (the age of the
+/// pool's oldest initialized observation, from [`crate::adapters`]). Errors
+/// if the clamped result falls below [`MIN_TWAP_WINDOW_SECS`].
+///
+/// Deliberately one guard on the final `effective` value, not two separate
+/// checks: it covers both a ring too young to answer a full window
+/// (`observable_secs` small) and a `twap_window_secs` misconfigured below
+/// the floor (`configured_secs` small) with the same code path, and the
+/// error message below distinguishes the two for the operator.
+pub fn effective_twap_window(configured_secs: u32, observable_secs: u32) -> Result<u32, String> {
+    let effective = configured_secs.min(observable_secs);
+    if effective < MIN_TWAP_WINDOW_SECS {
+        return Err(format!(
+            "effective TWAP window {effective}s is below the {MIN_TWAP_WINDOW_SECS}s floor \
+             (configured twap_window_secs={configured_secs}s, observable={observable_secs}s): \
+             a shorter average degrades toward a spot price and is cheap to manipulate; check \
+             whether the pool's observation ring is still young (observable is the smaller \
+             input) or twap_window_secs itself is misconfigured (configured is the smaller \
+             input)"
+        ));
+    }
+    Ok(effective)
+}
+
 /// Time-weighted average tick from two tick cumulatives `window_secs` apart,
 /// floored toward negative infinity (the Uniswap v3 observe convention).
 pub fn avg_tick(tick_cum_old: i64, tick_cum_new: i64, window_secs: u32) -> Result<i32, String> {
@@ -174,7 +205,7 @@ pub fn nav_usdc(
     total_pending_deposit: u128,
     total_claimable_redeem: u128,
 ) -> Result<U256, String> {
-    let floor = total_pending_deposit as u128 + total_claimable_redeem as u128;
+    let floor = total_pending_deposit + total_claimable_redeem;
     let folded_idle = usdc_balance.checked_sub(floor).ok_or_else(|| {
         format!("escrow floor breached: idle {usdc_balance} < pending+claimable {floor}")
     })?;
@@ -185,7 +216,12 @@ pub fn nav_usdc(
 
 /// The signed payload bytes: abi.encode(handler, nav, inputsBlock).
 pub fn encode_payload(handler: Address, nav: U256, inputs_block: u64) -> Vec<u8> {
-    BoundNavResult { handler, nav, inputsBlock: U256::from(inputs_block) }.abi_encode()
+    BoundNavResult {
+        handler,
+        nav,
+        inputsBlock: U256::from(inputs_block),
+    }
+    .abi_encode()
 }
 
 #[cfg(test)]
@@ -197,13 +233,19 @@ mod tests {
 
     #[test]
     fn borrow_assets_zero_shares_is_zero() {
-        assert_eq!(borrow_assets_up(0, U256::from(1_000_000_000u128), 5_000_000), U256::ZERO);
+        assert_eq!(
+            borrow_assets_up(0, U256::from(1_000_000_000u128), 5_000_000),
+            U256::ZERO
+        );
     }
 
     #[test]
     fn borrow_assets_rounds_up() {
         // shares * (tba + 1) / (tbs + 1e6) = 3 * 1001 / 2e6 = 0.0015 -> ceil 1.
-        assert_eq!(borrow_assets_up(3, U256::from(1_000u128), 1_000_000), U256::from(1u8));
+        assert_eq!(
+            borrow_assets_up(3, U256::from(1_000u128), 1_000_000),
+            U256::from(1u8)
+        );
         // Exact division must NOT round up: 1e6 * (1_999_999 + 1) / (1e6 + 1e6) = 1_000_000.
         assert_eq!(
             borrow_assets_up(1_000_000, U256::from(1_999_999u128), 1_000_000),
@@ -218,15 +260,21 @@ mod tests {
         let bs = 1_907_226_640_495u128;
         let tba = 30_363_672_594_546u128;
         let tbs = 28_968_098_704_951_882u128;
-        let expected = (bs * (tba + 1) + (tbs + 1_000_000) - 1) / (tbs + 1_000_000);
-        assert_eq!(borrow_assets_up(bs, U256::from(tba), tbs), U256::from(expected));
+        let expected = (bs * (tba + 1)).div_ceil(tbs + 1_000_000);
+        assert_eq!(
+            borrow_assets_up(bs, U256::from(tba), tbs),
+            U256::from(expected)
+        );
     }
 
     // --- interest accrual ---------------------------------------------------
 
     #[test]
     fn accrual_zero_rate_or_elapsed_is_identity() {
-        assert_eq!(accrued_total_borrow(1_000_000, 0, 3600), U256::from(1_000_000u128));
+        assert_eq!(
+            accrued_total_borrow(1_000_000, 0, 3600),
+            U256::from(1_000_000u128)
+        );
         assert_eq!(
             accrued_total_borrow(1_000_000, 31_709_791_983, 0),
             U256::from(1_000_000u128)
@@ -243,7 +291,10 @@ mod tests {
         let accrued = accrued_total_borrow(tba, rate, secs);
         let linear = U256::from(tba + tba); // 1 + x with x = 1
         let exp = U256::from(tba * 27_183 / 10_000); // e^1 = 2.7183
-        assert!(accrued >= linear, "3-term Taylor must dominate linear: {accrued}");
+        assert!(
+            accrued >= linear,
+            "3-term Taylor must dominate linear: {accrued}"
+        );
         assert!(accrued < exp, "Taylor must stay below exact e^x: {accrued}");
     }
 
@@ -267,6 +318,47 @@ mod tests {
         assert!(avg_tick(0, 1, 0).is_err());
     }
 
+    // --- TWAP window floor ---------------------------------------------------
+
+    #[test]
+    fn window_uses_configured_when_observable_covers_it() {
+        assert_eq!(effective_twap_window(1800, 3600).unwrap(), 1800);
+    }
+
+    #[test]
+    fn window_clamps_to_observable_above_the_floor() {
+        assert_eq!(effective_twap_window(1800, 900).unwrap(), 900);
+    }
+
+    #[test]
+    fn window_clamps_to_observable_exactly_at_the_floor() {
+        assert_eq!(effective_twap_window(1800, 300).unwrap(), 300);
+    }
+
+    #[test]
+    fn window_one_second_short_of_the_floor_fails_the_cycle() {
+        assert!(effective_twap_window(1800, 299).is_err());
+    }
+
+    #[test]
+    fn window_a_young_ring_of_a_few_seconds_fails_the_cycle() {
+        let e = effective_twap_window(1800, 4).unwrap_err();
+        assert!(e.contains("4"), "{e}");
+    }
+
+    #[test]
+    fn window_misconfigured_below_the_floor_fails_even_with_ample_observable() {
+        // observable is plenty (a day old ring); the configured window itself
+        // is the problem, not the ring.
+        let e = effective_twap_window(60, 86_400).unwrap_err();
+        assert!(e.contains("60"), "{e}");
+    }
+
+    #[test]
+    fn window_zero_configured_fails_the_cycle() {
+        assert!(effective_twap_window(0, 3600).is_err());
+    }
+
     #[test]
     fn sqrt_ratio_matches_canonical_vectors() {
         // Known TickMath outputs.
@@ -275,7 +367,10 @@ mod tests {
             sqrt_ratio_x96_at_tick(1).unwrap(),
             U256::from(79_232_123_823_359_799_118_286_999_568u128)
         );
-        assert_eq!(sqrt_ratio_x96_at_tick(-887_272).unwrap(), U256::from(4_295_128_739u64));
+        assert_eq!(
+            sqrt_ratio_x96_at_tick(-887_272).unwrap(),
+            U256::from(4_295_128_739u64)
+        );
         assert!(sqrt_ratio_x96_at_tick(887_273).is_err());
     }
 
@@ -384,8 +479,14 @@ mod tests {
         assert_eq!(&bytes[0..12], &[0u8; 12]);
         assert_eq!(&bytes[12..32], handler.as_slice());
         // Word 1: nav.
-        assert_eq!(U256::from_be_slice(&bytes[32..64]), U256::from(500_000_000u64));
+        assert_eq!(
+            U256::from_be_slice(&bytes[32..64]),
+            U256::from(500_000_000u64)
+        );
         // Word 2: inputs block.
-        assert_eq!(U256::from_be_slice(&bytes[64..96]), U256::from(49_911_282u64));
+        assert_eq!(
+            U256::from_be_slice(&bytes[64..96]),
+            U256::from(49_911_282u64)
+        );
     }
 }

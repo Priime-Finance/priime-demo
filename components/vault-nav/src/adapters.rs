@@ -10,6 +10,7 @@
 //! differing signed payload and a silently missed quorum.
 
 use crate::blocks::resolve_inputs_block;
+use crate::nav::effective_twap_window;
 use alloy_primitives::{Address, FixedBytes, U256};
 use alloy_provider::Provider;
 use alloy_rpc_types::TransactionRequest;
@@ -72,7 +73,10 @@ pub struct ChainState {
     pub tick_cum_new: i64,
     /// The TWAP window actually observed: the configured
     /// `twap_window_secs` clamped to the age of the pool's oldest
-    /// initialized observation. Must be the divisor in `avg_tick`.
+    /// initialized observation, and never below
+    /// [`crate::nav::MIN_TWAP_WINDOW_SECS`] (a shorter clamp fails the
+    /// cycle instead of attesting on a near-spot price). Must be the
+    /// divisor in `avg_tick`.
     pub twap_window_effective_secs: u32,
     pub vault_usdc_balance: u128,
     pub total_pending_deposit: u128,
@@ -94,7 +98,8 @@ pub struct ReadTargets {
 }
 
 fn u128_of(v: U256, what: &str) -> AdapterResult<u128> {
-    v.try_into().map_err(|_| format!("{what} overflows u128: {v}"))
+    v.try_into()
+        .map_err(|_| format!("{what} overflows u128: {v}"))
 }
 
 /// Read the full snapshot. Derives `inputs_block` from the cron
@@ -144,8 +149,15 @@ pub fn fetch_state(
             }
         };
 
-        let pos_raw =
-            call(t.morpho, positionCall { id: t.market_id, user: t.vault }.abi_encode()).await?;
+        let pos_raw = call(
+            t.morpho,
+            positionCall {
+                id: t.market_id,
+                user: t.vault,
+            }
+            .abi_encode(),
+        )
+        .await?;
         let pos = positionCall::abi_decode_returns(&pos_raw)
             .map_err(|e| format!("decode position failed: {e}"))?;
 
@@ -177,7 +189,11 @@ pub fn fetch_state(
         // nothing backfills them, and the mainnet pool sits at cardinality 1
         // at the fork pin. Asking `observe` for a secondsAgo older than the
         // oldest initialized observation reverts (`OLD`), which would kill
-        // bring-up with an opaque eth_call error. Clamp instead.
+        // bring-up with an opaque eth_call error. Clamp instead - but only
+        // down to a floor: a clamp that eats too much of the window turns
+        // the "average" into a near-spot price, which is cheap to move for
+        // the one block this cycle reads. Below that floor the cycle must
+        // fail, not attest on it.
         let slot0_raw = call(t.pool, slot0Call {}.abi_encode()).await?;
         let slot0 = slot0Call::abi_decode_returns(&slot0_raw)
             .map_err(|e| format!("decode slot0 failed: {e}"))?;
@@ -194,8 +210,14 @@ pub fn fetch_state(
         let read_obs = |index: u32| {
             let call = &call;
             async move {
-                let raw =
-                    call(t.pool, observationsCall { index: U256::from(index) }.abi_encode()).await?;
+                let raw = call(
+                    t.pool,
+                    observationsCall {
+                        index: U256::from(index),
+                    }
+                    .abi_encode(),
+                )
+                .await?;
                 observationsCall::abi_decode_returns(&raw)
                     .map_err(|e| format!("decode observations({index}) failed: {e}"))
             }
@@ -210,28 +232,33 @@ pub fn fetch_state(
         // Observation clocks are uint32 (Uniswap's truncated timestamp), so
         // the age is computed in that width, wrapping exactly as the pool
         // does. The `as` cast truncates rather than overflowing.
-        let observable_secs =
-            (block_timestamp as u32).wrapping_sub(oldest.blockTimestamp);
-        let twap_window_effective_secs = t.twap_window_secs.min(observable_secs);
-        if twap_window_effective_secs == 0 {
-            return Err(format!(
-                "pool TWAP window clamps to zero: oldest observation timestamp {} is not \
-                 older than block {inputs_block} (timestamp {block_timestamp}); the \
-                 observation ring needs time to fill after \
-                 increaseObservationCardinalityNext",
-                oldest.blockTimestamp
-            ));
-        }
+        let observable_secs = (block_timestamp as u32).wrapping_sub(oldest.blockTimestamp);
+        let twap_window_effective_secs = effective_twap_window(t.twap_window_secs, observable_secs)
+            .map_err(|e| {
+                format!(
+                    "{e} (oldest observation timestamp {}, inputs_block {inputs_block}, block \
+                     timestamp {block_timestamp}); if observable is the smaller input the \
+                     observation ring needs more time to fill after \
+                     increaseObservationCardinalityNext",
+                    oldest.blockTimestamp
+                )
+            })?;
 
         let obs_raw = call(
             t.pool,
-            observeCall { secondsAgos: vec![twap_window_effective_secs, 0] }.abi_encode(),
+            observeCall {
+                secondsAgos: vec![twap_window_effective_secs, 0],
+            }
+            .abi_encode(),
         )
         .await?;
         let obs = observeCall::abi_decode_returns(&obs_raw)
             .map_err(|e| format!("decode observe failed: {e}"))?;
         if obs.tickCumulatives.len() != 2 {
-            return Err(format!("observe returned {} cumulatives, want 2", obs.tickCumulatives.len()));
+            return Err(format!(
+                "observe returned {} cumulatives, want 2",
+                obs.tickCumulatives.len()
+            ));
         }
 
         let bal_raw = call(t.usdc, balanceOfCall { account: t.vault }.abi_encode()).await?;

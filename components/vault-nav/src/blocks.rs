@@ -136,7 +136,11 @@ mod tests {
 
     impl Chain {
         fn new(genesis: u64, spacing: u64) -> Self {
-            Chain { genesis, spacing, probes: Cell::new(0) }
+            Chain {
+                genesis,
+                spacing,
+                probes: Cell::new(0),
+            }
         }
         fn at(&self, n: u64) -> impl Future<Output = Result<u64, String>> + '_ {
             self.probes.set(self.probes.get() + 1);
@@ -200,7 +204,10 @@ mod tests {
     #[test]
     fn genesis_is_answerable() {
         let c = Chain::new(1000, 2);
-        assert_eq!(ready(block_at_or_before(600, 1001, |n| c.at(n))).unwrap(), 0);
+        assert_eq!(
+            ready(block_at_or_before(600, 1001, |n| c.at(n))).unwrap(),
+            0
+        );
     }
 
     #[test]
@@ -246,7 +253,10 @@ mod tests {
     #[test]
     fn zero_lag_pins_the_trigger_time_block_itself() {
         let c = Chain::new(1000, 2);
-        assert_eq!(ready(resolve_inputs_block(600, 2000, 0, |n| c.at(n))).unwrap(), 500);
+        assert_eq!(
+            ready(resolve_inputs_block(600, 2000, 0, |n| c.at(n))).unwrap(),
+            500
+        );
     }
 
     #[test]
