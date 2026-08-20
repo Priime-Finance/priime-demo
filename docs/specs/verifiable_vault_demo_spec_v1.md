@@ -36,7 +36,7 @@ Frontend on Vercel replays **captured journals** with live explorer links; gradu
 
 ## Scope lines
 
-**In (v1):** vault contract (deposit, share accounting, NAV-update handler verifying signature set against registry); loop entry as a deploy-time scripted tx sequence (3-4 turns, no flash loan needed at this size); NAV WASM component (reads Morpho state at trigger block only; no off-chain HTTP, ever); simple submit-on-quorum aggregator component; 3-node 2-of-3 setup; journal capture; Vercel replay UI.
+**In (v1):** vault contract (deposit, share accounting, NAV-update handler verifying signature set against registry); loop entry as a deploy-time scripted tx sequence (7 turns; amended 2026-08-13, the original "3-4 turns" cannot reach 80% LTV without a flash loan: a 4-turn cap tops out at LTV 0.763 even at zero margin); NAV WASM component (reads Morpho state at trigger block only; no off-chain HTTP, ever); simple submit-on-quorum aggregator component; 3-node 2-of-3 setup; journal capture; Vercel replay UI.
 
 **Out (v1):** strategy builder / canvas / wizard; quorum-driven fund movement (attested actions); envelope contract machinery; auto-compound; Merkl reward claiming; public depositors; audit. First v2 item: one attested action type, delever on health-factor breach.
 

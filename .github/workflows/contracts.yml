@@ -10,9 +10,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # The contracts resolve OpenZeppelin out of the root pnpm node_modules
+      # (contracts/remappings.txt), so the JS install is a build prerequisite.
+      # Step ordering and store caching follow replay-ui.yml, whose recipe is
+      # act-verified: setup-node BEFORE pnpm/action-setup so the PATH survives
+      # under act, and the store cached by hand keyed on pnpm-lock.yaml.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: locate pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+      - name: install
+        run: pnpm install --frozen-lockfile
+
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
       - name: forge build
         working-directory: contracts
         run: forge build -vvv
+      - name: forge test
+        working-directory: contracts
+        run: forge test -vvv

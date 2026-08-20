@@ -24,6 +24,7 @@ service.json
 deploy/components/*.wasm
 .nodes/
 .docker/
+deploy/.fork/
 
 # Misc
 .DS_Store
@@ -36,3 +37,5 @@ deploy/components/*.wasm
 # GSD .planning folder
 
 .planning/
+/cache/
+/out/

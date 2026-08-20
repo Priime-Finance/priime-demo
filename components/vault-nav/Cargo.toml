@@ -1,0 +1,42 @@
+[package]
+name = "priime-vault-nav"
+version = "0.1.0"
+edition = "2021"
+description = "WAVS operator component attesting PriimeVault NAV from pinned Morpho Blue reads (wavs:operator@2.7.0)."
+license = "MIT"
+
+# Standalone workspace: this wasm32-wasip2 component is intentionally detached
+# from the repo-root cargo workspace (which holds native crates) so a host-target
+# workspace build never tries to compile it. Pure NAV math in src/nav.rs still
+# tests on the host target (cargo test); only the WIT bindings and RPC adapters
+# are wasm32-gated.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+alloy-primitives = "1.0.0"
+alloy-sol-types = "1.0.0"
+alloy-sol-macro = "1.0.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wit-bindgen = "0.53.1"
+wit-bindgen-rt = { version = "0.44.0", features = ["bitflags"] }
+wasip2 = "1.0.2"
+wavs-wasi-utils = "=2.8.0"
+wstd = "=0.6.5"
+alloy-provider = { version = "1.0.0", default-features = false, features = ["rpc-api"] }
+alloy-network = "1.0.0"
+alloy-rpc-types = "1.0.0"
+
+# overflow-checks stays ON in release: a wrapped integer must fail the cycle,
+# never sign a wrong NAV. The cost is a branch per arithmetic op on a
+# component that runs once per cron beat.
+[profile.release]
+overflow-checks = true
+codegen-units = 1
+opt-level = "s"
+debug = false
+lto = true
+strip = true
