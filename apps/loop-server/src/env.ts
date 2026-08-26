@@ -1,5 +1,9 @@
 /** Environment parsing for the loop server. Fails loudly on anything missing. */
 
+import { readFileSync } from "node:fs";
+
+import { isRecord } from "@priime-demo/loop-deploy";
+
 export interface ServerEnv {
   port: number;
   /** Bearer token for every non-health route. */
@@ -45,6 +49,19 @@ export function readEnv(): ServerEnv {
     ipfsGatewayUrl: process.env.IPFS_GATEWAY_URL ?? "http://127.0.0.1:8080",
     artifactPath: process.env.HANDLER_ARTIFACT_PATH ?? new URL("../../../contracts/out/PriimeVault.sol/PriimeVault.json", import.meta.url).pathname,
     dbPath: process.env.DB_PATH ?? new URL("../data/loops.db", import.meta.url).pathname,
-    templateWorkflowId: process.env.TEMPLATE_WORKFLOW_ID,
+    templateWorkflowId: process.env.TEMPLATE_WORKFLOW_ID ?? templateFromServiceJson(),
   };
+}
+
+/** Read the template workflow id vault-service.sh wrote out at bring-up. */
+function templateFromServiceJson(): string | undefined {
+  const path = process.env.VAULT_SERVICE_JSON ?? new URL("../../../deploy/.fork/vault-service.json", import.meta.url).pathname;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return undefined;
+  }
+  if (isRecord(parsed) && typeof parsed.template_workflow_id === "string") return parsed.template_workflow_id;
+  return undefined;
 }
