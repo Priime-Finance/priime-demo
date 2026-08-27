@@ -1,0 +1,727 @@
+/* Priime Build canvas v2 — THE RACK (UX_SPEC). hm.css carries the exact
+ * landing hardware-module layers; this file is page shell + rack chrome:
+ * lanes, ghost slots, wires, market takeover, rule takeover, progress rail,
+ * review. The v1 bc-palette / bc-simbar / bcnode* / bcpanel* blocks are
+ * deleted by design. */
+
+.bc-root{display:flex;flex-direction:column;height:calc(100dvh - var(--nav-h, 64px));background:#EDEAE2}
+
+/* ── header + progress rail ── */
+.bc-top{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 26px 12px;border-bottom:1px solid #dcd8d0;background:#F5F2EB}
+.bc-kicker{font-family:var(--fm);font-size:10px;letter-spacing:.16em;color:#2B5CFF}
+
+.rail{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:0}
+.rail-step{display:flex;align-items:center;gap:5px;font-family:var(--fm);font-size:8.5px;letter-spacing:.14em;color:#a29e95;text-transform:uppercase}
+.rail-dot{width:8px;height:8px;border-radius:50%;border:1.5px solid #c9c2b0;background:transparent}
+.rail-step.done .rail-dot{background:#2B5CFF;border-color:#2B5CFF}
+.rail-step.done{color:#141210}
+.rail-step.now .rail-dot{border-color:#2B5CFF;animation:railpulse 1.4s ease-in-out infinite}
+.rail-step.now{color:#2B5CFF}
+.rail-step.skip .rail-dot{border-style:dashed;opacity:.5}
+@keyframes railpulse{0%,100%{box-shadow:0 0 0 0 rgba(43,92,255,.35)}50%{box-shadow:0 0 0 5px rgba(43,92,255,0)}}
+/* hero portfolio readout (UX_ITERATION_3 §4): the ONE number, top-center */
+.rail-hero{font-family:var(--fm);color:#141210;display:flex;align-items:baseline;gap:10px}
+.rail-hero-k{font-size:9px;letter-spacing:.16em;color:#2B5CFF}
+.rail-hero b{font-size:24px;font-weight:600;letter-spacing:-.02em;line-height:1}
+.rail-hero .flash{animation:apyflash .5s ease-out}
+@keyframes apyflash{0%{color:#2B5CFF}100%{color:#141210}}
+/* secondary per-lane chips */
+.rail-lanes{display:flex;gap:8px;flex-wrap:wrap}
+.rail-lanechip{font-family:var(--fm);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:#6f6c66;border:1px solid #d8d3c8;border-radius:30px;padding:3px 10px}
+.rail-lanechip b{color:#141210;font-weight:600}
+/* stage-aware guide line (UX_ITERATION_3 §5): the next action, one line */
+.rail-guide{font-family:var(--fm);font-size:10px;letter-spacing:.04em;color:#6f6c66;text-align:center;min-height:14px}
+
+/* header launch key: the hm-key idiom at header scale */
+.rail-launch{display:flex;align-items:center;justify-content:center;gap:7px;height:40px;padding:0 18px;border-radius:12px;
+  font-family:var(--fm);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8a7a73;
+  background:#17291B;border:1px solid rgba(255,255,255,.26);cursor:default;
+  box-shadow:0 7px 13px -6px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05),inset 0 0 0 1px rgba(0,0,0,.5);transition:.16s}
+.rail-launch .hm-led{width:5.5px;height:5.5px;border-radius:50%;background:#3a322f;transition:.16s}
+.rail-launch.lit{color:#fff;border-color:#fff;cursor:pointer;
+  box-shadow:0 0 22px rgba(255,255,255,.6),0 7px 14px -4px rgba(255,255,255,.45),inset 0 0 15px rgba(255,255,255,.3),inset 0 1px 0 rgba(255,255,255,.14)}
+.rail-launch.lit .hm-led{background:#fff;box-shadow:0 0 9px #fff}
+
+/* ── rack board (dot grid per DESIGN §5.5) — now a pan/zoom viewport
+      (UX_ITERATION_3 §2): CSS transform, no scrollbars, grab to pan ── */
+.rk-board{flex:1;min-height:0;overflow:hidden;position:relative;touch-action:none;cursor:grab;
+  background-image:radial-gradient(#d8d5cf 1px,transparent 1.5px);background-size:24px 24px}
+.rk-board--panning{cursor:grabbing}
+.rk-viewport{position:absolute;top:0;left:0;width:max-content;min-width:100%;transform-origin:0 0;will-change:transform}
+.rk-viewport--anim{transition:transform .32s cubic-bezier(.3,1,.4,1)}
+/* on-canvas nav keys (+ / − / FIT), small hm-key idiom */
+.rk-nav{position:absolute;right:18px;bottom:18px;display:flex;gap:8px;z-index:6}
+.rk-nav .hm-key{flex:0 0 auto;min-width:42px;height:34px;padding:0 12px;cursor:pointer;font-size:10px}
+.rk-rack{position:relative;display:flex;align-items:stretch;min-height:100%;padding:10px 18px 40px}
+.rk-orchcol{flex:0 0 auto;display:flex;flex-direction:column;justify-content:center;padding:40px 26px 40px 8px}
+.rk-lanes{flex:1;min-width:0;display:flex;flex-direction:column}
+
+/* ── lane ── */
+.rk-lane{position:relative;padding:6px 8px 26px}
+.rk-lane + .rk-lane{border-top:1px dashed #d8d3c8}
+.rk-lanehead{display:flex;align-items:center;gap:12px;height:28px;padding:0 6px}
+.rk-lanename{font-family:var(--fm);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#141210;background:none;border:0;padding:2px 4px;border-radius:6px;cursor:text;min-width:60px}
+.rk-lanename:focus{outline:1.5px dashed #C9B49A}
+.rk-laneapy{font-family:var(--fm);font-size:10px;color:#6f6c66}
+.rk-laneapy b{color:#141210;font-weight:600}
+.rk-laneshare{font-family:var(--fm);font-size:10px;color:#6f6c66}
+.rk-lanekill{margin-left:auto;font-family:var(--fm);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#a29e95;background:none;border:1px solid #d8d3c8;border-radius:30px;padding:3px 10px;cursor:pointer}
+.rk-lanekill:hover{color:#b91c1c;border-color:rgba(185,28,28,.4)}
+
+.rk-row{position:relative;display:flex;align-items:flex-start;gap:34px;padding:26px 10px 30px;min-width:max-content}
+.rk-row > *{position:relative;z-index:2}
+.rk-wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.rk-wires path{fill:none;stroke-linecap:round}
+.rk-wires path.ghost{stroke:#C9C2B0;stroke-width:1.6;stroke-dasharray:3 6;animation:pgdash 1.2s linear infinite}
+.rk-wires path.hot{stroke:#2B5CFF;stroke-width:1.6;filter:drop-shadow(0 0 5px rgba(43,92,255,.4))}
+.rk-wires path.hot.pulse{animation:wirepulse .4s ease-out}
+.rk-wires circle.plug{fill:#000000}
+@keyframes pgdash{to{stroke-dashoffset:-18}}
+@keyframes wirepulse{0%{stroke-width:1.6}50%{stroke-width:2.4}100%{stroke-width:1.6}}
+/* rank 18: newly hot wires draw in; plug dots pop onto the jacks */
+.rk-wires path.hot.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:wiredraw .48s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes wiredraw{to{stroke-dashoffset:0}}
+.rk-wires circle.plug.in{transform-box:fill-box;transform-origin:center;animation:plugin .25s cubic-bezier(.3,1.5,.4,1) .4s both}
+@keyframes plugin{from{transform:scale(0)}to{transform:scale(1)}}
+/* a wire can never rest hidden */
+@media (prefers-reduced-motion: reduce){
+  .rk-wires path.hot{stroke-dasharray:none;stroke-dashoffset:0;animation:none}
+  .rk-wires circle.plug{animation:none;transform:none}
+}
+
+/* multi-lane zoom (UX §4): .62 per lane, focused lane back to .86 */
+.rk-rack--multi .rk-lane .hm-hw{zoom:.62}
+.rk-rack--multi .rk-lane--focused .hm-hw{zoom:.86}
+/* focused plate: 244→340, siblings dim */
+.rk-plate--focused .hm-hw{width:340px;flex:0 0 340px}
+.rk-lane--hasfocus .rk-plate:not(.rk-plate--focused){opacity:.55}
+.rk-lane--hasfocus .rk-vault:not(.rk-plate--focused){opacity:.55}
+.rk-plate,.rk-vault{transition:opacity .2s}
+/* quote in flight: the screen dims, never a spinner overlay */
+.rk-plate--quoting .hm-scr{opacity:.85}
+/* plate materialize snap (UX stage 1) */
+.rk-plate--snap{animation:snapin .28s cubic-bezier(.3,1.35,.4,1)}
+@keyframes snapin{0%{transform:scale(.96);opacity:.4}100%{transform:scale(1);opacity:1}}
+
+/* the ? affordance in hm-tag (progressive disclosure) */
+.hm-help{font-family:var(--fm);font-size:9px;color:#6c6c68;border:1px solid rgba(0,0,0,.25);border-radius:50%;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;margin-left:6px;cursor:help;background:none}
+.hm-helppop{position:absolute;top:34px;left:10px;right:10px;z-index:6;background:#0d0d0d;color:#e9e9e6;font-family:var(--fm);font-size:9.5px;line-height:1.6;padding:10px 12px;border-radius:10px;box-shadow:0 18px 40px -18px rgba(0,0,0,.6)}
+
+/* plate controls (focused hm-acts swap) — dark hardware idiom */
+.pc{display:flex;flex-direction:column;gap:9px}
+.pc-dial{display:flex;flex-direction:column;gap:4px}
+.pc-dialrow{display:flex;justify-content:space-between;align-items:baseline}
+.pc-lab{font-family:var(--fm);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:#a29e95}
+.pc-val{font-family:var(--fm);font-size:10.5px;color:#141210;font-weight:600}
+.pc input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:2px;background:#2a2a28;border-radius:2px;outline:none}
+.pc input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;border-radius:50%;background:#ffffff;box-shadow:0 0 0 4px rgba(0,0,0,.15),0 0 8px rgba(0,0,0,.4);cursor:pointer;border:1px solid #2a2a28}
+.pc input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#ffffff;box-shadow:0 0 0 4px rgba(0,0,0,.15);cursor:pointer;border:1px solid #2a2a28}
+.pc-band{font-family:var(--fm);font-size:7.5px;letter-spacing:.06em;color:#a29e95}
+.pc-num{display:flex;align-items:center;gap:8px}
+.pc-num input{width:70px;font-family:var(--fm);font-size:11px;padding:5px 8px;border-radius:8px;border:1px solid #c9c2b0;background:#fff}
+.pc .hm-keys .hm-key{height:34px;font-size:7.5px}
+.pc-eject.hm-key{flex:0 0 64px;color:#b45309;border-color:rgba(180,83,9,.4)}
+/* automatic-behavior register shown while ADVANCED is closed (§3) */
+.pc-auto{font-family:var(--fm);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:#a29e95;padding:2px 3px 0;line-height:1.7}
+
+/* ── ghost slots (landing .pg-slot treatment) ── */
+.rk-slot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  width:244px;flex:0 0 244px;min-height:210px;border:1.5px dashed #C9B49A;border-radius:16px;
+  background:none;cursor:pointer;font-family:var(--fm);font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;color:#8a7a73;transition:border-color .2s,background .2s}
+.rk-rack--multi .rk-lane .rk-slot{zoom:.62}
+.rk-rack--multi .rk-lane--focused .rk-slot{zoom:.86}
+.rk-slot:hover{border-color:#2B5CFF;color:#2B5CFF}
+.rk-slot.want{border-color:#2B5CFF;background:rgba(43,92,255,.05);animation:slotwant 1.6s ease-in-out infinite}
+@keyframes slotwant{0%,100%{box-shadow:0 0 0 0 rgba(43,92,255,.18)}50%{box-shadow:0 0 0 8px rgba(43,92,255,0)}}
+.rk-slot .hm-key{flex:0 0 auto;width:82%;height:40px}
+/* ghost add-a-loop lane */
+.rk-addlane{margin:8px 16px 26px;display:flex;align-items:center;justify-content:center;height:64px;border:1.5px dashed #C9B49A;border-radius:16px;background:none;cursor:pointer;font-family:var(--fm);font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;color:#8a7a73;width:calc(100% - 32px)}
+.rk-addlane:hover{border-color:#2B5CFF;color:#2B5CFF}
+/* one-shot want pulse after the first lane completes (UX_ITERATION_3 §5):
+   three beats, never looping forever */
+.rk-addlane.want{border-color:#2B5CFF;color:#2B5CFF;background:rgba(43,92,255,.05);animation:slotwant 1.6s ease-in-out 3}
+
+/* dim unlit vault terminus at stage 0 */
+.rk-vault--dim{opacity:.5;filter:saturate(.4)}
+.rk-vault{cursor:default}
+
+/* orchestrator plate (one size larger) */
+.rk-orch .hm-hw{width:280px;flex:0 0 280px;zoom:.86}
+.rk-orch.rk-plate--focused .hm-hw{width:340px;flex:0 0 340px}
+.rk-orchrow{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;font-size:9px;letter-spacing:.04em;color:#a5a5a0;text-transform:uppercase}
+.rk-orchrow b{color:#e9e9e6;font-weight:600;font-size:9.5px}
+.rk-orchbar{position:relative;flex:1;height:7px;border-radius:4px;background:#1a1816;border:1px solid #262422;overflow:hidden;margin:0 8px}
+.rk-orchbar i{position:absolute;inset:0;width:0;background:#ffffff;box-shadow:0 0 8px rgba(255,255,255,.5);border-radius:4px;transition:width .35s cubic-bezier(.4,0,.2,1)}
+.rk-orchrow.dry b{color:#c2864e}
+.rk-orchrow .arr{color:#c2864e;font-size:9px}
+
+/* ── market discovery content rules (shell retired in IT4 — the content
+      lives in the context dock; .mt-* row/card classes are KEPT) ── */
+.mt-kicker{font-family:var(--fm);font-size:11px;letter-spacing:.18em;color:#2B5CFF}
+/* unified-list filter chips (UX_ITERATION_3 §1): all markets · venues · class */
+.mt-filters{display:flex;gap:8px;flex-wrap:wrap}
+.mt-filters .hm-key{height:38px;padding:0 14px;flex:0 0 auto;cursor:pointer}
+/* venue chip on each row */
+.mt-venuechip{display:inline-block;vertical-align:2px;margin-left:9px;font-family:var(--fm);font-style:normal;font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:#6f6c66;border:1px solid #d8d3c8;border-radius:30px;padding:2px 8px}
+.mt-body{display:grid;grid-template-columns:1fr 1fr;gap:26px;padding:20px 30px 60px;align-items:start}
+@media(max-width:900px){.mt-body{grid-template-columns:1fr}}
+.mt-sec-h{font-family:var(--fm);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#6f6c66;display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.mt-card{display:grid;grid-template-columns:1fr auto;gap:3px 14px;align-items:baseline;width:100%;text-align:left;min-height:72px;padding:14px 16px;margin-bottom:10px;border-radius:14px;border:1px solid #dcd8d0;background:#fff;cursor:pointer;font-family:inherit;transition:transform .1s,box-shadow .15s}
+.mt-card:hover{transform:translateY(-1px);box-shadow:0 10px 26px -16px rgba(20,18,15,.4)}
+.mt-card.sel{border-color:#2B5CFF;box-shadow:inset 0 0 0 1.5px #2B5CFF}
+.mt-card.miss{opacity:.55;cursor:default;background:transparent}
+.mt-pair{font-size:15px;font-weight:650;letter-spacing:-.01em}
+.mt-apy{font-family:var(--fm);font-size:16px;font-weight:600;color:#2B5CFF}
+.mt-meta{grid-column:1/-1;display:flex;gap:14px;font-family:var(--fm);font-size:9.5px;color:#a29e95}
+.mt-empty{font-family:var(--fm);font-size:10px;line-height:1.6;color:#a29e95;padding:6px 2px 10px}
+
+/* ── derived-rules decode content (RuleTakeover shell retired in IT4 —
+      the decode renders inside the dock's portfolio panel) ── */
+.rt-body{padding:20px 30px 60px;max-width:860px}
+.rt-policy{font-family:var(--fm);font-size:12px;letter-spacing:.1em;color:#141210;margin-bottom:6px}
+.rt-modeled{display:inline-block;font-family:var(--fm);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#b45309;border:1px solid rgba(180,83,9,.45);border-radius:30px;padding:3px 10px;margin-bottom:16px}
+.rt-rule{font-family:var(--fm);font-size:11px;line-height:1.7;color:#3d3a35;border-bottom:1px dashed #dcd8d0;padding:10px 2px}
+.rt-floor{font-family:var(--fm);font-size:10px;color:#6f6c66;margin-top:14px}
+
+/* ── review backdrop (the modal shell itself is pf-*, founder pass (C)).
+      The rest of the old dark-green .bcrev* shell was deleted 2026-08-20:
+      resurrection-risk dead code, no TSX consumer. ── */
+.bcrev-backdrop{position:fixed;inset:0;z-index:130;background:rgba(20,18,15,.55);display:grid;place-items:center;padding:20px}
+
+@media(max-width:960px){
+  .bc-top{flex-wrap:wrap}
+  .rk-rack{flex-direction:column}
+  .rk-orchcol{padding:8px 8px 0}
+  .rk-row{overflow-x:auto}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   IT4 — three-column workstation (IT4_DOCK_SPEC §1) — additive only
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.bc-work{flex:1;min-height:0;display:grid;position:relative;
+  grid-template-columns:var(--cp-w,300px) minmax(0,1fr) var(--dock-w,360px);
+  transition:grid-template-columns .28s cubic-bezier(.3,1,.4,1)}
+/* the copilot panel (column 1) is not rendered in this port; pin the two
+   children so auto-placement cannot drop the board into the empty column */
+.bc-work>.rk-board{grid-column:2}
+.bc-work>.dock{grid-column:3}
+.bc-work[data-dock="closed"]{--dock-w:40px}
+
+.dock{background:#F5F2EB;border-left:1px solid #dcd8d0;
+  display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.dock-scroll{flex:1;min-height:0;overflow-y:auto;padding:14px 16px 40px}
+
+/* panel headers carry the collapse key (hm-key idiom at 26px) */
+.dock-head{display:flex;align-items:center;gap:10px;
+  padding:12px 16px;border-bottom:1px solid #dcd8d0;flex:0 0 auto}
+
+.dock-head .mt-kicker{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.panel-key.hm-key{flex:0 0 auto;height:26px;min-width:26px;padding:0 8px;font-size:8px;cursor:pointer}
+
+/* collapsed rails: 40px strips, rotated mono label, whole strip clickable */
+.panel-rail{display:none;flex:1;align-items:flex-start;justify-content:center;
+  padding-top:14px;cursor:pointer;background:none;border:0}
+.panel-rail span{writing-mode:vertical-rl;font-family:var(--fm);font-size:9px;
+  letter-spacing:.18em;text-transform:uppercase;color:#a29e95;display:inline-flex;align-items:center;gap:6px}
+.panel-rail span .hm-led{width:5px;height:5px;border-radius:50%;background:#3a322f}
+.panel-rail span .hm-led.lit{background:#4D8BFF;box-shadow:0 0 7px rgba(77,139,255,.7)}
+
+.bc-work[data-dock="closed"] .dock > :not(.panel-rail){display:none}
+.bc-work[data-dock="closed"] .dock .panel-rail{display:flex}
+
+/* 961–1240px: not enough width for three columns — open panels OVERLAY the board */
+.bc-work[data-narrow="true"]{grid-template-columns:40px minmax(0,1fr) 40px}
+.bc-work[data-narrow="true"] .dock{position:absolute;top:0;bottom:0;z-index:8}
+.bc-work[data-narrow="true"] .dock{right:0;width:360px;box-shadow:-18px 0 40px -24px rgba(20,18,15,.35)}
+
+.bc-work[data-narrow="true"][data-dock="closed"] .dock{position:static;width:auto;box-shadow:none}
+
+/* ── dock: Discover reflow (360px column; interior 328px) ── */
+.dock .mt-filters{display:flex;flex-wrap:wrap;gap:6px}
+.dock .mt-filters .hm-key{height:30px;padding:0 10px;font-size:7.5px}
+.dock .mt-filters--class{margin-top:8px}
+.dock .mt-body{display:block;padding:14px 0 0}
+.dock .mt-card{grid-template-columns:1fr auto}
+.dock .mt-pair{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.dock .mt-apy{font-size:13.5px}
+.dock .mt-meta{flex-wrap:wrap;gap:8px;align-items:center}
+.dock .mt-meta .mt-venuechip{margin-left:0;vertical-align:0}
+.dock .mt-empty{padding:6px 0 10px}
+
+/* ── dock: module mode (mirrored PlateControls at full size) ── */
+.dock-module{display:flex;flex-direction:column;gap:14px}
+.dock-module .pc .hm-keys .hm-key{height:38px;font-size:8.5px}
+.dock-module .pc-num input{width:90px}
+.dock-market{display:flex;flex-direction:column;gap:9px}
+.dock-market-pair{font-size:16px;font-weight:650;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.dock-market-meta{display:flex;flex-wrap:wrap;gap:10px;font-family:var(--fm);font-size:9.5px;color:#6f6c66}
+.dock-market .hm-keys .hm-key{height:38px;font-size:8.5px;cursor:pointer}
+
+/* dock readouts (derived numbers above the controls) */
+.dock-readouts{border:1px solid #dcd8d0;border-radius:14px;background:#fff;padding:12px 14px}
+.dock-ro-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.dock-ro-lane{font-family:var(--fm);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#a29e95}
+.dock-ro-mod{font-family:var(--fm);font-size:10px;font-weight:600;color:#141210;flex:1;min-width:0}
+.dock-readouts .hm-bdg{font-family:var(--fm);font-size:8px;letter-spacing:.08em;text-transform:uppercase;border:1px solid #d8d3c8;border-radius:30px;padding:2px 8px;color:#6f6c66}
+.dock-readouts .hm-bdg.ok{color:#1a7a4b;border-color:rgba(26,122,75,.4)}
+.dock-ro-rows{display:flex;flex-direction:column;gap:5px}
+.dock-ro-row{display:flex;justify-content:space-between;gap:10px;font-family:var(--fm);font-size:9.5px;color:#6f6c66}
+.dock-ro-row b{color:#141210;font-weight:600;text-align:right}
+.dock-ro-register{font-family:var(--fm);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:#a29e95}
+
+/* ── dock: lane / portfolio mode ── */
+.dock-lane,.dock-portfolio{display:flex;flex-direction:column;gap:13px}
+.dock-lane-head{display:flex;align-items:center;gap:10px}
+.dock-lane-head b{font-size:14px;letter-spacing:-.01em}
+.dock-lane-apy{font-family:var(--fm);font-size:11px;color:#6f6c66;display:flex;align-items:baseline;gap:8px}
+.dock-lane-apy b{color:#141210;font-weight:600}
+.dock-checklist{display:flex;flex-direction:column;gap:6px;border:1px solid #dcd8d0;border-radius:12px;padding:10px 12px;background:#fff}
+.dock-checklist .rail-step{font-size:9px}
+.dock-lane-share{font-family:var(--fm);font-size:10px;color:#6f6c66}
+.dock-lane-acts .hm-key,.dock-lane .hm-keys .hm-key,.dock-portfolio .hm-keys .hm-key{height:38px;font-size:8.5px;cursor:pointer}
+.dock-allocs{display:flex;flex-direction:column;gap:7px;border:1px solid #262422;border-radius:12px;background:#0d0d0d;padding:12px}
+.dock-orch-status{font-family:var(--fm);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#a29e95}
+.dock-orch-dials{border:1px solid #dcd8d0;border-radius:12px;background:#fff;padding:12px}
+.dock-rules .rt-rule{font-size:10px}
+.dock-rules .rt-policy{font-size:11px;margin-top:4px}
+
+/* ── mobile bottom sheets (≤960px; IT4 §1.4) ── */
+@media(max-width:960px){
+  .bc-work{display:block;position:relative}
+  .bc-work .rk-board{height:100%}
+  .dock{position:fixed;left:0;right:0;bottom:0;top:auto;height:62dvh;
+    z-index:120;border:0;border-top:1px solid #dcd8d0;border-radius:18px 18px 0 0;
+    transform:translateY(102%);transition:transform .3s cubic-bezier(.3,1,.4,1);
+    box-shadow:0 -24px 60px -30px rgba(20,18,15,.5)}
+  .bc-work[data-sheet="dock"] .dock{transform:translateY(0)}
+  
+  .panel-rail{display:none !important}
+  
+  .bc-work[data-dock="closed"] .dock > :not(.panel-rail){display:flex}
+  .sheet-keys{position:fixed;left:14px;right:14px;bottom:14px;z-index:119;
+    display:flex;justify-content:space-between;pointer-events:none}
+  .sheet-keys .hm-key{pointer-events:auto;height:38px;padding:0 16px;cursor:pointer}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   IT4_HEADER_SPEC — one instrument cluster, three zones — additive only.
+   The strip is a single grid [cp key | identity | instrument | action | dock
+   key]; the earlier .rail/.rail-row/.rail-dots header rules above are
+   superseded by cascade (.rail-step/.rail-dot stay live for the dock
+   checklist). One hairline bottom border, no competing backgrounds.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.bc-top{padding:12px 22px 10px}
+.rail{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto auto;
+  align-items:center;gap:20px}
+
+/* IT4 panel toggles: small hm-keys framing the strip far-left / far-right */
+.rail-panelkey.hm-key{flex:0 0 auto;height:26px;min-width:26px;padding:0 9px;
+  font-size:7.5px;letter-spacing:.08em;cursor:pointer;gap:5px}
+.rail-panelkey .hm-led{width:5px;height:5px;flex:0 0 5px}
+.rail-panelkey .hm-led.lit{background:#4D8BFF;box-shadow:0 0 7px rgba(77,139,255,.7)}
+
+/* zone 1 — identity, quiet left: it names the room, it stops competing */
+.rail-id{display:flex;flex-direction:column;min-width:0}
+.rail-title{margin:2px 0 0;font-family:var(--fs);font-size:18px;
+  letter-spacing:-.02em;font-weight:700;white-space:nowrap}
+
+/* zone 2 — instrument, the one voice: meter → hero → status → guide,
+   internally left-aligned, centered as a block */
+.rail-instr{display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+  justify-self:center;min-width:0}
+
+/* thin unlabeled 5-segment meter; only the active segment names itself */
+.rail-meter{display:flex;align-items:center;gap:9px;margin-bottom:2px}
+.rail-segs{position:relative;display:flex;gap:4px;width:210px;flex:0 0 210px}
+.rail-seg{height:2px;flex:1;border-radius:2px;background:#d8d3c8;transition:background .2s,opacity .2s}
+.rail-seg.done{background:#2B5CFF}
+.rail-seg.now{background:#2B5CFF;animation:segpulse 1.4s ease-in-out infinite}
+.rail-seg.skip{opacity:.45}
+@keyframes segpulse{0%,100%{opacity:.35}50%{opacity:.95}}
+.rail-seg-active{font-family:var(--fm);font-size:8.5px;letter-spacing:.12em;color:#2B5CFF;white-space:nowrap}
+/* full labels only on hover, aligned over their segments */
+.rail-seg-labels{position:absolute;left:0;right:0;bottom:7px;display:flex;gap:4px;
+  opacity:0;pointer-events:none;transition:opacity .15s}
+.rail-meter:hover .rail-seg-labels{opacity:1}
+.rail-seg-labels i{flex:1;min-width:0;text-align:center;font-style:normal;font-family:var(--fm);
+  font-size:6.5px;letter-spacing:.04em;text-transform:uppercase;color:#a29e95;white-space:nowrap}
+.rail-seg-labels i.done,.rail-seg-labels i.now{color:#2B5CFF}
+
+/* hero numeral joins the mono data signature (rank 24): every data point
+   in the flow renders mono — review modal, cards, stat cards, tables */
+.rail .rail-hero b{font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1}
+
+/* ONE merged mono status register: modeled · block N · draft saved */
+.rail-status{font-family:var(--fm);font-size:9.5px;letter-spacing:.04em;color:#a29e95;min-height:13px}
+
+/* the guide docks directly under the status line, left-aligned with the hero */
+.rail .rail-guide{text-align:left;min-height:14px}
+
+/* zone 3 — action: the key vertically centered against the hero, per-lane
+   chips as small quiet chips under it, right-aligned */
+.rail-action{display:flex;flex-direction:column;align-items:flex-end;gap:7px;justify-self:end}
+.rail-action .rail-launch{height:36px;padding:0 16px}
+.rail-action .rail-lanes{justify-content:flex-end}
+.rail-action .rail-lanechip{font-size:8.5px;padding:2px 8px}
+
+/* mobile: identity collapses to the kicker, instrument stacks
+   hero → status → guide, action key full-width below; the meter rests
+   (the plates narrate stages) and the sheet keys own the panel toggles */
+@media(max-width:960px){
+  .rail{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+  .rail-panelkey.hm-key{display:none}
+  .rail-title{display:none}
+  .rail-meter{display:none}
+  .rail-instr{justify-self:auto}
+  .rail-action{align-items:stretch;justify-self:auto}
+  .rail-action .rail-launch{width:100%;justify-content:center}
+  .rail-action .rail-lanes{justify-content:flex-start}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   IT4C_RESPONSIVE_SPEC — responsive space plan — additive only.
+   Big screens get MORE PRODUCT: the fit math moved to lib/canvas/fit.ts
+   (86% of AVAILABLE width, 48px margin floor, viewport-scaled caps); the
+   rack hugs its lanes so the fit measures real bounds; collapsed rails are
+   44px hm-register tabs; the header spans gutter-to-gutter with the
+   instrument centered on the VIEWPORT.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* §0 — full-bleed root: the loop app's page container (root layout
+   <main id="main-content" class="mx-auto max-w-7xl px-...">) must not clamp
+   the workstation. Scoped with :has(.bc-root) so ONLY the build surface
+   unclamps — every other route (dashboard, /s/*, deposit) keeps the
+   container exactly as it was. The header's own 22px padding remains the
+   page gutter. */
+main#main-content:has(.bc-root){max-width:none;margin:0;padding:0}
+
+/* §1 — the rack hugs its content: real lane bounds for the fit, no
+   min-height stretch (the dead zone below ADD A LOOP), vertical centering
+   done by the fit itself. ADD A LOOP anchors 32px under the last lane
+   (26px lane padding + 6px margin), nothing floats after it. */
+.rk-rack{min-height:0;width:max-content;padding:10px 18px 24px}
+.rk-addlane{margin:6px 16px 0}
+/* the lane cables arc up to 54px ABOVE the jacks (and the orchestrator bus
+   sags below) — the row-bounded SVG was clipping the apex, leaving
+   disconnected stubs at every jack. The endpoints were always exact; let
+   the cable paint outside its box, and keep the lane header above the
+   arcs so the risk keys stay readable. */
+.rk-wires{overflow:visible}
+.rk-lanehead{position:relative;z-index:3}
+/* ≤960 the old row scroll would re-clip the cables; the rack hugs its
+   content now and the board pans, so the row never needs to scroll */
+@media(max-width:960px){
+  .rk-row{overflow:visible}
+}
+
+/* §3 — collapsed rails: 44px hm-register tabs. Icon glyph over the
+   vertical label, LED when the panel has something for you (dock forced
+   mode, copilot unread reply), hover brightens + reveals a tooltip; the
+   whole strip stays the click target. */
+.bc-work[data-dock="closed"]{--dock-w:44px}
+.bc-work[data-narrow="true"]{grid-template-columns:44px minmax(0,1fr) 44px}
+.panel-rail{position:relative;flex-direction:column;align-items:center;justify-content:flex-start;
+  gap:10px;padding:12px 0 14px;background:#17291B;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),inset 0 0 0 1px rgba(0,0,0,.5);transition:.16s}
+.panel-rail:hover{background:#1d3322;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 0 15px rgba(255,255,255,.1)}
+.panel-rail-icon{font-style:normal;font-size:12px;line-height:1;color:#8a7a73;transition:.16s}
+.panel-rail span{color:#8a7a73;font-size:9px;letter-spacing:.16em}
+
+.panel-rail:hover span,.panel-rail:hover .panel-rail-icon{color:#fff}
+.panel-rail .panel-rail-tip{position:absolute;top:50%;left:calc(100% + 10px);transform:translateY(-50%);
+  writing-mode:horizontal-tb;white-space:nowrap;display:block;
+  font-family:var(--fm);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#e9e9e6;
+  background:#0d0d0d;border:1px solid #2a2724;border-radius:8px;padding:6px 10px;
+  opacity:0;pointer-events:none;transition:opacity .15s;z-index:40;
+  box-shadow:0 12px 30px -14px rgba(0,0,0,.55)}
+.dock .panel-rail .panel-rail-tip{left:auto;right:calc(100% + 10px)}
+.panel-rail:hover .panel-rail-tip{opacity:1}
+/* the tooltip must escape the 44px strip (desktop only — mobile sheets
+   keep their clipping) */
+@media(min-width:961px){
+  
+  .bc-work[data-dock="closed"] .dock{overflow:visible}
+}
+
+/* §4 — the header strip spans gutter-to-gutter: identity cluster on the
+   LEFT page gutter, instrument truly centered on the VIEWPORT (1fr | auto |
+   1fr), action cluster on the RIGHT gutter next to the dock toggle. */
+.rail{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+.rail-zone{display:flex;align-items:center;gap:20px;min-width:0}
+.rail-zone--l{justify-self:start}
+.rail-zone--r{justify-self:end;justify-content:flex-end}
+/* <=1240 the instrument drops the meter labels (the segments stay) */
+@media(max-width:1240px){
+  .rail-seg-labels,.rail-seg-active{display:none}
+}
+/* <=960 the zones stack per the IT4b block above */
+@media(max-width:960px){
+  .rail-zone{flex-direction:column;align-items:stretch;gap:8px}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RECETTE FIXES (2026-07-29, six-persona pass) — additive only.
+   P0-1 quote truth + rescue, P1-1 eligibility, P1-4 dial narration,
+   P1-6 allocation edit, P1-8 demoted dead cards + floor hint,
+   P1-9 mobile reachability, P2-2 gate list, P2-6 draft notice.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* P1-4 — one quiet line on the risk dial when leverage is yield-negative */
+.rk-riskline{font-family:var(--fm);font-size:8px;letter-spacing:.04em;color:#b45309;text-transform:none}
+
+/* P2-6 — the honest one-line notice under the guide (dismissable) */
+.rail-notice{display:flex;align-items:center;gap:8px;font-family:var(--fm);font-size:9.5px;color:#b45309;
+  border:1px dashed rgba(180,83,9,.35);border-radius:8px;padding:4px 8px;background:rgba(180,83,9,.05)}
+.rail-notice-x{font-family:var(--fm);font-size:11px;line-height:1;color:#b45309;background:none;border:0;cursor:pointer;padding:0 2px}
+
+/* P1-6 — allocation share editor (canvas plate + dock rows) */
+.rk-allocedit{display:inline-flex;align-items:baseline;gap:1px}
+.rk-allocedit input{width:34px;font-family:var(--fm);font-size:9.5px;font-weight:600;text-align:right;
+  color:#141210;background:#fff;border:1px solid #c9c2b0;border-radius:6px;padding:1px 3px;
+  -moz-appearance:textfield;appearance:textfield}
+.rk-allocedit input::-webkit-outer-spin-button,.rk-allocedit input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.rk-allocedit b{font-family:var(--fm);font-size:9px;font-weight:600;color:#6f6c66}
+.rk-allocedit.dark input{color:#e9e9e6;background:#1a1816;border-color:#262422}
+.rk-allocedit.dark b{color:#a5a5a0}
+.rk-orchrow.dry .rk-allocedit input{color:#c2864e}
+
+/* P1-2 — gated APPLY on unverifiable blueprints */
+
+/* P1-9 — mobile reachability: the zoom cluster clears the floating sheet
+   keys (elementFromPoint-verified occlusion in the recette), and the lane
+   header wraps so RISK / rescue / remove stay inside the viewport */
+@media(max-width:960px){
+  .rk-nav{bottom:66px;right:14px}
+  .rk-lanehead{flex-wrap:wrap;height:auto;min-height:28px;row-gap:4px}
+}
+
+/* P2-13 — the workstation owns the viewport on the build route: with no
+   page scroll the sticky nav pill can never float over the portfolio hero
+   (reproduced at 1720x1000: 1270px document, overlap from scrollY 60).
+   The footer returns on every other route; --nav-h reflects the pill's
+   real flow height (14px top pad + ~62px pill + breathing room). */
+body:has(.bc-root){overflow:hidden}
+body:has(.bc-root) footer{display:none}
+.bc-root{--nav-h:90px}
+
+/* Demo embed (/build?demo=1): the preview page provides the chrome. */
+:root[data-demo] .nav{display:none!important}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FOUNDER PASS 2026-08-20 — additive only.
+   (A) BLUE HARDWARE: the dark-green register becomes the brand's deep navy
+       (#04071F / #0A0E2A / #10173A blue-blacks); lit states go
+       #4D8BFF/#2B5CFF. Semantic value-greens (healthy APY, live vault)
+       stay green. Screens/keys base colors recolored in hm.css layer 2.
+   (B) TYPE VOICE: Fraunces serif italic for annotations/kickers/statuses,
+       sentence-case chrome, pill keys; mono stays for data only.
+   (C) PUBLISH FLOW (pf-*): Review → Publish → Done.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.bc-root{--fser:"Fraunces",Georgia,serif}
+
+/* ── (A) blue hardware ── */
+.bc-root .hm-led{background:#232B5C}
+.bc-root .hm-key{border-color:rgba(127,178,255,.22);color:#8B94C4}
+.bc-root .hm-key.lit{color:#fff;border-color:#4D8BFF;
+  box-shadow:0 0 22px rgba(77,139,255,.5),0 7px 14px -4px rgba(43,92,255,.38),inset 0 0 15px rgba(77,139,255,.26),inset 0 1px 0 rgba(255,255,255,.14)}
+.bc-root .hm-key.lit .hm-led{background:#4D8BFF;box-shadow:0 0 9px #4D8BFF}
+.bc-root .hm-key[data-key="hold"].lit{color:#B8D9FF;border-color:rgba(127,178,255,.22);
+  box-shadow:0 7px 13px -6px rgba(0,0,0,.45),inset 0 0 11px rgba(77,139,255,.12),inset 0 1px 0 rgba(255,255,255,.1)}
+.bc-root .hm-key[data-key="hold"].lit .hm-led{background:#7FB2FF;box-shadow:0 0 6px rgba(77,139,255,.5)}
+
+.bc-root .hm-dot{background:#7FB2FF;box-shadow:0 0 0 4px rgba(77,139,255,.2),0 0 8px rgba(77,139,255,.75)}
+.bc-root .hm-bmk{background:#7FB2FF;box-shadow:0 0 6px rgba(127,178,255,.85)}
+.bc-root .hm-bmk::before{background:#7FB2FF}
+.bc-root .hm-bz.act{background:rgba(77,139,255,.24)}
+.bc-root .hm-bz{border-right-color:rgba(127,178,255,.08)}
+.bc-root .hm-fillbar{background:linear-gradient(90deg,#2B5CFF,#7FB2FF);box-shadow:0 0 8px rgba(77,139,255,.55)}
+.bc-root .hm-bdg{border-color:rgba(184,217,255,.45);color:#E6F4FF}
+.bc-root .hm-bdg.ok{border-color:rgba(95,211,154,.5);color:#5fd39a}
+.bc-root .hm-dep.warn i{background:#7FB2FF;box-shadow:0 0 7px #7FB2FF}
+.bc-root .hm-range{border-color:#2A3566;background:rgba(77,139,255,.06)}
+.bc-root .hm-track{background:#1B2350}
+.bc-root .hm-gauge::before{background:#1B2350}
+.bc-root .hm-hz{background:#2A3566}
+.bc-root .hm-bandw{border-color:#1B2350}
+.bc-root .hm-fill{border-color:#1B2350}
+.bc-root .rk-orchbar{background:#0A0E2A;border-color:#1B2350}
+.bc-root .rk-orchbar i{background:#4D8BFF;box-shadow:0 0 8px rgba(77,139,255,.55)}
+.bc-root .pc input[type=range]{background:#1B2350}
+.bc-root .pc input[type=range]::-webkit-slider-thumb{background:#7FB2FF;border-color:#10173A;
+  box-shadow:0 0 0 4px rgba(43,92,255,.15),0 0 8px rgba(77,139,255,.45)}
+.bc-root .pc input[type=range]::-moz-range-thumb{background:#7FB2FF;border-color:#10173A}
+
+.rail-launch{background:#10173A;border-color:rgba(127,178,255,.22);color:#8B94C4}
+.rail-launch .hm-led{background:#232B5C}
+.rail-launch.lit{color:#fff;border-color:#4D8BFF;
+  box-shadow:0 0 22px rgba(77,139,255,.55),0 7px 14px -4px rgba(43,92,255,.4),inset 0 0 15px rgba(77,139,255,.28),inset 0 1px 0 rgba(255,255,255,.14)}
+.rail-launch.lit .hm-led{background:#4D8BFF;box-shadow:0 0 9px #4D8BFF}
+.rail-panelkey .hm-led.lit,.panel-rail span .hm-led.lit{background:#4D8BFF;box-shadow:0 0 7px rgba(77,139,255,.7)}
+
+.mt-filters .hm-key.lit{background:#2B5CFF !important;border-color:#2B5CFF;color:#fff;box-shadow:none}
+.mt-filters .hm-key.lit .hm-led{background:#fff;box-shadow:none}
+
+/* page chrome: blue-black panels */
+
+.dock-allocs{background:#0A0E2A;border-color:#1B2350}
+.panel-rail{background:#10173A}
+.panel-rail:hover{background:#161F4E;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 0 15px rgba(77,139,255,.15)}
+.panel-rail .panel-rail-tip{background:#0A0E2A;border-color:#1B2350}
+.hm-helppop{background:#0A0E2A}
+
+/* ── (B) type voice ── */
+.bc-kicker,.mt-kicker,.rail-hero-k{font-family:var(--fser);font-style:italic;font-weight:500;
+  font-size:12.5px;letter-spacing:0;text-transform:none}
+.bc-kicker,.rail-hero-k,.mt-kicker{color:#2B5CFF}
+
+.rail-guide{font-family:var(--fser);font-style:italic;font-size:13px;letter-spacing:0;color:#56534e}
+.rail-seg-active{font-family:var(--fser);font-style:italic;letter-spacing:0;font-size:10.5px}
+.rail-seg-labels i{text-transform:none;letter-spacing:0;font-size:7.5px}
+.bc-root .hm-key{text-transform:none;letter-spacing:.02em;font-size:9.5px;border-radius:999px}
+.bc-root .hm-al{font-family:var(--fser);font-style:italic;font-size:10.5px;letter-spacing:0;text-transform:none;color:#8a877f}
+.bc-root .hm-st{text-transform:none;letter-spacing:.03em}
+.bc-root .hm-bdg{text-transform:none;letter-spacing:.02em}
+.bc-root .hm-sb{text-transform:none;letter-spacing:.04em}
+.rk-lanename{text-transform:none;letter-spacing:.01em;font-size:11.5px;font-weight:600}
+.rk-lanenote{font-family:var(--fser);font-style:italic;font-size:10.5px;color:#8a877f;font-weight:400}
+.rk-lanekill{text-transform:none;letter-spacing:.02em}
+.rk-slot{text-transform:none;letter-spacing:.05em;font-size:10px}
+.rk-addlane{text-transform:none;letter-spacing:.05em;font-size:10px}
+.mt-sec-h{font-family:var(--fser);font-style:italic;text-transform:none;letter-spacing:0;font-size:13px;color:#56534e}
+.mt-status{font-family:var(--fser);font-style:italic;font-size:12px;color:#8a877f;margin-top:12px}
+.mt-venuechip{text-transform:none;letter-spacing:.02em}
+.pc-lab{text-transform:none;letter-spacing:.04em}
+.pc-auto{font-family:var(--fser);font-style:italic;text-transform:none;letter-spacing:0;font-size:10.5px}
+.dock-ro-register{text-transform:none;letter-spacing:.03em}
+.dock-ro-lane{font-family:var(--fser);font-style:italic;text-transform:none;letter-spacing:0;font-size:11px}
+.dock-orch-status{text-transform:none;letter-spacing:.03em}
+.rt-modeled{text-transform:none;letter-spacing:.02em}
+
+.panel-rail span{text-transform:none;letter-spacing:.1em}
+.panel-rail .panel-rail-tip{text-transform:none;letter-spacing:.04em}
+.dock-checklist .rail-step{text-transform:none;letter-spacing:.06em}
+.rail-launch{text-transform:none;letter-spacing:.02em;font-size:10.5px;border-radius:999px}
+.rail-lanechip{text-transform:none;letter-spacing:.02em}
+.rail-panelkey.hm-key{border-radius:999px}
+
+/* ── (C) publish flow ── */
+.pf{width:min(460px,94vw);max-height:88vh;overflow-y:auto;background:#070A1C;color:#E6F4FF;
+  border:1px solid #1B2350;border-radius:20px;padding:26px;font-family:var(--fs);
+  box-shadow:inset 0 2px 9px rgba(0,0,0,.7),0 40px 90px -30px rgba(4,7,31,.85)}
+.pf-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.pf-kicker{font-family:var(--fser);font-style:italic;font-size:14px;color:#7FB2FF}
+.pf-close{font-family:var(--fm);font-size:10px;color:#8B94C4;background:none;border:1px solid #1B2350;border-radius:999px;padding:6px 13px;cursor:pointer}
+.pf-close:hover{color:#fff;border-color:#4D8BFF}
+.pf-name{width:100%;font-family:var(--fs);font-size:20px;font-weight:650;letter-spacing:-.02em;color:#fff;
+  background:#0D1233;border:1px solid #1B2350;border-bottom-color:#2A3568;border-radius:12px;padding:12px 14px;outline:none;margin-bottom:10px}
+.pf-name:focus{border-color:#4D8BFF}
+.pf-summary{font-family:var(--fser);font-style:italic;font-size:14px;line-height:1.55;color:#B8D9FF;margin-bottom:14px}
+.pf-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.pf-chip{font-family:var(--fm);font-size:10px;color:#B8D9FF;border:1px solid #1B2350;border-radius:999px;padding:4px 11px}
+.pf-apy{display:flex;align-items:baseline;gap:9px;margin-bottom:18px}
+.pf-apy b{font-family:var(--fm);font-size:30px;font-weight:600;letter-spacing:-.02em;color:#fff}
+.pf-apy i{font-family:var(--fser);font-style:italic;font-size:12.5px;color:#8B94C4}
+.pf-publish{display:inline-flex;align-items:center;justify-content:center;width:100%;height:46px;border-radius:999px;
+  border:1px solid #4D8BFF;background:#2B5CFF;color:#fff;font-size:14px;font-weight:600;cursor:pointer;
+  text-decoration:none;transition:.16s;box-shadow:0 0 24px rgba(77,139,255,.45),inset 0 1px 0 rgba(255,255,255,.18)}
+.pf-publish:hover{background:#4D8BFF;box-shadow:0 0 30px rgba(77,139,255,.6)}
+.pf-beats{display:flex;flex-direction:column;gap:14px;padding:26px 8px}
+.pf-beat{display:flex;align-items:center;gap:12px;font-size:15px;color:#3B4577;transition:color .2s}
+.pf-beat-dot{width:9px;height:9px;border-radius:50%;background:#1B2350;transition:.2s}
+.pf-beat.now{color:#fff}
+.pf-beat.now .pf-beat-dot{background:#4D8BFF;box-shadow:0 0 10px rgba(77,139,255,.8);animation:pfpulse .9s ease-in-out infinite}
+.pf-beat.done{color:#7FB2FF}
+.pf-beat.done .pf-beat-dot{background:#5fd39a;box-shadow:0 0 8px rgba(95,211,154,.5)}
+@keyframes pfpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.35)}}
+.pf-done-k{font-family:var(--fser);font-style:italic;font-size:14px;color:#5fd39a;margin-bottom:6px}
+.pf-done-name{font-size:28px;font-weight:650;letter-spacing:-.01em;color:#fff;margin-bottom:8px}
+/* "Open your vault" is the same full-width primary the Publish key was;
+   "All vaults" stays the ghost link beneath it. */
+.pf-done-acts{display:flex;flex-direction:column;align-items:stretch;gap:12px;margin-top:16px}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DESIGN + MOTION PASS 2026-08-20 — additive only.
+   Publish beats become a heartbeat (rank 4), the Published moment becomes
+   the peak (rank 5), modal height stability (rank 9), copilot speaks human
+   (rank 10), review-modal entrance + name affordance (rank 22), fresh-canvas
+   header stat (rank 23). Explicit reduced-motion fallbacks land every
+   hidden resting state.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── rank 9: the modal card holds its height across phases ── */
+.pf{min-height:352px;display:flex;flex-direction:column}
+.pf-beats{flex:1;justify-content:center}
+.pf-done-acts{margin-top:auto}
+
+/* ── rank 22: entrance under 300ms; name input affordance ── */
+.bcrev-backdrop{animation:pfbdfade .2s ease-out}
+@keyframes pfbdfade{from{opacity:0}to{opacity:1}}
+.pf{animation:pfin .26s cubic-bezier(.3,1.2,.4,1)}
+@keyframes pfin{0%{opacity:0;transform:scale(.97) translateY(6px)}100%{opacity:1;transform:none}}
+.pf-name-k{display:block;font-family:var(--fser);font-style:italic;font-size:12px;color:#8B94C4;margin:0 0 6px}
+
+/* ── rank 4: publish beats — progress thread, completion tick, label lift ── */
+.pf-beats{position:relative}
+.pf-beat{position:relative}
+.pf-beat:not(:last-child)::after{content:"";position:absolute;left:4px;top:16px;width:1px;height:14px;background:#1B2350}
+.pf-beat.done:not(:last-child)::before{content:"";position:absolute;left:4px;top:16px;width:1px;height:14px;background:#4D8BFF;
+  transform-origin:top;animation:pfthread .5s cubic-bezier(.4,0,.2,1)}
+@keyframes pfthread{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.pf-beat.done .pf-beat-dot{animation:pftick .22s cubic-bezier(.3,1.6,.4,1)}
+@keyframes pftick{0%{transform:scale(1)}55%{transform:scale(1.45)}100%{transform:scale(1)}}
+.pf-beat.now{animation:pfnow .18s ease-out}
+@keyframes pfnow{from{transform:translateX(-3px);opacity:.6}to{transform:none;opacity:1}}
+
+/* ── rank 5: the Published moment — one loud beat, animated in once ── */
+.pf--done{animation:pfland .32s cubic-bezier(.3,1.35,.4,1),pfbloom .9s ease-out both}
+@keyframes pfland{0%{transform:scale(.965);opacity:.5}100%{transform:scale(1);opacity:1}}
+@keyframes pfbloom{
+  0%{box-shadow:inset 0 2px 9px rgba(0,0,0,.7),0 0 0 rgba(43,92,255,0)}
+  45%{box-shadow:inset 0 2px 9px rgba(0,0,0,.7),0 0 90px rgba(43,92,255,.45)}
+  100%{box-shadow:inset 0 2px 9px rgba(0,0,0,.7),0 0 44px rgba(43,92,255,.22)}}
+.pf--done .pf-done-k{animation:pfrise .36s ease-out .06s both}
+.pf--done .pf-done-name{animation:pfrise .36s ease-out .14s both}
+.pf--done .pf-summary{animation:pfrise .36s ease-out .24s both}
+.pf--done .pf-apy{animation:pfrise .36s ease-out .28s both;margin-bottom:0}
+.pf--done .pf-done-acts{animation:pfrise .36s ease-out .34s both}
+@keyframes pfrise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* the green dot lands last: semantic green stays green and carries the win */
+.pf-done-k::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#5fd39a;
+  box-shadow:0 0 10px rgba(95,211,154,.6);margin-right:8px;transform:scale(0);
+  animation:pfdot .35s cubic-bezier(.3,1.6,.4,1) .5s forwards}
+@keyframes pfdot{0%{transform:scale(0)}60%{transform:scale(1.3)}100%{transform:scale(1)}}
+
+/* ── rank 23: fresh-canvas header stat, never a render-failure "···" ── */
+.rail-hero-empty{font-family:var(--fser);font-style:italic;font-weight:400;font-size:13px;letter-spacing:0;color:#a29e95}
+
+/* ── rank 10: copilot cool grays on the blue-black panel ── */
+
+/* ── explicit reduced-motion fallbacks: hidden resting states land at the
+      final visible state (the global guard shortens durations, not delays) ── */
+@media (prefers-reduced-motion: reduce){
+  .pf--done,.pf--done .pf-done-k,.pf--done .pf-done-name,.pf--done .pf-summary,
+  .pf--done .pf-apy,.pf--done .pf-done-acts{animation:none;opacity:1;transform:none}
+  .pf--done{box-shadow:inset 0 2px 9px rgba(0,0,0,.7),0 0 44px rgba(43,92,255,.22)}
+  .pf-done-k::before{animation:none;transform:scale(1)}
+  .pf-beat.done:not(:last-child)::before,.pf-beat.done .pf-beat-dot,.pf-beat.now{animation:none}
+  .bcrev-backdrop,.pf{animation:none}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Single-flow strip: the copilot column is gone
+   ══════════════════════════════════════════════════════════════════════════
+   The workstation is now board + dock, two columns. Rather than restructure
+   the grid (and every rule that keys off it — the narrow overlay band, the
+   mobile sheets), the left track simply collapses to zero. */
+.bc-work{--cp-w:0px}
+.bc-work[data-narrow="true"]{grid-template-columns:0 minmax(0,1fr) 44px}
+
+/* ── keyboard focus: blue ring, matching app/vault/directory.css's .dir-ghost
+      precedent. Covers every hardware key and dock toggle built on .hm-key —
+      real <button>s (zoom nav, panel collapse) and the div[role=button]
+      variants (market/venue filter chips, plate action keys). ── */
+.hm-key:focus-visible{outline:2px solid #2b5cff;outline-offset:2px}

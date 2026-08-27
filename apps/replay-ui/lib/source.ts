@@ -12,7 +12,7 @@ import type { Journal, Status } from "@priime-demo/journal-schema";
 import { strikeSabotage, strikeSettled } from "@/lib/journal";
 
 /** Lightweight strike descriptor for pickers/lists; no operator detail. */
-export interface StrikeRef {
+interface StrikeRef {
   /** `Journal.strike_id`; the key `JournalSource.get` takes. */
   strikeId: string;
   /** Lifecycle at the time `list()` was called (a live source may advance it). */
@@ -35,7 +35,7 @@ export interface StrikeRef {
  * - `list()` may return more refs over time and a ref's `status` may change.
  * - `get()` rejects with `StrikeNotFoundError` for an unknown id.
  */
-export interface JournalSource {
+interface JournalSource {
   /** All strikes this source knows about, newest-relevant order preserved. */
   list(): Promise<readonly StrikeRef[]>;
   /** Fetch one strike snapshot by `strike_id`. */
@@ -56,7 +56,7 @@ export class StrikeNotFoundError extends Error {
 }
 
 /** A journal plus the selector label to show for it. */
-export interface StaticJournalEntry {
+interface StaticJournalEntry {
   /** The captured journal. */
   journal: Journal;
   /** Selector label; falls back to the strike id when omitted. */
@@ -118,6 +118,3 @@ export class StaticJournalSource implements JournalSource {
     return entry.journal;
   }
 }
-
-/** Shared `StaticJournalSource` over `DEMO_JOURNALS`. */
-export const demoJournalSource: JournalSource = new StaticJournalSource();

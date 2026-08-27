@@ -1,43 +1,91 @@
+import type { Metadata, Viewport } from "next";
+import { Geist, Inter, Geist_Mono, STIX_Two_Text } from "next/font/google";
+import { SiteNav } from "@/components/nav/SiteNav";
+import { VintageFooter } from "@/components/footer/VintageFooter";
 import "./globals.css";
 
-import type { Metadata, Viewport } from "next";
-import type { ReactNode } from "react";
+// Font system mirrors Linear's (linear.app). Linear pairs Inter Variable
+// for everything sans (body + display + UI) with Berkeley Mono for
+// monospace. Berkeley Mono is a paid commercial license we can't
+// redistribute, so we substitute Geist Mono — a free geometric monospace
+// that hits the same visual register.
+// Priime uses Geist (sans) + Geist Mono. Geist is the primary face; Inter is
+// kept as a fallback in the font stack.
+const geist = Geist({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-geist",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-geist-mono",
+  display: "swap",
+});
+
+// STIX Two Text — open-source serif (SIL OFL). Used by shader.se for
+// their large editorial headers. We use it ONLY for the three home
+// section titles ("Three failure modes…", "Four steps…", "Observe.
+// Reason. Act.") via the `editorial` scale on SectionHeader.
+const stixSerif = STIX_Two_Text({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  variable: "--font-stix-serif",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "Priime — The Vault That Cannot Lie",
+  title: "Priime, vaults composed and verifiable.",
   description:
-    "Replay UI for the verifiable-vault demo: NAV-strike journals replayed beautifully. Nothing simulated is deep-linked to an explorer.",
+    "Leveraged carry, hedged dollar-for-dollar and rebalanced as the market moves. Delta-neutral, with liquidation kept out of reach. Capital sits in your vault, exit on your own signature.",
+  metadataBase: new URL("https://loop.priime.finance"),
 };
 
+// Phase I (2026-05-12) — explicit viewport for mobile rendering. Without
+// this Next.js falls back to its default which excludes `viewportFit: cover`
+// and can mis-handle iOS Safari notch / dynamic-island insets. Pinning the
+// initial scale + width-device-width also prevents the rare zoomed-out
+// first paint on Android Chrome when the page content is wider than
+// expected (was a real risk before the dashboard table overflow fixes).
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // The default register, not the system preference: the light chassis is a
-  // stored presenter choice, which a static <meta> cannot track.
-  themeColor: "#0B0B0B",
+  viewportFit: "cover",
+  themeColor: "#f4f3f1",
 };
 
-/**
- * Pre-paint register restore. Runs synchronously as the first thing in
- * <body>, before any console markup is parsed, so a presenter who chose the
- * light chassis never sees a black flash on reload. Absence of the attribute
- * is the dark register, which is why nothing is written for "dark".
- *
- * `?theme=light|dark` overrides the stored choice for one page load. It is a
- * headless-driving hook (screenshots of both registers), invisible to a
- * presenter, and it deliberately does not write to localStorage.
- *
- * Keep the storage key in sync with THEME_STORAGE_KEY in
- * components/ThemeToggle.tsx.
- */
-const THEME_BOOT = `try{var q=new URLSearchParams(location.search).get("theme");var t=q==="light"||q==="dark"?q:localStorage.getItem("priime.replay-ui.theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t)}}catch(e){}`;
-
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${geist.variable} ${inter.variable} ${geistMono.variable} ${stixSerif.variable}`}
+      suppressHydrationWarning
+    >
       <body>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
-        {children}
+        {/* A11y fix 2026-05-01: skip-link for keyboard / screen-reader users
+            to bypass the global Nav and land directly on page content.
+            WCAG 2.4.1 Bypass Blocks. */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-[var(--radius)] focus:bg-stone-925 focus:border focus:border-[var(--color-honey-400)] focus:px-3 focus:py-2 focus:text-sm focus:text-stone-100"
+        >
+          Skip to content
+        </a>
+        <SiteNav />
+        <main id="main-content" className="mx-auto max-w-7xl px-6 sm:px-10 lg:px-16 xl:px-20 pt-8 pb-24 space-y-8">
+          {children}
+        </main>
+        <VintageFooter />
       </body>
     </html>
   );
