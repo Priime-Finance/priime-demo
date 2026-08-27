@@ -245,8 +245,8 @@ for i in $(seq 1 18); do
   if [ "$UPDATES" != "0" ]; then
     NAV=$(cast call "$VAULT" 'nav()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
     IB=$(cast call "$VAULT" 'lastInputsBlock()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
-    jq -n --arg vault "$VAULT" --arg sm "$SM" --arg strategist "$STRATEGIST" --arg node "$NODE" \
-      '{vault: $vault, service_manager: $sm, strategist: $strategist, node: $node}' \
+    jq -n --arg vault "$VAULT" --arg sm "$SM" --arg strategist "$STRATEGIST" --arg node "$NODE" --arg template_workflow_id "$WID" \
+      '{vault: $vault, service_manager: $sm, strategist: $strategist, node: $node, template_workflow_id: $template_workflow_id}' \
       > "$FORKDIR/vault-service.json"
     echo "SUCCESS: updateCount=$UPDATES nav=$NAV inputsBlock=$IB"
     echo "vault=$VAULT  serviceManager=$SM  node=$NODE (docker logs $NODE)"

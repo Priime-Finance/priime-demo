@@ -21,6 +21,8 @@ schema/
   samples/                  # honest + sabotage journal fixtures
 crates/journal/       # Rust serde types for the journal (deny_unknown_fields)
 packages/journal-schema/    # TypeScript types + re-exported schema
+packages/loop-deploy/       # loop control-plane library: service.json mutation, handler deploys, loop registry
+apps/loop-server/           # authenticated HTTP API deploying user loops as workflows (see its README)
 ```
 
 Each component has its own README explaining what it does and why.

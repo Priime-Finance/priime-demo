@@ -39,3 +39,6 @@ deploy/.fork/
 .planning/
 /cache/
 /out/
+
+# loop-server local state
+apps/loop-server/data/
