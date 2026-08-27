@@ -29,6 +29,9 @@ deploy/.fork/
 # Misc
 .DS_Store
 
+# Claude Code session tooling (launch config, local settings)
+.claude/
+
 # NOTE: components/*/wit/deps is intentionally VENDORED, not ignored. Unlike
 # priime-pools (which re-fetches WIT via clone-wit-repo + a wkg registry config),
 # this demo is self-contained: `wkg wit fetch` cannot resolve wasi:tls (draft) or
