@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@priime-demo/journal-schema": "workspace:*",
+    "@priime-demo/loop-deploy": "workspace:*",
     "next": "15.4.10",
     "react": "19.2.1",
     "react-dom": "19.2.1"
