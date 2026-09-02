@@ -2,12 +2,13 @@
  * Loop server: authenticated HTTP control plane for Option A.
  *
  * Routes (Bearer auth except /healthz):
- *   GET    /healthz            liveness, no auth
- *   GET    /loops              list loops
- *   POST   /loops              create + deploy a loop (LoopConfig body)
- *   GET    /loops/:id          one loop
- *   POST   /loops/:id/resume   resume a failed deployment
- *   DELETE /loops/:id          remove the loop's workflow from the service
+ *   GET    /healthz                 liveness, no auth
+ *   GET    /loops                   list loops
+ *   POST   /loops                   create + deploy a loop (LoopConfig body)
+ *   GET    /loops/:id               one loop + latest attested facts
+ *   POST   /loops/:id/resume        resume a failed deployment
+ *   DELETE /loops/:id               remove the loop's workflow from the service
+ *   GET    /loops/:id/journals      recent Journal[] for this loop's handler
  *
  * nginx terminates TLS in front (deploy/nginx.conf); this listens on
  * loopback only.
@@ -26,6 +27,9 @@ import {
   ValidationError,
   makeChain,
   makeIpfs,
+  makeJournalReader,
+  type JournalReader,
+  type LoopRecord,
 } from "@priime-demo/loop-deploy";
 
 import { readEnv } from "./env.ts";
@@ -49,6 +53,40 @@ const deployer = new LoopDeployer({
   usdcAddress: env.usdcAddress,
   templateWorkflowId: env.templateWorkflowId,
 });
+
+const journalReader: JournalReader = makeJournalReader({
+  rpcUrl: env.rpcUrl,
+  chainId: env.chainId,
+  chainKey: env.chainKey,
+  managerAddress: env.managerAddress,
+  componentDigest: env.componentDigest,
+  quorumThreshold: env.quorumThreshold,
+  quorumTotal: env.quorumTotal,
+  fromBlock: env.journalFromBlock,
+});
+
+/** Serialize a loop record for the API. BigInts and dates never appear here,
+ *  so this is a pass-through today. Kept as a seam for when we enrich. */
+function serializeLoop(loop: LoopRecord): Record<string, unknown> {
+  return { ...loop };
+}
+
+/** Convenience: derive `{ nav, inputsBlock, txHash, timestamp }` from the
+ *  most recent NavUpdated log on this loop's handler, or null when no strike
+ *  has landed yet. Non-fatal on RPC errors: the detail endpoint returns the
+ *  loop record without the attested block. */
+async function latestAttested(loop: LoopRecord): Promise<{ nav: string; inputsBlock: number; txHash: string; timestamp: number } | null> {
+  if (loop.handlerAddress === null) return null;
+  try {
+    const [latest] = await journalReader.readJournals(loop.handlerAddress, 1);
+    if (latest === undefined) return null;
+    const { nav_final, tx_hash, timestamp } = latest.attestation;
+    if (nav_final === null || tx_hash === null || timestamp === null) return null;
+    return { nav: nav_final, inputsBlock: latest.inputs_block, txHash: tx_hash, timestamp };
+  } catch {
+    return null;
+  }
+}
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -99,38 +137,54 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   }
 
   if (req.method === "GET" && path === "/loops") {
-    sendJson(res, 200, { loops: registry.list() });
+    sendJson(res, 200, { loops: registry.list().map(serializeLoop) });
     return;
   }
 
   if (req.method === "POST" && path === "/loops") {
     const body = await readJsonBody(req);
     const loop = await deployer.createLoop(body);
-    sendJson(res, 201, { loop });
+    sendJson(res, 201, { loop: serializeLoop(loop) });
+    return;
+  }
+
+  const journalsMatch = /^\/loops\/([a-z0-9-]+)\/journals$/.exec(path);
+  if (journalsMatch !== null && req.method === "GET") {
+    const loop = registry.get(journalsMatch[1]!);
+    if (loop === null) throw new LoopNotFoundError(journalsMatch[1]!);
+    if (loop.handlerAddress === null) {
+      sendJson(res, 200, { journals: [] });
+      return;
+    }
+    const limitRaw = url.searchParams.get("limit");
+    const limit = limitRaw === null ? 20 : Math.min(200, Math.max(1, Number.parseInt(limitRaw, 10) || 20));
+    const journals = await journalReader.readJournals(loop.handlerAddress, limit);
+    sendJson(res, 200, { journals });
+    return;
+  }
+
+  const resumeMatch = /^\/loops\/([a-z0-9-]+)\/resume$/.exec(path);
+  if (resumeMatch !== null && req.method === "POST") {
+    const loop = await deployer.resumeLoop(resumeMatch[1]!);
+    sendJson(res, 200, { loop: serializeLoop(loop) });
     return;
   }
 
   const loopMatch = /^\/loops\/([a-z0-9-]+)$/.exec(path);
   if (loopMatch !== null) {
-    const id = loopMatch[1];
+    const id = loopMatch[1]!;
     if (req.method === "GET") {
       const loop = registry.get(id);
       if (loop === null) throw new LoopNotFoundError(id);
-      sendJson(res, 200, { loop });
+      const attested = await latestAttested(loop);
+      sendJson(res, 200, { loop: serializeLoop(loop), attested });
       return;
     }
     if (req.method === "DELETE") {
       const loop = await deployer.deactivateLoop(id);
-      sendJson(res, 200, { loop });
+      sendJson(res, 200, { loop: serializeLoop(loop) });
       return;
     }
-  }
-
-  const resumeMatch = /^\/loops\/([a-z0-9-]+)\/resume$/.exec(path);
-  if (resumeMatch !== null && req.method === "POST") {
-    const loop = await deployer.resumeLoop(resumeMatch[1]);
-    sendJson(res, 200, { loop });
-    return;
   }
 
   sendJson(res, 404, { error: "not found" });

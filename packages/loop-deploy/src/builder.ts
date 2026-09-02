@@ -81,7 +81,7 @@ export function addLoopWorkflow(doc: unknown, spec: WorkflowSpec, templateWorkfl
     if (ids.length !== 1) {
       throw new ServiceDocError(`template workflow id required: service has ${ids.length} workflows`);
     }
-    templateId = ids[0];
+    templateId = ids[0]!;
   }
   const template = workflows[templateId];
   if (!isRecord(template)) throw new ServiceDocError(`template workflow ${templateId} not found`);
