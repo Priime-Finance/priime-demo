@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Inter, Geist_Mono, STIX_Two_Text } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { SiteNav } from "@/components/nav/SiteNav";
 import { VintageFooter } from "@/components/footer/VintageFooter";
 import "./globals.css";
@@ -9,19 +9,12 @@ import "./globals.css";
 // monospace. Berkeley Mono is a paid commercial license we can't
 // redistribute, so we substitute Geist Mono — a free geometric monospace
 // that hits the same visual register.
-// Priime uses Geist (sans) + Geist Mono. Geist is the primary face; Inter is
-// kept as a fallback in the font stack.
+// Priime uses Geist (sans) + Geist Mono. Inter itself is not loaded: it never
+// rendered (Geist always resolves ahead of it), so it was dead preloads.
 const geist = Geist({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800"],
   variable: "--font-geist",
-  display: "swap",
-});
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
-  variable: "--font-inter",
   display: "swap",
 });
 
@@ -32,22 +25,10 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-// STIX Two Text — open-source serif (SIL OFL). Used by shader.se for
-// their large editorial headers. We use it ONLY for the three home
-// section titles ("Three failure modes…", "Four steps…", "Observe.
-// Reason. Act.") via the `editorial` scale on SectionHeader.
-const stixSerif = STIX_Two_Text({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  style: ["normal", "italic"],
-  variable: "--font-stix-serif",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
   title: "Priime, vaults composed and verifiable.",
   description:
-    "Leveraged carry, hedged dollar-for-dollar and rebalanced as the market moves. Delta-neutral, with liquidation kept out of reach. Capital sits in your vault, exit on your own signature.",
+    "One vault, a USDe/USDC leveraged loop on Morpho Blue. Three independent operators re-execute its NAV and a quorum attests it on chain: the vault that cannot lie about its NAV.",
   metadataBase: new URL("https://loop.priime.finance"),
 };
 
@@ -68,7 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${geist.variable} ${inter.variable} ${geistMono.variable} ${stixSerif.variable}`}
+      className={`${geist.variable} ${geistMono.variable}`}
       suppressHydrationWarning
     >
       <body>

@@ -62,17 +62,6 @@ export function SiteNav() {
 
   return (
     <>
-      {/* refraction filter for the glass (lensing at the edges) */}
-      <svg width="0" height="0" aria-hidden="true" focusable="false" style={{ position: "absolute", width: 0, height: 0 }}>
-        <defs>
-          <filter id="lgDistort" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="0.009 0.016" numOctaves={2} seed={13} result="n" />
-            <feGaussianBlur in="n" stdDeviation={2.4} result="nb" />
-            <feDisplacementMap in="SourceGraphic" in2="nb" scale={22} xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </defs>
-      </svg>
-
       <nav ref={navRef} className={`nav${open ? " nav-open" : ""}`}>
         <div className="wrap">
           <a className="brand" href={SITE} aria-label="Priime">

@@ -123,9 +123,22 @@ export default function Lane(props: LaneProps) {
     <section className={`rk-lane${props.laneFocused ? " rk-lane--focused" : ""}${props.focusedKey ? " rk-lane--hasfocus" : ""}`}>
       <header
         className="rk-lanehead"
+        tabIndex={0}
+        aria-label={`${loop.label} lane, select to edit`}
         onClick={(e) => {
           e.stopPropagation();
           props.onFocusLane();
+        }}
+        // Keyboard reach for the lane header. The guard keeps typing in the
+        // lane-name input (and the Remove button) out of it, so no
+        // role="button" wrapper over nested interactive content.
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            props.onFocusLane();
+          }
         }}
       >
         <input

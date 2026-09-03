@@ -28,8 +28,8 @@ export type RepriceData =
 
 /** The lifted /api/canvas/opportunities payload (fetched once in RackCanvas). */
 export interface OpportunitiesPayload {
-  ok: boolean;
-  nowMs: number;
   venues: (ProjectedVenue & { source?: "kv" | "process-cache" | "snapshot" })[];
   degraded: { venue: CanvasVenueId; reason: string }[];
+  /** The one market the demo composes on (app/api/canvas/opportunities). */
+  demoMarketId: string;
 }

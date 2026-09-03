@@ -5,17 +5,18 @@ Next.js App Router UI for the verifiable-vault demo
 One vault, its NAV independently re-executed by three operator nodes, a 2-of-3
 quorum attesting the number, a corrupted node rejected on hash mismatch.
 
-Two product routes; `/` redirects to `/build`.
+Three product routes; `/` redirects to `/build`.
 
 | Route | What it is |
 | --- | --- |
 | `/build` | The vault composer. Antoni's rack-canvas kit (see `priime-build-ui-kit.md`): hardware plates on a dotted board, a context dock, one market (USDe/USDC on Morpho Blue · Base), one template (leveraged loop). Install defaults, review, publish. |
-| `/vault` | The published vault. Attested stat band, the Operators panel (three node cards, quorum bar, attestation block, replay / corrupt / restore controls), automation instruments, parameters, strike ledger, and async deposits that settle at the next attested NAV strike. |
+| `/vault` | The vaults directory. One card today (the desk's own vault, per the demo spec); the card links to `/vault/[slug]`. |
+| `/vault/[slug]` | The vault page. The verification canvas as hero (vault plate, three operator nodes, quorum bar, attestation sink, replay / corrupt / restore controls), then the attested stat band, automation instruments, parameters, strike ledger, and async deposits that settle at the next attested NAV strike. |
 
-Everything attested on `/vault` is read off the two captured journals in
-`schema/samples/` through the replay engine; the page never polls a live
-chain and says so in the Operators section. Modeled numbers are labeled
-`modeled`; attested numbers come from the journal and nowhere else.
+Everything attested on `/vault/[slug]` is read off the two captured journals
+in `schema/samples/` through the replay engine; the page never polls a live
+chain and says so next to the verification canvas. Modeled numbers are
+labeled `modeled`; attested numbers come from the journal and nowhere else.
 
 ## Layers
 
@@ -23,26 +24,32 @@ chain and says so in the Operators section. Modeled numbers are labeled
 app/            Routes. Own React state, compose the rest.
   page.tsx            /       redirect to /build
   build/              /build  the composer: page.tsx + build.css + hm.css
-  vault/              /vault  the vault page: page.tsx + vault.css
-  api/canvas/*        local stubs only: draft (204), reprice (intentional 404
-                      so the client uses the offline mock quote), and the
+  vault/              /vault  the vaults directory: page.tsx + vault.css +
+                      directory.css. vault/[slug]/page.tsx is the vault page
+                      itself, styled by vault.css + canvas.css
+  api/canvas/*        local stubs only: draft (204), reprice (501, no live
+                      quote service, so the client prices from the offline
+                      mock quote; a 404 is reserved for a delisted market), and the
                       opportunities catalog served from a checked-in fixture.
                       Nothing in this app contacts an external service.
   layout.tsx          fonts, metadata, favicon
   globals.css         base styles shared by both routes
 
 components/     Presentational. canvas/ is the /build rack (plates, wires,
-                dock), vaults/ is the /vault page (OperatorNodes, deposits,
+                dock), vaults/ is the vault page (VerificationCanvas: vault
+                plate, three operator nodes, attestation sink; deposits;
                 ledger), nav/ and footer/ are the site chrome.
 
-lib/            Pure logic, unit-tested.
+lib/            Pure logic. format.ts, journal.ts, replay.ts, source.ts and
+                vaults/ are unit-tested (tests/); under canvas/ only
+                mock-quote.ts and reprice-state.ts are, the rest is not yet.
   journal.ts, source.ts, replay.ts   the frozen captures + the replay engine
                                      (deriveReplayState; pacing in REPLAY_PACING)
   vaults/                            /vault view logic: pipeline, requests
                                      (async deposits), attested formatting, store
   canvas/                            /build canvas logic: graph ops, templates,
                                      dock state, mock quote, serialization
-  format.ts, copy.ts, boot.ts        formatting, fixed copy, URL params
+  format.ts                          formatting
 
 tests/          vitest against the real sample journals; lib/ only.
 ```

@@ -126,9 +126,9 @@
   --color-amber-500: #9c6127;
   --color-amber-900: #6e4a1e;
 
-  /* Typography — Inter (sans + display) + Geist Mono. Linear-style. */
-  --font-display: var(--font-geist), var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body:    var(--font-geist), var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Typography: Geist (sans + display) + Geist Mono. Linear-style. */
+  --font-display: var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body:    var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono:    var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 
   /* Radius — bumped up for the institutional-DeFi card feel (PYUSD/Aave-Pro
@@ -213,7 +213,7 @@
     background-color: var(--color-stone-950);
     color: var(--color-stone-200);
     font-family: var(--font-body);
-    /* Inter glyph features used on linear.app:
+    /* Glyph features from linear.app (Inter); harmless on Geist:
          cv08 — alt single-storey "a"
          calt — contextual alternates
          ss03 — opt-in stylistic set (kept for parity) */

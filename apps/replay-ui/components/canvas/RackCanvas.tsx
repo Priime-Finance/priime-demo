@@ -241,9 +241,15 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
   const [viewAnim, setViewAnim] = useState(false);
   const [panning, setPanning] = useState(false);
   const viewRef = useRef(view);
-  viewRef.current = view;
+  // A pan (and a wheel burst) drives the board through the DOM directly and
+  // commits ONE setView at the end, so the whole board does not reconcile per
+  // pointer event. While that fast path owns the view, the committed state is
+  // behind and must not clobber the live value.
+  const viewLiveRef = useRef(false);
+  if (!viewLiveRef.current) viewRef.current = view;
   const didPanRef = useRef(false);
   const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wheelRaf = useRef<number | null>(null);
 
   const loadedRef = useRef(false);
   const addPulsedRef = useRef(false);
@@ -256,6 +262,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
   const repriceTimers = useRef<Record<LoopId, ReturnType<typeof setTimeout>>>({});
   const rackRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     demoRef.current = new URLSearchParams(window.location.search).has("demo");
@@ -371,6 +378,9 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
           }
         } catch {
           corrupt = true; // unparseable JSON in LS is a corrupt draft too
+          // Clear the bad keys, or the notice returns on every visit.
+          localStorage.removeItem(LS_V2);
+          localStorage.removeItem(LS_V1);
         }
       } finally {
         if (corrupt) setDraftNotice(true);
@@ -476,7 +486,9 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
               riskPreset: p.riskPreset,
             }),
           });
-          const body = await res.json();
+          // A 404 carries no body, and any answer may be unparseable: read
+          // the body defensively so the STATUS drives classification.
+          const body = res.status === 404 ? null : await res.json().catch(() => null);
           // Definitive answers are classified, never flattened (P0-1):
           // 404 = the market left the live scan; anything else = failed.
           setReprices((m) => ({
@@ -643,7 +655,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
       // it answered; otherwise the latest catalog scan prices the lane
       // client-side. Failure states never render.
       const hit = serverOk ? null : catalogRow(oppData, p.candidateId);
-      const q: RepriceData | null = serverOk ?? (hit ? mockQuote(hit, p.targetLeverage, p.riskPreset) : null);
+      const q: RepriceData | null = serverOk ?? (hit ? mockQuote(hit, p.targetLeverage, p.riskPreset, Date.now()) : null);
       const ok = q?.ok === true ? q : null;
       const graphValidation = validateGraph(loop);
       const graphOk = graphValidation.ok;
@@ -1033,6 +1045,22 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
 
   const clampScale = (s: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, s));
 
+  /** Write a view straight to the two elements that consume it — the board's
+   *  grid offset and the viewport transform. Same values React renders, so a
+   *  later commit repaints them identically. */
+  const applyViewToDom = useCallback((v: { x: number; y: number; s: number }) => {
+    const vp = viewportRef.current;
+    if (vp) vp.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.s})`;
+    const bd = boardRef.current;
+    if (bd) bd.style.backgroundPosition = `${v.x}px ${v.y}px`;
+  }, []);
+
+  // Any unrelated re-render mid-gesture would repaint the committed (stale)
+  // view, so re-apply the live one before paint.
+  useLayoutEffect(() => {
+    if (viewLiveRef.current) applyViewToDom(viewRef.current);
+  });
+
   const animateView = useCallback((next: { x: number; y: number; s: number }) => {
     setViewAnim(true);
     if (animTimer.current) clearTimeout(animTimer.current);
@@ -1100,37 +1128,58 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
         next = { ...v, x: v.x - e.deltaX, y: v.y - e.deltaY };
       }
       viewRef.current = next; // wheel bursts outpace renders — keep reads fresh
-      setView(next);
+      viewLiveRef.current = true;
+      applyViewToDom(next); // paint this event now; commit once per frame
+      if (wheelRaf.current === null) {
+        wheelRaf.current = requestAnimationFrame(() => {
+          wheelRaf.current = null;
+          viewLiveRef.current = false;
+          setView(viewRef.current);
+        });
+      }
     };
     board.addEventListener("wheel", onWheel, { passive: false });
-    return () => board.removeEventListener("wheel", onWheel);
-  }, []);
+    return () => {
+      board.removeEventListener("wheel", onWheel);
+      if (wheelRaf.current !== null) cancelAnimationFrame(wheelRaf.current);
+      wheelRaf.current = null;
+    };
+  }, [applyViewToDom]);
 
   const isCanvasBackground = (t: EventTarget | null) => {
     const el = t as HTMLElement | null;
     return !el?.closest(".rk-plate,.rk-slot,.rk-addlane,.rk-nav,.rk-lanename,button,input,select,textarea");
   };
 
-  const onBoardPointerDown = useCallback((e: React.PointerEvent) => {
-    if (e.button !== 0 || !isCanvasBackground(e.target)) return;
-    setViewAnim(false);
-    didPanRef.current = false;
-    const start = { px: e.clientX, py: e.clientY, x: viewRef.current.x, y: viewRef.current.y };
-    setPanning(true);
-    const onMove = (ev: PointerEvent) => {
-      const dx = ev.clientX - start.px;
-      const dy = ev.clientY - start.py;
-      if (Math.abs(dx) + Math.abs(dy) > 3) didPanRef.current = true;
-      setView((v) => ({ ...v, x: start.x + dx, y: start.y + dy }));
-    };
-    const onUp = () => {
-      setPanning(false);
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }, []);
+  const onBoardPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0 || !isCanvasBackground(e.target)) return;
+      setViewAnim(false);
+      didPanRef.current = false;
+      const start = { px: e.clientX, py: e.clientY, x: viewRef.current.x, y: viewRef.current.y };
+      viewLiveRef.current = true; // the drag owns the view until pointerup
+      setPanning(true);
+      const onMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - start.px;
+        const dy = ev.clientY - start.py;
+        if (Math.abs(dx) + Math.abs(dy) > 3) didPanRef.current = true;
+        const next = { ...viewRef.current, x: start.x + dx, y: start.y + dy };
+        viewRef.current = next;
+        applyViewToDom(next); // no setView per pointer event: the board would
+        // reconcile every lane, plate and wire on each move
+      };
+      const onUp = () => {
+        viewLiveRef.current = false;
+        setPanning(false);
+        setView(viewRef.current); // the one commit for the whole gesture
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [applyViewToDom],
+  );
 
   // zoom-to-fit on lane add/remove (after the snap/zoom transitions settle)
   useEffect(() => {
@@ -1229,6 +1278,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
         >
           <div
             className={`rk-viewport${viewAnim ? " rk-viewport--anim" : ""}`}
+            ref={viewportRef}
             style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})` }}
           >
             <div className={`rk-rack${portfolio.loops.length >= 2 ? " rk-rack--multi" : ""}`} ref={rackRef}>
@@ -1437,7 +1487,7 @@ function OrchWires({ rackRef, portfolio }: { rackRef: React.RefObject<HTMLDivEle
             x={p.x}
             y={p.y}
             textAnchor="middle"
-            style={{ fontFamily: '"IBM Plex Mono",monospace', fontSize: 9, fill: "#141210" }}
+            style={{ fontFamily: "var(--fm)", fontSize: 9, fill: "#141210" }}
           >
             {p.label}
           </text>

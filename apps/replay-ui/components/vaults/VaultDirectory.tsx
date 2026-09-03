@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useBuildHref } from "@/lib/host";
+import { attestedShareText, attestedText } from "@/lib/vaults/attested";
 import {
   HERO_VAULT,
   automationCountFor,
@@ -42,7 +43,9 @@ export function VaultDirectory() {
     };
   }, []);
 
-  const navUsd = heroNavUsd() ?? vault.baseTvlUsd;
+  // Attested, so null stays null: the card says it is waiting on a strike
+  // rather than quoting the record's modeled capital under an attested label.
+  const navUsd = heroNavUsd();
   const share = heroNavPerShare();
   const series = [...heroStrikes()]
     .reverse()
@@ -51,6 +54,7 @@ export function VaultDirectory() {
   const { venue, chain } = venueParts(vault.venue);
   const automations = automationCountFor(vault);
   const buildHref = useBuildHref();
+  const navLine = navUsd === null ? "NAV awaiting strike" : `${fmtUsd(navUsd)} attested NAV`;
 
   return (
     <div className="dir">
@@ -63,7 +67,7 @@ export function VaultDirectory() {
             modeled; the NAV and share value are attested off the journal.
           </p>
           <div className="dir-count vn">
-            1 vault · {fmtUsd(navUsd)} attested NAV · 1 strategy
+            1 vault · {navLine} · 1 strategy
           </div>
         </div>
         <Link className="dir-create" href="/build">
@@ -101,11 +105,11 @@ export function VaultDirectory() {
           <div className="dir-stats">
             <div>
               <span>NAV, attested</span>
-              <b className="vn">{fmtUsd(navUsd)}</b>
+              <b className="vn">{attestedText(navUsd, fmtUsd)}</b>
             </div>
             <div>
               <span>Share value</span>
-              <b className="vn">{share === null ? "1.000000" : share.toFixed(6)}</b>
+              <b className="vn">{attestedShareText(share)}</b>
             </div>
             <div>
               <span>Automations</span>

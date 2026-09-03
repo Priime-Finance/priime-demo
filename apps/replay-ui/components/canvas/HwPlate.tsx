@@ -129,9 +129,22 @@ export default function HwPlate(props: HwPlateProps) {
       data-wire-node
       data-placed
       data-node-id={props.nodeId}
+      tabIndex={0}
+      aria-label={`${def.name} plate, select to edit`}
       onClick={(e) => {
         e.stopPropagation();
         onFocus();
+      }}
+      // Keyboard reach for the plate itself (the dock dials are only
+      // reachable through focus). No role="button": the plate holds real
+      // buttons, so nested interactive content would be the violation.
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return; // keys inside inner controls
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          onFocus();
+        }
       }}
     >
       <div className="hm-hw">

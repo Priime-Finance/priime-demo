@@ -34,9 +34,9 @@
   --v-live-tint: #e7f3ec;
   --v-alarm: #c0392b;
   --v-alarm-tint: #fbeae7;
-  --vs: "Hanken Grotesk", system-ui, -apple-system, sans-serif;
-  --vm: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --vser: "Fraunces", Georgia, serif;
+  --vs: var(--font-hanken), "Hanken Grotesk", system-ui, -apple-system, sans-serif;
+  --vm: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --vser: var(--font-fraunces), "Fraunces", Georgia, serif;
 
   max-width: 1108px;
   margin: 0 auto;

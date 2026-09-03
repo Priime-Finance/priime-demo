@@ -11,7 +11,7 @@
  * app/build/{build,hm,funding}.css) is self-defined within those same
  * files — verified by diffing every `var(--x)` read against every `--x:`
  * declaration across them. The only reads with no local declaration are
- * `--font-geist` / `--font-inter` / `--font-geist-mono`, which app/layout.tsx
+ * `--font-geist` / `--font-geist-mono`, which app/layout.tsx
  * supplies at runtime via next/font's `variable` option, not a stylesheet.
  * If a future page needs tokens genuinely owned by this file, add them here.
  */

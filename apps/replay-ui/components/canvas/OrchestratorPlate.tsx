@@ -49,9 +49,20 @@ export default function OrchestratorPlate({
     <div
       className={`rk-plate rk-orch${focused ? " rk-plate--focused on" : ""}`}
       data-node-id="orchestrator"
+      tabIndex={0}
+      aria-label={`${ORCHESTRATOR_DEF.name} plate, select to edit`}
       onClick={(e) => {
         e.stopPropagation();
         onFocus();
+      }}
+      // Same keyboard reach as HwPlate; no role="button" (real buttons inside).
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          onFocus();
+        }
       }}
     >
       <div className="hm-hw">

@@ -238,7 +238,7 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
             )}
 
             {/* ── meta layer: the verification topology ── */}
-            <div className="vc-layer vc-layer--meta" aria-hidden={level !== "meta"}>
+            <div className="vc-layer vc-layer--meta" aria-hidden={level !== "meta"} inert={level !== "meta"}>
               <div className="vc-kicker">
                 <div className="vc-lane">
                   <span>
@@ -327,7 +327,12 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") setLevel("inner");
+                  // Space would scroll the page and Enter would submit a form:
+                  // a div playing a button has to swallow both itself.
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setLevel("inner");
+                  }
                 }}
                 aria-label={`${vault.name}: open the loop`}
               >
@@ -349,7 +354,9 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
                       </div>
                       <div className="vc-srow" style={{ marginTop: 4 }}>
                         <span>NAV, attested</span>
-                        <b>share {navPerShare === null ? "1.000000" : navPerShare.toFixed(6)}</b>
+                        <b className={navPerShare === null ? "vc-v--wait" : undefined}>
+                          share {navPerShare === null ? AWAITING : navPerShare.toFixed(6)}
+                        </b>
                       </div>
                     </div>
                     <div className="vc-foot">
@@ -358,10 +365,12 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
                   </div>
                   <div className="vc-acts">
                     <div className="vc-al">Actions</div>
-                    <button type="button" className="vc-openkey" tabIndex={-1}>
+                    {/* A span, not a button: this plate is already the
+                        role="button", and a nested control there is invalid. */}
+                    <span className="vc-openkey">
                       <span className="vc-led" />
                       Open the loop
-                    </button>
+                    </span>
                   </div>
                   <span className="vc-jack vc-jack--t" />
                   <span className="vc-jack vc-jack--l" />
@@ -394,7 +403,7 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
             </div>
 
             {/* ── inner layer: the loop inside ── */}
-            <div className="vc-layer vc-layer--inner" aria-hidden={level !== "inner"}>
+            <div className="vc-layer vc-layer--inner" aria-hidden={level !== "inner"} inert={level !== "inner"}>
               <div className="vc-crumb">
                 <div className="vc-lane">
                   <em>PRIIME OPERATOR</em> ▸ {vault.name.toUpperCase()}

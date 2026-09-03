@@ -25,7 +25,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { truncateAddress, truncateHash } from "@/lib/format";
-import { formatAttestedNav, type StrikeRow } from "@/lib/vaults/attested";
+import {
+  attestedShareText,
+  attestedText,
+  formatAttestedNav,
+  type StrikeRow,
+} from "@/lib/vaults/attested";
 import { fmtAgo } from "@/lib/vaults/display";
 import { HERO_SLUG, HERO_VAULT, heroNavPerShare, heroNavUsd, heroStrikes, resolveVault } from "@/lib/vaults/rows";
 import { loadRequestsFor, type DepositRequest } from "@/lib/vaults/requests";
@@ -93,7 +98,10 @@ export function VaultAsset({ slug }: { slug: string }) {
   const strikes = heroStrikes();
   const navUsd = heroNavUsd();
   const navPerShare = heroNavPerShare();
-  const navOrCapital = navUsd ?? vault.baseTvlUsd;
+  // Modeled surfaces only: the auto-compound meter needs a notional to draw
+  // its accrual against, and every number it renders is labeled modeled. The
+  // attested slots below take `navUsd` itself and say so when it is null.
+  const modeledTvlUsd = navUsd ?? vault.baseTvlUsd;
   const { venue, chain } = venueParts(vault.venue);
 
   // One vault exists; any other slug is a quiet miss, not an error page.
@@ -143,12 +151,7 @@ export function VaultAsset({ slug }: { slug: string }) {
         and was rejected. Nothing on this page edits a journal, and no strike here is live.
       </p>
 
-      <StatBand
-        vault={vault}
-        navUsd={navOrCapital}
-        shareValue={navPerShare ?? 1}
-        strikes={strikes}
-      />
+      <StatBand vault={vault} navUsd={navUsd} shareValue={navPerShare} strikes={strikes} />
 
       <nav className="vp-tabs vpx-tabs" aria-label="Vault sections">
         {TABS.map((t) => (
@@ -197,7 +200,7 @@ export function VaultAsset({ slug }: { slug: string }) {
               <OperatorInstrument strikes={strikes} />
               <LeverageInstrument vault={vault} nowMs={nowMs} />
               <HedgeInstrument vault={vault} nowMs={nowMs} />
-              <CompoundInstrument vault={vault} nowMs={nowMs} tvlUsd={navOrCapital} />
+              <CompoundInstrument vault={vault} nowMs={nowMs} tvlUsd={modeledTvlUsd} />
               <p className="vp-note">
                 Envelope and harvest meter are the vault&apos;s published parameters, modeled. The
                 attestation instrument is read from the journal.
@@ -297,14 +300,16 @@ function StatBand({
   strikes,
 }: {
   vault: VaultRecord;
-  navUsd: number;
-  shareValue: number;
+  /** Attested NAV, null until a strike settles. Never filled from the record. */
+  navUsd: number | null;
+  /** Attested NAV per share, null until a strike settles. */
+  shareValue: number | null;
   strikes: readonly StrikeRow[];
 }) {
   const newest = strikes[0];
   const cells: { label: string; modeled?: boolean; value: string }[] = [
-    { label: "NAV", value: fmtUsdFull(navUsd) },
-    { label: "Share value", value: shareValue.toFixed(6) },
+    { label: "NAV", value: attestedText(navUsd, fmtUsdFull) },
+    { label: "Share value", value: attestedShareText(shareValue) },
     { label: "Quorum", value: newest ? newest.quorum.thresholdLabel : "-" },
     { label: "Net APY", modeled: true, value: fmtPct(vault.modeledApy) },
   ];
@@ -341,7 +346,7 @@ function AttestedPerformance({
       <div className="vp-chart-head">
         <div>
           <div className="vp-chart-k">Share value, attested</div>
-          <div className="vp-chart-v">{(navPerShare ?? 1).toFixed(6)}</div>
+          <div className="vp-chart-v">{attestedShareText(navPerShare)}</div>
         </div>
         <span className="vchip">{series.length} strikes</span>
       </div>
@@ -390,7 +395,15 @@ function AttestationParameters({ strikes }: { strikes: readonly StrikeRow[] }) {
       value: `${journal.nav_unit.asset}, ${String(journal.nav_unit.decimals)} decimals`,
     },
     { label: "Latest inputs block", value: String(newest.inputsBlock) },
-    { label: "Winning result hash", value: truncateHash(newest.operators[0]?.resultHash ?? "", 10, 6) },
+    {
+      label: "Winning result hash",
+      // The journal's own field. Reading it off an operator row would quote a
+      // submission, which on a sabotage strike need not be the winning one.
+      value:
+        newest.quorum.winningHash === null
+          ? "-"
+          : truncateHash(newest.quorum.winningHash, 10, 6),
+    },
     {
       label: "Latest attested NAV",
       value:

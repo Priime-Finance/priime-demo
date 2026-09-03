@@ -120,6 +120,12 @@ interface QuorumFacts {
   thresholdLabel: string;
   /** True once the winning hash reached the threshold. */
   reached: boolean;
+  /**
+   * The result hash the quorum formed over, straight from the journal. Null
+   * when no quorum ever formed, in which case the UI shows a marker and never
+   * a hash: an unattested strike has no winning hash to quote.
+   */
+  winningHash: string | null;
 }
 
 /** Quorum facts for one strike. */
@@ -133,6 +139,7 @@ export function quorumFacts(journal: Journal): QuorumFacts {
     label: `${accepted}-of-${total}`,
     thresholdLabel: `${journal.quorum.threshold} of ${total}`,
     reached: journal.quorum.reached,
+    winningHash: journal.quorum.winning_result_hash,
   };
 }
 
@@ -207,6 +214,25 @@ export function strikeRows(
  */
 export function settlingStrike(rows: readonly StrikeRow[]): StrikeRow | null {
   return rows.find((r) => r.status === "settled" && r.navPerShare !== null) ?? null;
+}
+
+/**
+ * What an attested slot reads when the quorum has not attested a number yet.
+ *
+ * The attested register never falls back to a modeled number and never prints
+ * a placeholder digit: a NAV or a share price the quorum has not signed is not
+ * a number this page is allowed to state, so the slot says so in words.
+ */
+export const AWAITING_LABEL = "awaiting strike";
+
+/** An attested value in its own format, or the awaiting marker when null. */
+export function attestedText(value: number | null, format: (value: number) => string): string {
+  return value === null ? AWAITING_LABEL : format(value);
+}
+
+/** An attested share price at journal precision, or the awaiting marker. */
+export function attestedShareText(navPerShare: number | null): string {
+  return attestedText(navPerShare, (v) => v.toFixed(6));
 }
 
 /** Format an attested NAV the way the journal states it: full base-unit precision. */

@@ -11,9 +11,12 @@ import { describe, expect, it } from "vitest";
 
 import { DEMO_JOURNALS, STRIKE_IDS } from "@/lib/source";
 import {
+  AWAITING_LABEL,
   HERO_SHARES_OUTSTANDING,
   attestedNavPerShare,
   attestedNavUsd,
+  attestedShareText,
+  attestedText,
   baseUnitsToNumber,
   formatAttestedNav,
   quorumFacts,
@@ -96,6 +99,41 @@ describe("quorumFacts", () => {
     expect(q.accepted).toBe(2);
     expect(q.total).toBe(3);
   });
+
+  it("takes the winning hash from the quorum, not from a submission", () => {
+    const q = quorumFacts(sabotage);
+    const accepted = sabotage.operators.filter((o) => o.accepted);
+    const rejected = sabotage.operators.filter((o) => !o.accepted);
+    expect(accepted).toHaveLength(2);
+    expect(rejected).toHaveLength(1);
+    // The rejected node is the one that reported the inflated NAV.
+    expect(rejected[0]!.nav).toBe("750000000");
+    expect(q.winningHash).toBe(sabotage.quorum.winning_result_hash);
+    for (const op of accepted) expect(q.winningHash).toBe(op.result_hash);
+    expect(q.winningHash).not.toBe(rejected[0]!.result_hash);
+  });
+
+  it("reads the quorum's hash even when the rejected node submitted first", () => {
+    // The captures happen to list an accepted operator first, so reading
+    // `operators[0]` looks right on them. Reorder and the shortcut breaks.
+    const reordered = { ...sabotage, operators: [...sabotage.operators].reverse() };
+    expect(reordered.operators[0]!.accepted).toBe(false);
+    expect(quorumFacts(reordered).winningHash).toBe(sabotage.quorum.winning_result_hash);
+  });
+});
+
+describe("awaiting register", () => {
+  it("says awaiting rather than quoting a number the quorum has not signed", () => {
+    expect(attestedShareText(null)).toBe(AWAITING_LABEL);
+    expect(attestedText(null, (v) => v.toFixed(2))).toBe(AWAITING_LABEL);
+    expect(AWAITING_LABEL).not.toMatch(/\d/);
+  });
+
+  it("formats the attested value untouched once there is one", () => {
+    expect(attestedShareText(1)).toBe("1.000000");
+    expect(attestedShareText(0)).toBe("0.000000");
+    expect(attestedText(500, (v) => `$${v.toFixed(2)}`)).toBe("$500.00");
+  });
 });
 
 describe("strikeRows", () => {
@@ -119,6 +157,9 @@ describe("strikeRows", () => {
 
   it("picks the newest settled strike to fill deposits at", () => {
     const s = settlingStrike(rows);
+    // Both captures settled at 1.000000, so the price alone proves nothing:
+    // the assertion that bites is *which* strike was chosen.
+    expect(s?.strikeId).toBe(STRIKE_IDS.sabotage);
     expect(s?.navPerShare).toBe(1);
   });
 });

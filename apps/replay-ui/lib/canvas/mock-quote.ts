@@ -27,16 +27,19 @@ export function catalogRow(opp: OpportunitiesPayload | null, candidateId: string
   return null;
 }
 
-/** Synthesize an ok-shaped quote from a catalog row (client-side, modeled). */
+/** Synthesize an ok-shaped quote from a catalog row (client-side, modeled).
+ *  The clock is a parameter (serialize.ts `toDraft` precedent): lib/ stays
+ *  pure and the call site supplies Date.now(). */
 export function mockQuote(
   hit: CatalogHit,
   targetLeverage: number,
   riskPreset: RiskPreset,
+  nowMs: number,
 ): RepriceData {
   const lt = typeof hit.row.lt === "number" && hit.row.lt > 0 ? hit.row.lt : 0.86;
   return {
     ok: true,
-    repricedAtMs: Date.now(),
+    repricedAtMs: nowMs,
     blockNumber: hit.blockNumber,
     candidate: hit.row,
     requestedLeverage: targetLeverage,

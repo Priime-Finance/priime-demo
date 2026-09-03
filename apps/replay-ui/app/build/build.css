@@ -521,7 +521,7 @@ body:has(.bc-root) footer{display:none}
    (C) PUBLISH FLOW (pf-*): Review → Publish → Done.
    ══════════════════════════════════════════════════════════════════════════ */
 
-.bc-root{--fser:"Fraunces",Georgia,serif}
+.bc-root{--fser:var(--font-fraunces),"Fraunces",Georgia,serif}
 
 /* ── (A) blue hardware ── */
 .bc-root .hm-led{background:#232B5C}
@@ -725,3 +725,10 @@ body:has(.bc-root) footer{display:none}
       real <button>s (zoom nav, panel collapse) and the div[role=button]
       variants (market/venue filter chips, plate action keys). ── */
 .hm-key:focus-visible{outline:2px solid #2b5cff;outline-offset:2px}
+
+/* ── keyboard focus on the plates and the lane header: same blue ring as
+      .hm-key above. Both are focusable (tabIndex=0) so a keyboard user can
+      select a plate and reach the dock dials; the ring sits outside the
+      plate chrome so it never fights the focused-plate state. ── */
+.rk-plate:focus-visible{outline:2px solid #2b5cff;outline-offset:3px;border-radius:4px}
+.rk-lanehead:focus-visible{outline:2px solid #2b5cff;outline-offset:2px;border-radius:4px}
