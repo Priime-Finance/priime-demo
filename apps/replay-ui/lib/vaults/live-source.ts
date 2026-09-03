@@ -55,3 +55,53 @@ export function fetchLoopJournals(id: string, limit = 20): Promise<LoopJournalsR
   const suffix = limit === 20 ? "" : `?limit=${String(limit)}`;
   return getJson<LoopJournalsResponse>(`/api/loops/${encodeURIComponent(id)}/journals${suffix}`);
 }
+
+/** Body shape for POST /api/loops. Matches the loop-deploy `LoopConfig`
+ *  server-side; kept as a local interface so callers do not need to import
+ *  the server package just to build the payload. */
+export interface CreateLoopInput {
+  name: string;
+  strategist: string;
+  cronSeconds: number;
+  marketId: string;
+  lltv: string;
+  usdeAddress: string;
+  oracleAddress: string;
+  irmAddress: string;
+  morphoAddress: string;
+  poolAddress: string;
+  twapWindowSecs: number;
+  inputsBlockLag: number;
+}
+
+export class LoopValidationError extends Error {
+  readonly issues: string[];
+  constructor(issues: string[]) {
+    super(`invalid loop config: ${issues.join("; ")}`);
+    this.name = "LoopValidationError";
+    this.issues = issues;
+  }
+}
+
+/** POST /api/loops. On the loop-server's own 400 response the promise
+ *  rejects with a LoopValidationError so the form can render per-field
+ *  hints; other failures throw a plain Error. */
+export async function createLoop(input: CreateLoopInput): Promise<LoopDetailResponse> {
+  const res = await fetch("/api/loops", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (res.status === 201) {
+    return (await res.json()) as LoopDetailResponse;
+  }
+  const body = (await res.json().catch(() => null)) as unknown;
+  if (res.status === 400 && body !== null && typeof body === "object" && "issues" in body && Array.isArray(body.issues)) {
+    throw new LoopValidationError(body.issues.filter((v): v is string => typeof v === "string"));
+  }
+  let detail = "";
+  if (body !== null && typeof body === "object" && "error" in body && typeof body.error === "string") {
+    detail = `: ${body.error}`;
+  }
+  throw new Error(`POST /api/loops returned ${String(res.status)}${detail}`);
+}
