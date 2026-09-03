@@ -88,3 +88,25 @@
   .dir { padding-left: 0; padding-right: 0; }
   .dir-head { flex-wrap: wrap; align-items: flex-start; gap: 16px; }
 }
+
+/* Live loops section: separate block below the hero grid, same card
+   language. Kept intentionally simple so the hero remains the eye. */
+.dir-live { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--v-line, #e6e2d9); }
+.dir-live-head { max-width: 640px; margin-bottom: 14px; }
+.dir-live-title { font-family: var(--vdis); font-size: 22px; letter-spacing: -0.01em; margin: 0 0 6px; color: var(--v-ink, #141210); }
+.dir-live-sub { font-family: var(--vser); font-style: italic; font-size: 13px; color: var(--v-mut, #6f6c66); line-height: 1.6; }
+.dir-live-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 8px; }
+.dir-live-msg { font-family: var(--vser); font-style: italic; font-size: 13px; color: var(--v-mut, #6f6c66); }
+.dir-card--live .dir-tag { background: color-mix(in srgb, var(--v-accent, #2b6cb0) 15%, transparent); }
+
+/* Minimal live-vault detail table. */
+.live-vault { display: grid; gap: 24px; padding: 24px 0; }
+.live-vault-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.live-vault-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 24px; background: var(--v-card, #fafaf7); border: 1px solid var(--v-line, #e6e2d9); border-radius: 10px; padding: 16px; }
+.live-vault-facts dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--v-mut, #6f6c66); margin-bottom: 2px; }
+.live-vault-facts dd { font-size: 13px; word-break: break-all; margin: 0; color: var(--v-ink, #141210); }
+.live-vault-strikes { display: grid; gap: 12px; }
+.live-vault-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.live-vault-table th { text-align: left; font-weight: 500; color: var(--v-mut, #6f6c66); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; padding: 8px 10px; border-bottom: 1px solid var(--v-line, #e6e2d9); }
+.live-vault-table td { padding: 8px 10px; border-bottom: 1px solid var(--v-line, #e6e2d9); color: var(--v-ink, #141210); word-break: break-all; }
+.live-vault-table tr:last-child td { border-bottom: 0; }
