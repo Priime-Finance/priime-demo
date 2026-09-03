@@ -27,7 +27,7 @@ import type {
 /* ------------------------------------------------------------------ pacing */
 
 /** Knobs that map real strike timestamps onto demo playback time. */
-export interface ReplayPacing {
+interface ReplayPacing {
   /** Dead air before the trigger fires, so the idle frame is legible. */
   leadInMs: number;
   /** Floor on the gap between consecutive events (simultaneous ones included). */
@@ -72,14 +72,14 @@ interface ReplayEventCommon {
 }
 
 /** The strike firing (cron/block/event/manual). Always the first event. */
-export interface TriggerReplayEvent extends ReplayEventCommon {
+interface TriggerReplayEvent extends ReplayEventCommon {
   kind: "trigger";
   /** The journal's trigger record. */
   trigger: Trigger;
 }
 
 /** One operator's NAV submission landing. */
-export interface SubmissionReplayEvent extends ReplayEventCommon {
+interface SubmissionReplayEvent extends ReplayEventCommon {
   kind: "submission";
   /** The submitting operator, verbatim from the journal. */
   operator: Operator;
@@ -88,7 +88,7 @@ export interface SubmissionReplayEvent extends ReplayEventCommon {
 }
 
 /** One quorum-weight transition over the winning result hash. */
-export interface TransitionReplayEvent extends ReplayEventCommon {
+interface TransitionReplayEvent extends ReplayEventCommon {
   kind: "transition";
   /** The transition record, verbatim from the journal. */
   transition: Transition;
@@ -97,21 +97,21 @@ export interface TransitionReplayEvent extends ReplayEventCommon {
 }
 
 /** The on-chain attestation landing. Only emitted once `tx_hash` exists. */
-export interface AttestationReplayEvent extends ReplayEventCommon {
+interface AttestationReplayEvent extends ReplayEventCommon {
   kind: "attestation";
   /** The attestation record, verbatim from the journal. */
   attestation: Attestation;
 }
 
 /** Anything that can happen during playback. */
-export type ReplayEvent =
+type ReplayEvent =
   | TriggerReplayEvent
   | SubmissionReplayEvent
   | TransitionReplayEvent
   | AttestationReplayEvent;
 
 /** A journal compiled into a demo-paced schedule. Pure function of its inputs. */
-export interface ReplayTimeline {
+interface ReplayTimeline {
   /** Events in fire order, `atMs` strictly increasing. */
   events: readonly ReplayEvent[];
   /** Playback length including `tailHoldMs`; `done` flips at this `t`. */
@@ -130,7 +130,7 @@ export interface ReplayTimeline {
  * terminal phase — playback just runs out of events (`done`) while the strike
  * stays `collecting`/`quorum-reached`, which is exactly the live-poll case.
  */
-export type ReplayPhase =
+type ReplayPhase =
   | "idle"
   | "triggered"
   | "collecting"
@@ -157,7 +157,7 @@ export const REPLAY_PHASE_RANK: Readonly<Record<ReplayPhase, number>> = {
 };
 
 /** An operator that has appeared on screen, with its verdict. */
-export interface ReplayOperatorState {
+interface ReplayOperatorState {
   /** Operator signing address. */
   id: string;
   /** keccak256 of the result payload. */
@@ -183,7 +183,7 @@ export interface ReplayOperatorState {
 }
 
 /** Quorum fill progress at `t`. */
-export interface ReplayQuorumState {
+interface ReplayQuorumState {
   /** Weight required to settle. */
   threshold: number;
   /** Total registered operator weight. */
@@ -203,7 +203,7 @@ export interface ReplayQuorumState {
 }
 
 /** Attestation state: not on chain yet, or landed with its receipt. */
-export type ReplayAttestationState =
+type ReplayAttestationState =
   | {
       /** Nothing on chain yet. */
       status: "not-landed";

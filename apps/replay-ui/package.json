@@ -19,12 +19,14 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
     "eslint-config-next": "15.4.10",
     "eslint-plugin-react-hooks": "^5.2.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "5.5.4",
     "typescript-eslint": "^8.67.0",
     "vitest": "^3.2.4"

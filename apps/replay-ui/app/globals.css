@@ -1,1623 +1,402 @@
-@import "../styles/tokens/base.css";
-@import "../styles/tokens/colors.css";
-@import "../styles/tokens/elevation.css";
-@import "../styles/tokens/fonts.css";
-@import "../styles/tokens/motion.css";
-@import "../styles/tokens/spacing.css";
-@import "../styles/tokens/typography.css";
-
-/*
- * Two registers, one token set. Dark is the default; light is presenter-
- * selectable via `data-theme="light"` on <html>.
- *
- * colors.css (as shipped by priime-design-system) declares exactly one
- * theme: the LIGHT aluminium chassis, wired through semantic aliases
- * (--bg, --surface, --text, ...) at :root. There is no
- * `@media (prefers-color-scheme: dark)` block and no `[data-theme]`
- * switch in the token set to "honor" — it ships single-theme, so the app
- * owns theming.
- *
- * DARK (default). This app is an instrument console (NAV strikes, quorum
- * fills, attestations), not a marketing page, so the default register is
- * the palette's own dark "hardware/screen" tokens — --k-900/--k-800 (the
- * black keys/screens), --alu-0 (white-key highlight, used here as primary
- * text), --ink-300/--g-600 (secondary/faint text), --dash-on-black
- * (hairlines), --ok-dark (status green tuned for dark screens) — all of
- * which already exist as raw tokens in the copied colors.css, just unused
- * by its light-mode semantic layer. The chassis is black; the *controls*
- * stay aluminium (the register switch is the only one left on the page),
- * exactly as the kit draws them.
- *
- * The dark block is scoped `html:not([data-theme="light"])` rather than
- * `:root` on purpose: it leaves the kit's own light values in place under
- * `[data-theme="light"]`, so the light register IS the kit's default look
- * (--surface-0 card surface, --ink-800/--ink-900 ink, --grad-card plate,
- * --e-card elevation, --border/--dash hairlines) rather than an invented
- * palette. Only the handful of aliases listed under [data-theme="light"]
- * below are moved off the kit default, and each says why.
- *
- * LCD screens do NOT flip. Instrument consoles keep their readouts dark on
- * a light chassis, and the LCD micro-palette (--lcd-red/--lcd-pink) plus
- * --ok-dark are tuned for exactly that. `.screen` therefore re-declares the
- * dark ink/status aliases locally in light mode, so everything inside a
- * screen renders identically in both registers.
- *
- * Light still comes from directly above in both registers.
- *
- * ============================ CONTENTS ============================
- *   1  REGISTERS ........ the two token remaps + the screen exception
- *   2  CONSOLE SHELL .... page grid, content column, masthead, captions
- *   3  PANEL ............ the plate every region sits on
- *   4  PRIMITIVES ....... Badge, Chip
- *   5  SCREEN ........... the recessed LCD field, Readout, Metric
- *   6  FIELD ROW ........ the read-only parameter well
- *   7  OPERATOR MODULE .. the per-node card in a strike detail
- *   8  QUORUM METER ..... the weight ladder
- *   9  SYSTEM CANVAS .... board, wires, plates, lamps, mini LCDs,
- *                         the corrupt switch, the vault door
- *  10  STRIKE TICKER .... the recent-strikes strip
- *  11  STAGE LAYOUT ..... the two-column stage, DataList, peer rows
- *  12  THEME SWITCH ..... the presenter's register control
- *  13  LIGHT REGISTER ... the few rules a token remap cannot carry
- *  14  RESPONSIVE ....... 1180 / 900 / 640 breakpoints
- * ==================================================================
- */
-
-/* ============================================================
-   1 · REGISTERS
-   ============================================================ */
-
-/* ---------- Dark: the default register (no attribute, or "dark") ---------- */
-html:not([data-theme="light"]) {
-  --bg: var(--k-900);
-  --surface: var(--k-800);
-  --text: var(--alu-0);
-  --text-strong: var(--surface-0);
-  --text-muted: var(--ink-300);
-  --text-faint: var(--g-600);
-  --border: var(--dash-on-black);
-
-  /* Console-local semantics, all composed from shipped tokens.
-     --e-plate is the kit's Panel tone="dark" shadow, lifted verbatim from
-     components/layout/Panel.jsx (the token set ships no dark-plate
-     elevation of its own). */
-  --e-plate: 0 26px 46px -18px rgba(0, 0, 0, 0.5);
-  --plate: var(--k-800);
-  --plate-raised: var(--k-700);
-  --grid-ink: color-mix(in srgb, var(--dash-on-black) 55%, transparent);
-  --wash: color-mix(in srgb, var(--surface-0) 4%, transparent);
-  --accent-ink: var(--o-500);
-  --status-ok: var(--ok-dark);
-  --status-warn: var(--warn);
-  --status-bad: var(--lcd-red);
-
-  /* Canvas hardware. SVG `fill` cannot take a CSS gradient, so the canvas
-     gets its own SOLID aliases rather than reusing --plate (which resolves to
-     --grad-card in the light register and would silently paint nothing). */
-  --canvas-bg: var(--k-900);
-  --canvas-plate: var(--k-700);
-  --canvas-plate-edge: var(--dash-on-black);
-  --canvas-wire: var(--dash-on-black);
-  --canvas-ink: var(--alu-0);
-  --canvas-ink-dim: var(--g-600);
-  --vault-face-a: #2f2f2f;
-  --vault-face-b: #101010;
-  --vault-rim-a: #3f3f3f;
-  --vault-rim-b: #191919;
-  --vault-hub-a: #3c3c3c;
-  --vault-hub-b: #1d1d1d;
-  --vault-line: var(--dash-on-black);
-  --vault-spoke: var(--g-500);
-}
-
-/* ---------- Light: the kit's own aluminium chassis ---------- */
-html[data-theme="light"] {
-  /* --surface, --text, --text-strong, --accent, --on-accent are NOT
-     declared here: they keep the values colors.css ships (--surface-0,
-     --ink-800, --ink-900, --o-500, #FFF). That is the point. */
-
-  /* The console draws the kit's .blueprint-grid motif, which pairs
-     --alu-50 with --alu-200 rules (base.css), not --paper with dots. */
-  --bg: var(--alu-50);
-
-  /* The kit's default --text-muted/--text-faint are --ink-500/--ink-300.
-     --ink-300 is documented in colors.css as "faint labels (large/label
-     use only, 2.6:1)" and --ink-500 measures 4.1-4.4:1 on the aluminium
-     page and on the plate's dark gradient end — both under AA, and every
-     faint string in this console (small print, registry labels, peer ids)
-     is 10-14px body/mono text. Both steps therefore take the kit's own
-     doc register, the ink it ships for readable copy on light:
-     --doc-prose (9.3:1) and --doc-callout (5.7-6.2:1). */
-  --text-muted: var(--doc-prose);
-  --text-faint: var(--doc-callout);
-
-  /* Almost every rule in this console is a dashed registration line, which
-     is what --dash is for; the kit's flat --border (#E7E4DD) is too faint
-     to survive dashing on an aluminium page. */
-  --border: var(--dash);
-
-  --e-plate: var(--e-card);
-  --plate: var(--grad-card);
-  --plate-raised: var(--surface-0);
-  --grid-ink: color-mix(in srgb, var(--alu-200) 70%, transparent);
-  --wash: color-mix(in srgb, var(--ink-900) 4%, transparent);
-
-  /* Coloured INK on a light chassis. The kit's light-register colours
-     (--o-600 "orange-text-on-light", --neg, --ok, --warn) are drawn as
-     fills and indicators, and as 10-12px type on aluminium they measure
-     3.4-4.4:1 — just under AA. Each is therefore dropped a step onto the
-     kit's own ink ramp by mixing toward --ink-900: same hue, same role,
-     enough contrast. Percentages are the measured minimum that clears 4.5:1
-     on the surface each one actually lands on (page, plate, or its own
-     wash), with margin. Nothing here is a literal colour.
-     Note these are chassis inks only: the LCD reds and --ok-dark stay
-     inside the screens, re-declared below. */
-  --accent-ink: color-mix(in srgb, var(--o-600) 86%, var(--ink-900));
-  --status-ok: color-mix(in srgb, var(--ok) 52%, var(--ink-900));
-  --status-warn: color-mix(in srgb, var(--warn) 62%, var(--ink-900));
-  --status-bad: color-mix(in srgb, var(--neg) 78%, var(--ink-900));
-
-  /* The canvas is chassis, not screen: it flips with the register. Only the
-     mini LCDs inside it stay dark (see `.lcd` below). */
-  --canvas-bg: var(--alu-50);
-  --canvas-plate: var(--surface-0);
-  --canvas-plate-edge: var(--border-strong);
-  /* A step darker than the plate edge: a dashed 1.6px wire on aluminium needs
-     more than a hairline token to read as a connection. */
-  --canvas-wire: var(--g-300);
-  --canvas-ink: var(--ink-800);
-  --canvas-ink-dim: var(--doc-callout);
-  --vault-face-a: #fbfbf9;
-  --vault-face-b: #d9d9d3;
-  --vault-rim-a: #f2f2ef;
-  --vault-rim-b: #c4c4bf;
-  --vault-hub-a: #ffffff;
-  --vault-hub-b: #d4d4cf;
-  --vault-line: var(--border-strong);
-  --vault-spoke: var(--g-600);
-}
-
-/* The recessed screens are dark hardware in both registers, so they carry the
-   dark register's ink and the LCD micro-palette wherever they sit. Everything
-   inside a `.screen` renders identically in light and dark. */
-html[data-theme="light"] .screen {
-  --text: var(--alu-0);
-  --text-strong: var(--surface-0);
-  --text-muted: var(--ink-300);
-  --text-faint: var(--g-600);
-  --border: var(--dash-on-black);
-  --wash: color-mix(in srgb, var(--surface-0) 4%, transparent);
-  --accent-ink: var(--o-500);
-  --status-ok: var(--ok-dark);
-  --status-warn: var(--warn);
-  --status-bad: var(--lcd-red);
-}
-
-/* ============================================================
-   2 · CONSOLE SHELL
-   ============================================================ */
-
-.console {
-  min-height: 100vh;
-  /* The kit's .blueprint-grid motif: --alu-200 rules on --alu-50 in the light
-     register (base.css), --dash-on-black on --k-900 in the dark one. Both at
-     part strength (--grid-ink) so the plates stay the subject and the grid
-     stays structure. */
-  background-color: var(--bg);
-  background-image:
-    linear-gradient(var(--grid-ink) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-ink) 1px, transparent 1px);
-  background-size: var(--grid-cell) var(--grid-cell);
-}
-
-.console__inner {
-  /* Content column: the 1180px token plus four blueprint modules, so the
-     three operator plates and the side rail sit side by side when projected. */
-  max-width: calc(var(--container) + var(--grid-cell) * 4);
-  margin: 0 auto;
-  padding: var(--sp-4) var(--gutter) var(--sp-8);
-}
-
-/* ---------- Header ---------- */
-
-.hdr {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-3) var(--sp-5);
-  padding-bottom: var(--sp-3);
-  border-bottom: 1px dashed var(--border);
-}
-
-.hdr__mark {
-  /* Clearspace >= the height of the ∞ in the wordmark. */
-  display: block;
-  height: 26px;
-  width: auto;
-  margin-right: var(--sp-2);
-}
-
-/* The official wordmark is never recoloured, so each register gets the asset
-   drawn for its background and the other one is simply not rendered. */
-.hdr__mark--light {
-  display: none;
-}
-
-[data-theme="light"] .hdr__mark--dark {
-  display: none;
-}
-
-[data-theme="light"] .hdr__mark--light {
-  display: block;
-}
-
-.hdr__titles {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
-}
-
-.hdr__title {
-  margin: 0;
-  font-size: var(--fs-h3);
-  line-height: var(--lh-h3);
-  letter-spacing: var(--ls-h3);
-  font-weight: var(--fw-semibold);
-  color: var(--text-strong);
-}
-
-.hdr__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-left: auto;
-}
-
-/* ---------- Page heading + captions ---------- */
-
-.beat__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-2) var(--sp-4);
-  margin: var(--sp-5) 0 var(--sp-2);
-}
-
-.beat__title {
-  margin: 0;
-  font-size: var(--fs-h2);
-  line-height: var(--lh-h2);
-  letter-spacing: var(--ls-h2);
-  font-weight: var(--fw-medium);
-  color: var(--text-strong);
-}
-
-.beat__kicker {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
-  max-width: 78ch;
-}
-
-.caption {
-  margin: var(--sp-3) 0 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
-  letter-spacing: 0;
-  color: var(--text-muted);
-  border-left: 1px solid var(--o-500);
-  padding-left: var(--sp-3);
-}
-
-.caption--quiet {
-  border-left-color: var(--border);
-  color: var(--text-faint);
-  font-size: var(--fs-micro);
-  line-height: var(--lh-micro);
-}
-
-.smallprint {
-  margin: var(--sp-3) 0 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 15px;
-  letter-spacing: 0.02em;
-  color: var(--text-faint);
-  border-top: 1px dashed var(--border);
-  padding-top: var(--sp-2);
-}
-
-/* ============================================================
-   3 · PANEL (kit: layout/Panel, tone="dark")
-   ============================================================ */
-
-.panel {
-  position: relative;
-  border-radius: var(--r-panel);
-  background: var(--plate);
-  border: 1px solid var(--border);
-  box-shadow: var(--e-plate);
-  padding: var(--sp-5);
-}
-
-.panel--tight {
-  padding: var(--sp-4);
-}
-
-.panel__head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
-}
-
-.panel__title {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  line-height: var(--lh-micro);
-  letter-spacing: var(--ls-micro);
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.panel__idx {
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  letter-spacing: var(--ls-micro);
-  color: var(--accent-ink);
-}
-
-.panel__actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
-.panel__kicker {
-  margin: 0 0 var(--sp-4);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
-  color: var(--text-muted);
-}
-
-/* ============================================================
-   4 · PRIMITIVES — Badge, Chip (kit: primitives/)
-   ============================================================ */
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  height: 26px;
-  padding: 0 var(--sp-3);
-  border-radius: var(--r-pill);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  border: 1px solid var(--border);
-  background: var(--wash);
-  color: var(--text-muted);
-}
-
-.badge__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: var(--r-round);
-  background: currentColor;
-  flex: none;
-}
-
-.badge--ok {
-  color: var(--status-ok);
-  border-color: color-mix(in srgb, var(--status-ok) 55%, transparent);
-  background: color-mix(in srgb, var(--status-ok) 12%, transparent);
-}
-
-.badge--warn {
-  color: var(--status-warn);
-  border-color: color-mix(in srgb, var(--status-warn) 55%, transparent);
-  background: color-mix(in srgb, var(--status-warn) 12%, transparent);
-}
-
-.badge--bad {
-  color: var(--status-bad);
-  border-color: var(--status-bad);
-  background: color-mix(in srgb, var(--status-bad) 16%, transparent);
-}
-
-.badge--accent {
-  color: var(--o-400);
-  border-color: color-mix(in srgb, var(--o-500) 65%, transparent);
-  background: var(--o-wash);
-}
-
-.badge--ghost {
-  color: var(--text-muted);
-  border-style: dashed;
-  background: transparent;
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  height: 30px;
-  padding: 0 var(--sp-4);
-  border-radius: var(--r-pill);
-  border: 1px solid var(--border);
-  background: var(--wash);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--text);
-  text-decoration: none;
-  white-space: nowrap;
-  transition: border-color var(--dur) var(--ease);
-}
-
-a.chip:hover {
-  border-color: var(--o-500);
-}
-
-.chip__label {
-  color: var(--text-faint);
-  text-transform: uppercase;
-}
-
-.chip__arrow {
-  color: var(--accent-ink);
-}
-
-/* ============================================================
-   5 · SCREEN (kit: data/Screen) + METRIC (kit: data/Metric)
-   ============================================================ */
-
-.screen {
-  position: relative;
-  background: var(--lcd-bg);
-  border-radius: var(--r-screen);
-  box-shadow: var(--e-screen);
-  padding: var(--sp-2) var(--sp-4) var(--sp-3);
-  overflow: hidden;
-  font-family: var(--font-mono);
-  color: var(--text-strong);
-}
-
-.screen__scan {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: var(--tex-scanline);
-  opacity: 0.5;
-  mix-blend-mode: overlay;
-}
-
-.screen__inner {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.screen__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-
-.screen__label {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--surface-0) 45%, transparent);
-}
-
-.screen__status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-1);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.screen__status i {
-  width: 5px;
-  height: 5px;
-  border-radius: var(--r-round);
-  background: currentColor;
-}
-
-/* Readout rows inside a screen: label left, mono value right. */
-.readout {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: 2px 0;
-}
-
-.readout + .readout {
-  border-top: 1px dashed color-mix(in srgb, var(--surface-0) 8%, transparent);
-}
-
-.readout__label {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--surface-0) 40%, transparent);
-  flex: none;
-}
-
-.readout__value {
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  color: var(--text-strong);
-  overflow-wrap: anywhere;
-  text-align: right;
-}
-
-.readout__value--dim {
-  color: color-mix(in srgb, var(--surface-0) 28%, transparent);
-}
-
-.readout__value--ok {
-  color: var(--status-ok);
-}
-
-.readout__value--bad {
-  color: var(--status-bad);
-}
-
-.readout__value--hash {
-  font-size: 14px;
-  font-weight: var(--fw-semibold);
-}
-
-.metric__label {
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--surface-0) 45%, transparent);
-  margin-bottom: var(--sp-1);
-}
-
-.metric__value {
-  font-family: var(--font-mono);
-  font-size: var(--fs-metric);
-  line-height: var(--lh-metric);
-  letter-spacing: var(--ls-metric);
-  font-weight: var(--fw-semibold);
-  color: var(--lcd-red);
-}
-
-.metric__value--md {
-  font-size: 26px;
-  line-height: 30px;
-}
-
-.metric__value--ok {
-  color: var(--status-ok);
-}
-
-.metric__value--bad {
-  color: var(--status-bad);
-}
-
-.metric__value--idle {
-  color: color-mix(in srgb, var(--surface-0) 26%, transparent);
-}
-
-.metric__unit {
-  color: var(--lcd-pink);
-}
-
-.metric__value--ok .metric__unit {
-  color: color-mix(in srgb, var(--status-ok) 70%, transparent);
-}
-
-.metric__value--bad .metric__unit {
-  color: color-mix(in srgb, var(--status-bad) 70%, transparent);
-}
-
-.metric__value--idle .metric__unit {
-  color: inherit;
-}
-
-.metric__caption {
-  margin-top: var(--sp-1);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--surface-0) 35%, transparent);
-}
-
-/* ============================================================
-   6 · FIELD ROW (kit: primitives/Field, read-only register)
-   ============================================================ */
-
-.fieldrow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--sp-1) var(--sp-4);
-  padding: var(--sp-4) 0;
-  /* Rule above each row, never below: the row is not the panel's last child
-     (the facts list is), so a bottom rule would double up with its own. */
-  border-top: 1px dashed var(--border);
-}
-
-.fieldrow__label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-/* Read-only well: the kit's recessed Field input, in the dark register and
-   without the focus state, because these values are scripted config. */
-.fieldrow__value {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  align-self: center;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 128px;
-  height: 44px;
-  padding: 0 var(--sp-4);
-  border-radius: var(--r-sm);
-  background: var(--k-900);
-  border: 1px solid var(--border);
-  box-shadow: var(--e-groove);
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.02em;
-  color: var(--text-strong);
-}
-
-.fieldrow__help {
-  grid-column: 1;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
-  color: var(--text-faint);
-  max-width: 62ch;
-}
-
-/* ============================================================
-   7 · OPERATOR MODULE (kit: layout/Module)
-   ============================================================ */
-
-.opgrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-4);
-}
-
-.op {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  min-width: 0;
-  padding: var(--sp-4);
-  border-radius: var(--r-panel);
-  background: var(--plate);
-  border: 1px solid var(--border);
-  box-shadow: var(--e-plate);
-  transition: border-color var(--dur) var(--ease);
-}
-
-.op--live {
-  border-color: color-mix(in srgb, var(--o-500) 45%, transparent);
-}
-
-.op--rejected {
-  border-color: var(--status-bad);
-}
-
-/* An honest node in a strike that never reached quorum: drift, not alarm. */
-.op--stalled {
-  border-color: var(--status-warn);
-}
-
-.op__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-
-.op__name {
-  font-size: 15px;
-  font-weight: var(--fw-semibold);
-  letter-spacing: -0.01em;
-  color: var(--text-strong);
-}
-
-.op__idx {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--accent-ink);
-}
-
-.op__addr {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-
-.op__foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  margin-top: auto;
-}
-
-/* Operator cards stack badge over registry line so all three plates share the
-   same footer baseline, however long the status copy runs. */
-.op__foot--stack {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-2);
-}
-
-.op__weight {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-/* ============================================================
-   8 · QUORUM METER (kit: data/BarMeter, as a weight ladder)
-   ============================================================ */
-
-.quorum {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-
-.quorum__bar {
-  display: flex;
-  align-items: stretch;
-  gap: var(--sp-1);
-  height: 30px;
-}
-
-.quorum__seg {
-  flex: 1;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--surface-0) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--surface-0) 10%, transparent);
-  transition:
-    background var(--dur) var(--ease),
-    border-color var(--dur) var(--ease);
-}
-
-.quorum__seg--lit {
-  background: var(--o-500);
-  border-color: var(--o-400);
-}
-
-.quorum__seg--reached {
-  background: var(--status-ok);
-  border-color: var(--status-ok);
-}
-
-/* A weight that never entered the bar: hatched and outlined in alarm red. */
-.quorum__seg--excluded {
-  background-color: transparent;
-  background-image: repeating-linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--status-bad) 45%, transparent) 0 2px,
-    transparent 2px 7px
-  );
-  border-color: var(--status-bad);
-}
-
-.quorum__scale {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--surface-0) 40%, transparent);
-}
-
-/* ============================================================
-   9 · SYSTEM CANVAS — the living topology
-   ============================================================ */
-
-/* The canvas is a recessed board dropped into a panel: the console's own
-   blueprint grid, one step darker (or lighter) than the plate around it. */
-.canvaspanel {
-  margin-top: var(--sp-4);
-  padding: var(--sp-4);
-}
-
-.canvas {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: var(--r-screen);
-  box-shadow: var(--e-groove);
-  overflow: visible;
-}
-
-.canvas__board {
-  fill: var(--canvas-bg);
-}
-
-.canvasgrid {
-  fill: none;
-  stroke: var(--grid-ink);
-  stroke-width: 1;
-}
-
-/* Gradient stops, coloured from CSS because `stop-color` as an SVG attribute
-   does not resolve var(). */
-.vaultstop--face-a {
-  stop-color: var(--vault-face-a);
-}
-.vaultstop--face-b {
-  stop-color: var(--vault-face-b);
-}
-.vaultstop--rim-a {
-  stop-color: var(--vault-rim-a);
-}
-.vaultstop--rim-b {
-  stop-color: var(--vault-rim-b);
-}
-.vaultstop--hub-a {
-  stop-color: var(--vault-hub-a);
-}
-.vaultstop--hub-b {
-  stop-color: var(--vault-hub-b);
-}
-
-/* ---------- Wires ---------- */
-
-.wire {
-  fill: none;
-  stroke: var(--canvas-wire);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.wire--read,
-.wire--submit {
-  stroke-width: 1.6;
-  stroke-dasharray: 7 6;
-}
-
-.wire--mesh {
-  stroke-width: 1.2;
-  stroke-dasharray: 2 8;
-  opacity: 0.7;
-}
-
-/* A hot wire is the same route drawn again in the status colour. It travels
-   only when motion is allowed; under reduced motion it simply stays lit. */
-.wire--hot {
-  stroke-width: 2.2;
-  stroke-dasharray: 7 6;
-  animation: wireFlow 700ms linear infinite;
-}
-
-.pulse {
-  filter: drop-shadow(0 0 6px currentColor);
-}
-
-@keyframes wireFlow {
-  to {
-    stroke-dashoffset: -26;
+@import "tailwindcss";
+@import "../lib/design/tokens.css";
+
+/* Monument Extended — self-hosted display face for the three home
+   editorial titles. Pangram Pangram web license confirmed by Antoni
+   2026-05-14. Files at /public/fonts/. local() comes first so installed
+   copies render instantly (no network fetch); url() falls back for
+   visitors without the font installed. */
+@font-face {
+  font-family: "Monument Extended";
+  src: local("Monument Extended"), local("MonumentExtended-Regular"),
+       url("/fonts/MonumentExtended-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Monument Extended";
+  src: local("Monument Extended Ultrabold"), local("MonumentExtended-Ultrabold"),
+       url("/fonts/MonumentExtended-Ultrabold.otf") format("opentype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ============================================================================
+   autoloop design tokens — warm-stone dark + honey-amber brand
+   ============================================================================
+   Tailwind v4 @theme directive. All custom utilities (bg-stone, text-honey,
+   etc.) generate from these vars. Editing here propagates everywhere.
+
+   NOTE 2026-05-14: The Linear-grade token system lives in
+   lib/design/tokens.css and is imported above. It coexists with the
+   existing @theme block below until the migration finishes; consumers
+   should prefer the new tokens (var(--bg-page), var(--text-primary),
+   var(--brand-500), etc.) for any net-new code.
+*/
+@theme {
+  /* Cold near-black neutrals. Updated 2026-04-30 (Antoni's direction) from
+     warm-stone — examples from PYUSD-vault / Spark / Aave-Pro all use a pure
+     cold black. Background slightly off-true-black (#0a0a0a) so a sliver of
+     atmosphere remains; everything else neutral gray. */
+  /* PRIIME LIGHT THEME: the neutral ramp is INVERTED vs the old dark theme so
+     every existing bg-stone-950 / text-stone-100 usage flips to light correctly.
+     High numbers = light surfaces (page bg, cards); low numbers = dark ink (text).
+     Values are Priime's warm off-white + ink palette. */
+  --color-stone-950: #f4f3f1;   /* page bg — Priime warm off-white */
+  --color-stone-925: #faf9f7;   /* card bg — lifted near-white */
+  --color-stone-900: #f0eee9;   /* surface lift */
+  --color-stone-800: #e7e4dd;   /* borders / hairlines */
+  --color-stone-700: #d6d1c8;   /* dashed borders / faint dividers */
+  --color-stone-600: #6f6b63;   /* faint text / disabled — AA on cream (was #a29e95 2.4:1, then #8a867f 3.3:1 → now 4.6:1) */
+  --color-stone-500: #6f6c66;   /* muted text */
+  --color-stone-400: #57534e;   /* secondary text */
+  --color-stone-300: #3a3833;   /* body text */
+  --color-stone-200: #262320;   /* strong text */
+  --color-stone-100: #1a1a1a;   /* ink — darkest (primary text/headings) */
+  --color-stone-50:  #141414;   /* deepest ink — was missing from the ramp, so text-stone-50 fell back to Tailwind near-white (invisible on cream); now resolves to ink */
+
+  /* Brand — electric cobalt. Brighter / more saturated than the previous
+     muted cobalt (was #3578bf), to match the institutional-DeFi reference
+     screens (PYUSD vault, Aave Pro). The class names remain `honey-*` as a
+     semantic alias for "brand primary" to avoid touching ~20 component files. */
+  /* Priime orange. Class names stay honey-* (semantic alias for brand primary). */
+  --color-honey-50:  #fff1ec;
+  --color-honey-100: #ffe0d6;
+  --color-honey-200: #e0ddd8;
+  --color-honey-300: #333333;   /* light accent */
+  --color-honey-400: #000000;   /* primary CTA + brand accent (Priime orange) */
+  --color-honey-500: #000000;   /* hover */
+  --color-honey-600: #b8330f;
+  --color-honey-700: #92290c;
+  --color-honey-800: #6e1f09;
+
+  /* Brand secondary — cosmic violet (Aave-inspired). Used as the accent
+     color on the public home page (hero CTA, primary buttons, focus halos).
+     The rest of the app continues to use honey-400 cobalt. We deliberately
+     scope the violet to home so the front door has a distinct "premium"
+     feel without recoloring 50+ deeper-app surfaces. */
+  /* Priime uses orange, not purple: map the old home violet onto the orange scale. */
+  --color-violet-100: #ffe0d6;
+  --color-violet-300: #e0ddd8;
+  --color-violet-400: #000000;   /* primary home CTA + brand accent */
+  --color-violet-500: #000000;
+  --color-violet-600: #b8330f;
+  --color-violet-700: #92290c;
+
+  /* Functional — heavily desaturated. The UI is mostly black and white;
+     status colors only carry meaning when something is actually wrong.
+     "Healthy" / "info" map to neutral grayscale (no news is good news);
+     warning / danger get muted earth tones, never bright. */
+  /* Retuned for light backgrounds (must read on cream, not on black). */
+  --color-healthy:     #267e50;   /* calm green, AA on cream (was #2f9c63, 3.1:1 → 4.5:1) */
+  --color-healthy-dim: #dcefe4;   /* light green tint */
+  --color-warning:     #9c6127;   /* amber, AA on cream (was #b8722e, 3.4:1 → 4.6:1) */
+  --color-warning-dim: #f6e7d4;
+  --color-danger:      #c0392b;   /* red, contrast on light */
+  --color-danger-dim:  #f7ddd9;
+  --color-info:        #6f6c66;   /* muted neutral */
+  --color-info-dim:    #e7e4dd;
+
+  /* Gain/loss number colors. Components use text-emerald and text-rose classes
+     for positive/negative financial figures. Tailwind's defaults are a cold mint
+     (#6ee7b7) and salmon-pink (#fda4af) that fail AA on cream and read off the
+     warm Priime palette. Remap the used shades to the warm, AA status hues.
+     Text shades (200/300) hit 4.5:1+; fill shades (400/500) stay for dots. */
+  --color-emerald-50:  #267e50;
+  --color-emerald-100: #267e50;  /* success-title text (deposit forms) — was Tailwind pale mint, invisible on the green tint */
+  --color-emerald-200: #267e50;
+  --color-emerald-300: #267e50;   /* gain text — 4.5:1 on cream */
+  --color-emerald-400: #2f9c63;   /* dot / small fill */
+  --color-emerald-500: #267e50;
+  --color-emerald-600: #1f6b43;
+  --color-rose-200:    #c0392b;
+  --color-rose-300:    #c0392b;   /* loss text — 4.9:1 on cream */
+  --color-rose-400:    #c0392b;
+  --color-rose-500:    #c0392b;
+  --color-rose-600:    #a82e22;
+  /* Amber scale (same treatment as emerald/rose): Tailwind's default ambers
+     are dark-theme pale yellows that vanish on cream. Text shades map to the
+     AA warning amber; fills stay warm. */
+  --color-amber-100: #9c6127;
+  --color-amber-200: #9c6127;
+  --color-amber-300: #b8722e;
+  --color-amber-400: #b8722e;
+  --color-amber-500: #9c6127;
+  --color-amber-900: #6e4a1e;
+
+  /* Typography: Geist (sans + display) + Geist Mono. Linear-style. */
+  --font-display: var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body:    var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Radius — bumped up for the institutional-DeFi card feel (PYUSD/Aave-Pro
+     reference screens use ~14–16px for their main cards). Pills go fully
+     rounded via Tailwind's `rounded-full` directly. */
+  --radius-sm: 6px;
+  --radius:    8px;     /* small surfaces */
+  --radius-lg: 14px;    /* cards */
+
+  /* Animation durations — calmer set-and-forget UI. The whole interface breathes
+     at a slow rate; only the live-dot continues to pulse. */
+  --duration-tick: 250ms;
+  --duration-pulse: 900ms;
+  --duration-crossfade: 220ms;
+
+  /* ──────────────────────────────────────────────────────────────────────
+     Liquid Glass design tokens — Apple iOS 26 / macOS Tahoe inspired.
+
+     Goal: the surfaces feel like translucent glass panes catching light
+     from above, layered above the page rather than slabs sitting on it.
+     Three tiers (default / hero / quiet) tagged with different opacities
+     so the hierarchy is read visually:
+
+       hero    — primary container (VaultHero, YieldDecomposition, Nav,
+                 deposit/withdraw form). Slightly brighter, brighter top
+                 edge, deeper shadow. Catches the most light.
+       default — most cards (chart, composition, activity, etc). Standard
+                 frost.
+       quiet   — depth content (parameters table, system footer,
+                 ledgers). Dimmer, less edge, sits flat.
+
+     Every glass surface gets the meniscus pattern: a thin top-edge
+     highlight (`--glass-edge-top`) and a thinner bottom shadow tone,
+     simulating how light refracts through a curved bevel.
+  */
+  /* Light frosted glass (Priime): frosted off-white panes over the warm page. */
+  --glass-edge-top:   rgba(255, 255, 255, 0.85);
+  --glass-edge-bot:   rgba(255, 255, 255, 0.30);
+  --glass-bg-default: rgba(252, 252, 250, 0.62);
+  --glass-bg-hero:    rgba(255, 255, 255, 0.58);
+  --glass-bg-quiet:   rgba(248, 247, 244, 0.70);
+  /* 2026-05-13 retune: 20px is the primary blur. Closer to Apple's
+     WWDC25 demos and lets shadow+border do more of the separation.
+     Solid fallback fills + the lg variant live in the :root block
+     below — Tailwind v4 @theme filters some unrecognized custom
+     namespace patterns, so we declare them on :root directly. */
+  --glass-blur:       20px;
+  --glass-blur-light: 14px;
+  --glass-saturate:   1.4;
+  --glass-shadow:     0 12px 40px -12px rgba(0, 0, 0, 0.5);
+  --glass-shadow-hi:  0 18px 60px -16px rgba(0, 0, 0, 0.6);
+  --glass-shadow-low: 0 4px 16px -8px rgba(0, 0, 0, 0.4);
+  --glass-inner-hl:   inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-inner-hl-hero: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+
+  /* Motion vocabulary (INTERPRETATION — Apple does not publish numeric
+     durations for Liquid Glass; the system encodes them inside the
+     framework). We use a single Apple-style "smooth-out" easing and two
+     durations: short for material state changes, slow for sheet/morph
+     transitions. */
+  --ease-glass:       cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-glass:       220ms;
+  --duration-glass-slow:  320ms;
+}
+
+/* Runtime-only glass tokens (not Tailwind utilities). These power the
+   accessibility fallbacks in the media-query block further down and the
+   .glass-scroll-edge / .glass-lg helpers. Declared on :root so Tailwind
+   v4's @theme namespace filter does not strip them. */
+:root {
+  --glass-bg-default-solid: #faf9f7;
+  --glass-bg-hero-solid:    #ffffff;
+  --glass-bg-quiet-solid:   #f4f3f1;
+  --glass-blur-lg:          28px;
+}
+
+/* ============================================================================
+   Base layer
+   ============================================================================ */
+@layer base {
+  html {
+    background-color: var(--color-stone-950);
+    color: var(--color-stone-200);
+    font-family: var(--font-body);
+    /* Glyph features from linear.app (Inter); harmless on Geist:
+         cv08 — alt single-storey "a"
+         calt — contextual alternates
+         ss03 — opt-in stylistic set (kept for parity) */
+    font-feature-settings: "cv08", "calt", "ss03";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* `overflow-x: clip` prevents the full-bleed banner (100vw + negative
+       margins) from triggering a horizontal scrollbar when the OS shows
+       a visible vertical scrollbar gutter. `clip` (vs `hidden`) leaves
+       sticky/fixed positioning untouched, unlike `overflow: hidden` which
+       creates a new scroll container. */
+    overflow-x: clip;
+  }
+
+  body {
+    /* Full true-black canvas. */
+    background: var(--color-stone-950);
+    min-height: 100vh;
+  }
+
+  /* All numerics use tabular-nums by default — digits never jump on update. */
+  .num,
+  [class*="font-mono"] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Selection. */
+  ::selection {
+    background-color: var(--color-honey-400);
+    color: var(--color-stone-950);
+  }
+
+  /* Focus rings — honey-amber, never default blue. */
+  *:focus-visible {
+    outline: 2px solid var(--color-honey-400);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Scrollbars — thin, warm. */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--color-stone-925); }
+  ::-webkit-scrollbar-thumb { background: var(--color-stone-700); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-stone-600); }
+}
+
+/* ============================================================================
+   Reduced-motion respect (WCAG 2.3.3, 2.2.2)
+   --------------------------------------------------------------------------
+   When the OS / browser advertises `prefers-reduced-motion: reduce`, drop
+   every continuous or auto-playing animation in the design system to a
+   non-moving steady state. SVG `<animate>` elements inside SystemMap are
+   gated client-side via the `useReducedMotion()` hook in `lib/hooks/`.
+   ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-/* ---------- Node plates ---------- */
-
-.canvasnode {
-  cursor: pointer;
-}
-
-.canvasnode:focus {
-  outline: none;
-}
-
-.plate {
-  fill: var(--canvas-plate);
-  stroke: var(--canvas-plate-edge);
-  stroke-width: 1;
-}
-
-.canvasnode--selected .plate {
-  stroke: var(--o-500);
-  stroke-width: 2;
-}
-
-.canvasnode:focus-visible .plate {
-  stroke: var(--o-500);
-  stroke-width: 2.5;
-}
-
-.canvasnode--sick .plate {
-  stroke: var(--status-bad);
-  stroke-width: 2;
-}
-
-/* A corrupted node buzzes in its socket. The transform lives on an inner
-   group so it never fights the node's own translate. */
-.canvasnode--buzzing .canvasnode__body {
-  animation: nodeBuzz 160ms steps(2, end) infinite;
-}
-
-@keyframes nodeBuzz {
-  0% {
-    transform: translate(0, 0);
-  }
-  25% {
-    transform: translate(1.4px, -0.9px);
-  }
-  50% {
-    transform: translate(-1.2px, 1px);
-  }
-  75% {
-    transform: translate(0.9px, 0.7px);
-  }
-  100% {
-    transform: translate(0, 0);
-  }
-}
-
-.plate__name {
-  font-family: var(--font-sans);
-  font-weight: var(--fw-semibold);
-  fill: var(--canvas-ink);
-}
-
-.plate__index {
-  font-family: var(--font-mono);
-  letter-spacing: 0.06em;
-  fill: var(--accent-ink);
-}
-
-.plate__addr {
-  font-family: var(--font-mono);
-  letter-spacing: 0.02em;
-  fill: var(--canvas-ink-dim);
-}
-
-.plate__kicker,
-.plate__foot {
-  font-family: var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  fill: var(--canvas-ink-dim);
-}
-
-/* ---------- Lamps ---------- */
-
-.lamp {
-  filter: drop-shadow(0 0 5px currentColor);
-}
-
-.lamp--breathing {
-  animation: lampBreathe 3.6s var(--ease) infinite;
-}
-
-.lamp--alarm {
-  animation: lampAlarm 520ms steps(1, end) infinite;
-}
-
-@keyframes lampBreathe {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-@keyframes lampAlarm {
-  0%,
-  49% {
-    opacity: 1;
-  }
-  50%,
-  100% {
-    opacity: 0.15;
-  }
-}
-
-/* ---------- Mini LCDs (dark in BOTH registers, like every screen) ---------- */
-
-.lcd {
-  fill: var(--lcd-bg);
-  stroke: #000;
-  stroke-width: 1;
-}
-
-.lcd__label {
-  font-family: var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  fill: color-mix(in srgb, var(--surface-0) 42%, transparent);
-}
-
-.lcd__value {
-  font-family: var(--font-mono);
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.02em;
-  fill: var(--alu-0);
-}
-
-.lcd__metric {
-  font-family: var(--font-mono);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-metric);
-  fill: var(--lcd-red);
-}
-
-.lcd__sim {
-  font-family: var(--font-mono);
-  letter-spacing: 0.1em;
-  fill: var(--warn);
-}
-
-/* Status registers inside a screen use the LCD palette, never the chassis
-   inks, in both light and dark. */
-.lcd__label[data-tone="accepted"],
-.lcd__value[data-tone="accepted"],
-.lcd__metric[data-tone="accepted"] {
-  fill: var(--ok-dark);
-}
-
-.lcd__label[data-tone="bad"],
-.lcd__value[data-tone="bad"],
-.lcd__metric[data-tone="bad"] {
-  fill: var(--lcd-red);
-}
-
-.lcd__label[data-tone="warn"],
-.lcd__value[data-tone="warn"],
-.lcd__metric[data-tone="warn"] {
-  fill: var(--warn);
-}
-
-.lcd__label[data-tone="idle"],
-.lcd__value[data-tone="idle"],
-.lcd__metric[data-tone="idle"] {
-  fill: color-mix(in srgb, var(--surface-0) 30%, transparent);
-}
-
-.lcd__label[data-tone="computing"],
-.lcd__value[data-tone="computing"],
-.lcd__metric[data-tone="computing"],
-.lcd__label[data-tone="submitted"],
-.lcd__value[data-tone="submitted"],
-.lcd__metric[data-tone="submitted"] {
-  fill: var(--o-400);
-}
-
-/* ---------- The corrupt switch ---------- */
-
-.corrupt {
-  cursor: pointer;
-}
-
-.corrupt__track {
-  fill: var(--canvas-bg);
-  stroke: var(--canvas-plate-edge);
-  stroke-width: 1;
-  transition: fill var(--dur) var(--ease);
-}
-
-.corrupt--on .corrupt__track {
-  fill: color-mix(in srgb, var(--lcd-red) 30%, transparent);
-  stroke: var(--status-bad);
-}
-
-.corrupt__thumb {
-  fill: var(--vault-hub-a);
-  stroke: var(--canvas-plate-edge);
-  stroke-width: 1;
-  transition: cx var(--dur) var(--ease);
-}
-
-.corrupt--on .corrupt__thumb {
-  fill: var(--lcd-red);
-  stroke: var(--lcd-red);
-}
-
-.corrupt__label {
-  font-family: var(--font-mono);
-  letter-spacing: 0.1em;
-  fill: var(--canvas-ink-dim);
-}
-
-.corrupt--on .corrupt__label {
-  fill: var(--status-bad);
-}
-
-.corrupt:focus {
-  outline: none;
-}
-
-.corrupt:focus-visible .corrupt__track {
-  stroke: var(--o-500);
-  stroke-width: 2;
-}
-
-/* ---------- The vault door ---------- */
-
-.vaultdoor__bezel {
-  fill: url(#vaultBezel);
-  stroke: var(--vault-line);
-  stroke-width: 1.5;
-}
-
-/* The vault has no `.plate`, so it carries the selection ring on its bezel. */
-.canvasnode--selected .vaultdoor__bezel,
-.canvasnode:focus-visible .vaultdoor__bezel {
-  stroke: var(--o-500);
-  stroke-width: 2.5;
-}
-
-.vaultdoor__face {
-  fill: url(#vaultFace);
-  stroke: var(--vault-line);
-  stroke-width: 1;
-}
-
-.vaultdoor__ring {
-  fill: none;
-  stroke: var(--vault-line);
-  stroke-width: 1;
-  stroke-dasharray: 4 7;
-}
-
-.vaultdoor__bolt {
-  fill: var(--vault-spoke);
-  opacity: 0.8;
-}
-
-.vaultdoor__hinge {
-  fill: url(#vaultBezel);
-  stroke: var(--vault-line);
-  stroke-width: 1;
-}
-
-.vaultdoor__spoke {
-  fill: var(--vault-spoke);
-}
-
-.vaultdoor__hub {
-  fill: url(#vaultHub);
-  stroke: var(--vault-line);
-  stroke-width: 1;
-}
-
-.vaultdoor__hubcap {
-  fill: none;
-  stroke: var(--vault-spoke);
-  stroke-width: 1;
-  opacity: 0.7;
-}
-
-.vaultdoor__wheel {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.vaultdoor__wheel--turning {
-  animation: wheelTurn 5s var(--ease-linear) infinite;
-}
-
-@keyframes wheelTurn {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* The door's readout is a screen, so it keeps the LCD register in both
-   chassis colours, exactly like every other screen in the console. */
-.vaultdoor__caption {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.02em;
-  fill: var(--ok-dark);
-}
-
-.vaultdoor__sub {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  fill: color-mix(in srgb, var(--surface-0) 45%, transparent);
-}
-
-.vaultdoor[data-tone="stalled"] .vaultdoor__caption {
-  fill: var(--warn);
-}
-
-/* ============================================================
-   10 · STRIKE TICKER
-   ============================================================ */
-
-.ticker__rail {
-  display: flex;
-  gap: var(--sp-2);
-  overflow-x: auto;
-  padding-bottom: var(--sp-2);
-}
-
-.ticker__empty {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.ticker__cell {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 104px;
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px dashed var(--border);
-  border-radius: var(--r-sm);
-  background: var(--wash);
-  cursor: pointer;
-  text-align: left;
-  font-family: var(--font-mono);
-}
-
-.ticker__cell[data-tone="warn"] {
-  border-color: color-mix(in srgb, var(--status-warn) 60%, transparent);
-}
-
-.ticker__cell[data-live="true"] {
-  border-style: solid;
-  border-color: var(--o-500);
-}
-
-.ticker__cell[aria-pressed="true"] {
-  background: var(--o-wash);
-  border-style: solid;
-  border-color: var(--o-500);
-}
-
-.ticker__ordinal {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
-}
-
-.ticker__nav {
-  font-size: 14px;
-  font-weight: var(--fw-semibold);
-  color: var(--text-strong);
-}
-
-.ticker__meta {
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.ticker__cell[data-tone="warn"] .ticker__meta {
-  color: var(--status-warn);
-}
-
-/* ============================================================
-   11 · STAGE LAYOUT — the two-column stage and its rows
-   ============================================================ */
-
-.stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--sp-4);
-  align-items: start;
-  margin-top: var(--sp-4);
-}
-
-.stage__main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  min-width: 0;
-}
-
-.stage__rail {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  min-width: 0;
-}
-
-.stage__pair {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--sp-4);
-  align-items: stretch;
-}
-
-.stage__pair > * {
-  min-width: 0;
-}
-
-/* Data list — registry / peer / strike facts rows. */
-.datalist {
-  display: flex;
-  flex-direction: column;
-}
-
-.datarow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-2) 0;
-  border-bottom: 1px dashed var(--border);
-}
-
-.datarow:last-child {
-  border-bottom: 0;
-}
-
-.datarow__label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  flex: none;
-}
-
-.datarow__value {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: var(--text);
-  text-align: right;
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-
-.datarow__value--ok {
-  color: var(--status-ok);
-}
-
-.node {
-  padding: var(--sp-3) 0;
-  border-bottom: 1px dashed var(--border);
-}
-
-.node:last-of-type {
-  border-bottom: 0;
-}
-
-.node__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-1);
-}
-
-.node__name {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-
-.node__peer {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 15px;
-  letter-spacing: 0;
-  color: var(--text-faint);
-  overflow-wrap: anywhere;
-}
-
-/* Badge row above an inspector body (venue / market / chain, health state). */
-.deploy__venue {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-3);
-}
-
-/* ============================================================
-   12 · THEME SWITCH (kit: layout/SegmentedTabs, at control size)
-   ============================================================ */
-
-/* An aluminium control in both registers: the chassis changes, the machined
-   controls do not. */
-.themesw {
-  display: inline-flex;
-  align-items: stretch;
-  height: 30px;
-  border-radius: var(--r-sm);
-  overflow: hidden;
-  border: 1px solid var(--border-strong);
-  background: var(--alu-50);
-  box-shadow: var(--e-key);
-}
-
-.themesw__opt {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: 0 var(--sp-3);
-  border: 0;
-  background: var(--grad-key);
-  color: var(--ink-700);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background var(--dur) var(--ease),
-    color var(--dur) var(--ease);
-}
-
-.themesw__opt + .themesw__opt {
-  border-left: 1px solid var(--border-strong);
-}
-
-/* The live segment is a key that is DOWN: recessed into the strip, darker
-   aluminium, max-contrast ink, with the orange indicator carried by the lamp
-   rather than by the label. (The kit lights an active tab orange; here the
-   label is 11px, where --on-accent on --grad-orange measures 3.0:1, so the
-   state moves to the key itself and the type stays legible.) */
-.themesw__opt[aria-pressed="true"] {
-  background: var(--alu-100);
-  color: var(--ink-900);
-  box-shadow: var(--e-groove);
-}
-
-.themesw__lamp {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--r-round);
-  background: var(--g-300);
-  flex: none;
-}
-
-.themesw__opt[aria-pressed="true"] .themesw__lamp {
-  background: var(--o-500);
-  box-shadow: 0 0 5px var(--o-glow);
-}
-
-.themesw__opt:focus-visible {
-  outline: 2px solid var(--o-500);
-  outline-offset: 2px;
-}
-
-/* ============================================================
-   13 · LIGHT REGISTER — the handful of rules a token remap cannot carry
-   ============================================================ */
-
-/* The kit's Field is a cool recessed well on aluminium (--surface-150 +
-   --border-strong), not a groove cut into black. */
-[data-theme="light"] .fieldrow__value {
-  background: var(--surface-150);
-  border-color: var(--border-strong);
-}
-
-/* Orange ink that carries meaning rides --accent-ink. These two do not: the
-   accent badge uses the lighter --o-400 in the dark register, and
-   `.kicker .idx` is base.css, which stays pristine. */
-[data-theme="light"] .badge--accent {
-  color: var(--accent-ink);
-}
-
-[data-theme="light"] .kicker .idx {
-  color: var(--accent-ink);
-}
-
-/* A live plate needs a firmer orange edge to read against a white card. */
-[data-theme="light"] .op--live {
-  border-color: color-mix(in srgb, var(--o-500) 70%, transparent);
-}
-
-/* ============================================================
-   14 · RESPONSIVE — desktop is primary; hold together at 390px.
-   ============================================================ */
-
-@media (max-width: 1180px) {
-  .stage {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .stage__rail {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 900px) {
-  .opgrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .stage__pair {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .stage__rail {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .console__inner {
-    padding: var(--sp-4) var(--sp-4) var(--sp-7);
-  }
-
-  .hdr__meta {
-    margin-left: 0;
-    width: 100%;
-  }
-
-  .canvaspanel {
-    padding: var(--sp-3);
-  }
-
-  .beat__title {
-    font-size: var(--fs-h3);
-    line-height: var(--lh-h3);
-  }
-
-  .fieldrow {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .fieldrow__value {
-    grid-row: auto;
-    grid-column: 1;
-    justify-content: flex-start;
-    margin-top: var(--sp-2);
-  }
-
-  .fieldrow__help {
-    order: 3;
-  }
-
-  .metric__value {
-    font-size: 32px;
-    line-height: 36px;
-  }
-}
+/* ════════════════════════════════════════════════════════════════════════
+   Site nav (Tier 1, glass pill) + product tabs (Tier 2)
+   Ported from the Priime apps so loop.priime.finance carries the same
+   full-site navigation. SiteNav = Apps/Stack/Risk/Docs/Blog + wallet.
+   ProductTabs = Dashboard/Strategy/Deposit.
+   ════════════════════════════════════════════════════════════════════════ */
+:root{
+  --o:#000000; --o2:#333333; --ink:#1a1a1a; --mut:#6f6c66; --faint:#a29e95;
+  --bd:#e7e4dd; --dash:#d6d1c8; --panel:rgba(255,255,255,.5);
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+.nav{position:sticky;top:0;z-index:60;display:flex;justify-content:center;padding-top:14px;background:transparent;border:0;transition:padding-top .34s cubic-bezier(.2,.72,.2,1)}
+.nav .wrap{position:relative;isolation:isolate;width:auto;max-width:calc(100vw - 24px);height:auto;margin:0;display:flex;align-items:center;justify-content:space-between;gap:clamp(16px,2vw,32px);padding:10px 12px 10px 22px;border-radius:999px;background:linear-gradient(177deg,rgba(255,255,255,.30),rgba(255,255,255,.08) 46%,rgba(255,255,255,.18));-webkit-backdrop-filter:blur(8px) saturate(2.1) brightness(1.07);backdrop-filter:blur(8px) saturate(2.1) brightness(1.07);border:1px solid rgba(255,255,255,.62);box-shadow:inset 0 1.4px .5px rgba(255,255,255,.98),inset 1.5px 2px 3px rgba(255,255,255,.55),inset -1.5px -2px 10px rgba(255,255,255,.30),inset 0 -1px 2px rgba(20,16,12,.06),0 8px 20px -6px rgba(20,16,12,.16),0 24px 52px -16px rgba(20,16,12,.30);transition:padding .34s cubic-bezier(.2,.72,.2,1),gap .34s,box-shadow .34s,background .34s}
+.nav .wrap::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;background:radial-gradient(120% 80% at 26% -16%,rgba(255,255,255,.75),rgba(255,255,255,0) 44%),linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,0) 38%)}
+.nav .wrap>*:not(.nav-mobile){position:relative;z-index:1}
+.brand{text-decoration:none;display:flex;align-items:center;flex:none}
+.brand-logo{height:26px;width:auto;display:block;transition:height .34s cubic-bezier(.2,.72,.2,1)}
+.nav-links{display:flex;align-items:center;gap:clamp(8px,1.3vw,18px)}
+.nav .link{font-size:11.5px;letter-spacing:.05em;color:#2b2823;text-decoration:none;font-weight:500;cursor:pointer;padding:8px 12px;border-radius:999px;transition:background .2s,color .2s,box-shadow .2s}
+.nav .link:hover{color:#0c0a08;background:rgba(255,255,255,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 1px 3px rgba(0,0,0,.07)}
+.nav .link.active{color:var(--o)}
+.nav.nav--shrink{padding-top:8px}
+.nav.nav--shrink .wrap{padding:5px 10px 5px 18px;gap:clamp(8px,1.5vw,22px);box-shadow:inset 0 1.2px .5px rgba(255,255,255,.95),inset 1px 1.5px 3px rgba(255,255,255,.5),0 6px 16px -6px rgba(20,16,12,.18),0 14px 32px -14px rgba(20,16,12,.26)}
+.nav.nav--shrink .brand-logo{height:23px}
+.nav.nav--shrink .link{font-size:11px;padding:6px 10px}
+.nav .btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;text-decoration:none;font-weight:600;border:1px solid var(--bd);background:linear-gradient(180deg,#fff,#f0eee9);color:#1a1a1a;padding:9px 16px;font-size:13px;cursor:pointer;transition:transform .15s,box-shadow .2s;font-family:inherit;white-space:nowrap}
+.nav .btn:hover{transform:translateY(-1px)}
+.nav .btn--orange{background:linear-gradient(180deg,#333333,#000000);border-color:#000000;color:#fff;box-shadow:0 6px 16px -6px rgba(0,0,0,.5)}
+.nav-burger{display:none;flex-direction:column;justify-content:center;gap:5px;width:40px;height:40px;padding:9px;background:none;border:0;cursor:pointer}
+.nav-burger span{display:block;width:22px;height:2px;border-radius:2px;background:#1a1a1a;transition:transform .26s,opacity .2s}
+.nav.nav-open .nav-burger span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.nav.nav-open .nav-burger span:nth-child(2){opacity:0}
+.nav.nav-open .nav-burger span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+.nav-mobile{display:none}
+
+@media(max-width:900px){
+  .nav .wrap{width:calc(100vw - 20px);padding:9px 10px 9px 18px}
+  .nav.nav--shrink .wrap{padding:6px 9px 6px 16px}
+  .nav-links{display:none}.nav-burger{display:flex}
+  .nav.nav-open .nav-mobile{opacity:1;visibility:visible;transform:translateY(0)}
+  .nav-mobile{display:flex;flex-direction:column;position:absolute;left:0;right:0;top:calc(100% + 10px);background:linear-gradient(180deg,rgba(252,252,250,.96),rgba(243,242,238,.93));-webkit-backdrop-filter:blur(26px) saturate(1.8);backdrop-filter:blur(26px) saturate(1.8);border:1px solid rgba(255,255,255,.55);border-radius:22px;box-shadow:0 20px 44px -16px rgba(22,17,13,.3),inset 0 1px 0 rgba(255,255,255,.8);padding:8px 18px 16px;opacity:0;visibility:hidden;transform:translateY(-10px);transition:opacity .24s,transform .24s,visibility .24s}
+  .nav-mobile a{padding:13px 2px;font-size:16px;font-weight:500;color:#1a1a1a;text-decoration:none;border-bottom:1px solid rgba(0,0,0,.06)}
+}
+
+/* ============================================================================
+   ELECTRIC BLUE THEME (2026-08-20) — match priime.finance. Appended LAST so it
+   wins. loop.priime.finance is a light dashboard (cool grey -> cream). Redefines
+   the brand accent (honey ramp + --o + --brand-*) to electric blue #2B5CFF and
+   the page / glass surfaces to cream / warm-white. Status colours
+   (--color-healthy, red negatives) and the load-bearing phase palette
+   (--phase-*) are left untouched.
+   Single source: priime/docs/BRAND.md (electric-blue system).
+   ========================================================================== */
+:root{
+  /* brand accent ramp (honey = Tailwind @theme, drives every bg-honey-* CTA,
+     focus ring, glow + pulse animation) -> electric blue */
+  --color-honey-50:#E6F4FF !important; --color-honey-100:#B8D9FF !important;
+  --color-honey-300:#4D8BFF !important; --color-honey-400:#2B5CFF !important;
+  --color-honey-500:#1B2FEE !important; --color-honey-600:#1B2FEE !important;
+  --color-honey-700:#1B2FEE !important; --color-honey-800:#1B2FEE !important;
+  /* violet ramp = brand alias (bridge chain/token picker selected state) -> blue */
+  --color-violet-300:#4D8BFF !important; --color-violet-400:#2B5CFF !important;
+  --color-violet-500:#1B2FEE !important; --color-violet-600:#1B2FEE !important;
+  --color-violet-700:#1B2FEE !important;
+  /* SiteNav port accent tokens */
+  --o:#2B5CFF !important; --o2:#4D8BFF !important;
+  /* design-system brand ramp (tokens.css) -> electric blue */
+  --brand-300:#7FB2FF !important; --brand-400:#4D8BFF !important;
+  --brand-500:#2B5CFF !important; --brand-600:#1B2FEE !important;
+  --brand-glow:rgba(43,92,255,.16) !important; --text-on-accent:#F5F2EB !important;
+  --brand-gradient:linear-gradient(180deg,#1B2FEE 0%,#2B5CFF 45%,#56A8FF 100%) !important;
+  --brand-gradient-soft:radial-gradient(60% 50% at 70% 30%, rgba(43,92,255,.16), transparent 70%) !important;
+  --shadow-glow-brand:0 0 0 4px rgba(43,92,255,.18) !important;
+  /* page + surfaces -> Arcus cream / warm-white */
+  --bg-page:#F5F2EB !important;
+  --bg-surface-1:#FFFAF5 !important; --bg-surface-2:#F0EBDD !important; --bg-surface-3:#E5DFCF !important;
+  --glass-bg-default-solid:#FBF8F1 !important; --glass-bg-hero-solid:#FFFAF5 !important; --glass-bg-quiet-solid:#F5F2EB !important;
+  --glass-bg-default:rgba(255,250,245,.62) !important; --glass-bg-hero:rgba(255,252,248,.58) !important; --glass-bg-quiet:rgba(245,242,235,.70) !important;
+  --bd:#E5DFCF !important; --dash:#D8D2C2 !important; --panel:rgba(255,250,245,.55) !important;
+}
+body{ background:#F5F2EB !important; }
+/* Primary CTA (nav-scoped .btn--orange uses a hardcoded gradient) -> blue. */
+.btn--orange,.nav .btn--orange{ background:#2B5CFF !important; background-image:none !important;
+  border:1px solid #2B5CFF !important; color:#F5F2EB !important; text-shadow:none !important; }
+/* Secondary -> pale blue-tint fill + brand-blue text. */
+.btn:not(.btn--orange){ background:rgba(43,92,255,.08) !important;
+  color:#2B5CFF !important; border:1px solid rgba(43,92,255,.22) !important; }
+
+/* ── FOUNDER PASS 2026-08-20: "Create vault" nav link — quiet outline pill
+      in the blue system. Sans, not mono: chrome labels never set mono
+      (mono is for data only; the landing renders this label sans). ── */
+.nav .link--create{font-size:11.5px;letter-spacing:.02em;color:#2B5CFF;
+  border:1px solid rgba(43,92,255,.35);border-radius:999px;padding:7px 14px}
+.nav .link--create:hover{background:rgba(43,92,255,.08);color:#1B2FEE;box-shadow:none}
+
+/* ── Inert nav chrome (2026-08-25): this app serves the canvas, the vault
+      directory and the replay console. The remaining landing labels keep the
+      nav's shape and rhythm but are not links, so nothing in the pill can land
+      on a 404. Same type, same spacing, no pointer, no hover lift. ── */
+.nav .link--inert{cursor:default;color:#8a867f;opacity:.55}
+.nav .link--inert:hover{background:none;box-shadow:none;color:#8a867f;opacity:.55}
+.nav-mobile .link--inert{padding:13px 2px;font-size:16px;font-weight:500;color:#8a867f;opacity:.55;
+  border-bottom:1px solid rgba(0,0,0,.06);cursor:default}
+
+/* ── DESIGN PASS 2026-08-20: footer seam. The dark footer band must sit at
+      the true bottom of the viewport on short pages (/portfolio) — no cream
+      strip beneath it. Body becomes a column; the footer takes the slack. ── */
+/* RainbowKitProvider inserts a div[data-rk] between body and the page chrome,
+   so the flex chain must pass through it for the footer to take the slack. */
+body{display:flex;flex-direction:column;min-height:100dvh}
+/* …and a flex item whose cross-axis margins are `auto` (main carries
+   `mx-auto`) opts out of stretch and shrink-wraps to its own intrinsic
+   width instead of the container's. Any child with a wide minimum — the
+   1400px vault board, the nowrap tab strip — therefore dragged the shell
+   past the viewport (main measured 1156px at a 375px viewport) and every
+   descendant inherited that lie, including the canvas's own clientWidth
+   probe. Re-capping the shrink-wrap at the viewport is enough: the 80rem
+   ceiling from `max-w-7xl` is kept verbatim, so nothing at or above
+   1280px moves, and the shrink-to-fit behaviour below it is preserved. */
+body>main{max-width:min(80rem,100%)}
+body>div[data-rk]{flex:1;display:flex;flex-direction:column}
+div[data-rk]>footer{margin-top:auto}
+body>footer{margin-top:auto}

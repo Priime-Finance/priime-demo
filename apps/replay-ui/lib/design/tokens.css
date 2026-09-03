@@ -1,0 +1,17 @@
+/**
+ * Standalone-kit stub.
+ *
+ * app/globals.css opens with `@import "../lib/design/tokens.css";`. That
+ * file (the source project's shared design-token sheet, presumably reused
+ * across priime.finance's several apps) was not part of the UI kit handoff
+ * — the file tree only lists 66 files, and this path isn't one of them.
+ *
+ * It's an empty stub rather than a guessed-at token set: every custom
+ * property actually consumed by the extracted CSS (app/globals.css,
+ * app/build/{build,hm,funding}.css) is self-defined within those same
+ * files — verified by diffing every `var(--x)` read against every `--x:`
+ * declaration across them. The only reads with no local declaration are
+ * `--font-geist` / `--font-geist-mono`, which app/layout.tsx
+ * supplies at runtime via next/font's `variable` option, not a stylesheet.
+ * If a future page needs tokens genuinely owned by this file, add them here.
+ */
