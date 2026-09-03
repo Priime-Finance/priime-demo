@@ -105,11 +105,16 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
   return {
     async readJournals(vaultAddress: string, limit: number): Promise<Journal[]> {
       const vault = vaultAddress.toLowerCase() as Address;
+      // Some RPCs (Base fork on anvil) cap eth_getLogs at 10k blocks. Default
+      // to a rolling window ending at head; callers with a wider need set
+      // fromBlock explicitly.
+      const head = await client.getBlockNumber();
+      const from = options.fromBlock ?? (head > 9_999n ? head - 9_999n : 0n);
       const logs = await client.getLogs({
         address: vault,
         event: navUpdatedEvent,
-        fromBlock: options.fromBlock ?? 0n,
-        toBlock: "latest",
+        fromBlock: from,
+        toBlock: head,
       });
       // Newest first, bounded.
       const picked = logs.slice(-Math.max(1, limit)).reverse();
