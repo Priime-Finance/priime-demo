@@ -22,13 +22,8 @@ const INERT = ["Portfolio", "Ecosystem", "Stack", "Risk management", "Docs", "Bl
 // ConnectButton.Custom render-prop (open connect/account/chain modals); there
 // is no wallet gating anywhere in this POC, so this is a static, inert pill
 // that preserves the nav's layout without any wagmi/RainbowKit dependency.
-function NavWallet() {
-  return (
-    <button type="button" className="btn btn--orange" disabled>
-      Connect wallet
-    </button>
-  );
-}
+import { ConnectButton } from "./ConnectButton";
+
 
 export function SiteNav() {
   const [open, setOpen] = useState(false);
@@ -94,7 +89,7 @@ export function SiteNav() {
                 {t}
               </span>
             ))}
-            <NavWallet />
+            <ConnectButton />
           </div>
 
           <button
@@ -121,7 +116,7 @@ export function SiteNav() {
               </span>
             ))}
             <div style={{ marginTop: 14 }}>
-              <NavWallet />
+              <ConnectButton />
             </div>
           </div>
         </div>

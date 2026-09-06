@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Inter, Geist_Mono, STIX_Two_Text } from "next/font/google";
 import { SiteNav } from "@/components/nav/SiteNav";
 import { VintageFooter } from "@/components/footer/VintageFooter";
+import { Providers } from "@/components/Providers";
 import "./globals.css";
 
 // Font system mirrors Linear's (linear.app). Linear pairs Inter Variable
@@ -72,20 +73,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body>
-        {/* A11y fix 2026-05-01: skip-link for keyboard / screen-reader users
-            to bypass the global Nav and land directly on page content.
-            WCAG 2.4.1 Bypass Blocks. */}
-        <a
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-[var(--radius)] focus:bg-stone-925 focus:border focus:border-[var(--color-honey-400)] focus:px-3 focus:py-2 focus:text-sm focus:text-stone-100"
-        >
-          Skip to content
-        </a>
-        <SiteNav />
-        <main id="main-content" className="mx-auto max-w-7xl px-6 sm:px-10 lg:px-16 xl:px-20 pt-8 pb-24 space-y-8">
-          {children}
-        </main>
-        <VintageFooter />
+        <Providers>
+          {/* A11y fix 2026-05-01: skip-link for keyboard / screen-reader users
+              to bypass the global Nav and land directly on page content.
+              WCAG 2.4.1 Bypass Blocks. */}
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-[var(--radius)] focus:bg-stone-925 focus:border focus:border-[var(--color-honey-400)] focus:px-3 focus:py-2 focus:text-sm focus:text-stone-100"
+          >
+            Skip to content
+          </a>
+          <SiteNav />
+          <main id="main-content" className="mx-auto max-w-7xl px-6 sm:px-10 lg:px-16 xl:px-20 pt-8 pb-24 space-y-8">
+            {children}
+          </main>
+          <VintageFooter />
+        </Providers>
       </body>
     </html>
   );

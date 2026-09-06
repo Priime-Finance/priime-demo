@@ -6,9 +6,8 @@
  * hides when the server is unreachable, so the demo still works with the
  * backend down (captured journals continue to power the hero card above).
  *
- * Includes an inline `CreateLoopForm`; on success the form re-triggers a
- * fetch so the new card appears without a hard reload.
- *
+ * The composer at `/build` is the create path; this section only displays
+ * what is already deployed.
  * Every number rendered here is attested (comes from the server's journal
  * reader, which is derived from on-chain state) or is loop metadata (name,
  * strategist). No modeling.
@@ -21,7 +20,6 @@ import type { LoopRecord } from "@priime-demo/loop-deploy";
 
 import { fetchLoops } from "@/lib/vaults/live-source";
 
-import { CreateLoopForm } from "./CreateLoopForm";
 
 interface LiveLoopCardData {
   loop: LoopRecord;
@@ -63,11 +61,9 @@ export function LiveVaultsSection() {
         </p>
       </header>
 
-      <CreateLoopForm onCreated={reload} />
-
       {state.loops.length === 0 ? (
         <p className="dir-live-msg">
-          No loops yet. Deploy one above; the first strike lands within a strike cadence.
+          No loops yet. Publish one from the composer at <a href="/build">/build</a>; the first strike lands within a strike cadence.
         </p>
       ) : (
         <div className="dir-live-grid">

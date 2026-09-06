@@ -1,30 +1,33 @@
 "use client";
 
 /**
- * PublishFlow — the tight Review and Publish flow for the canvas.
+ * PublishFlow: the Review and Publish flow for the canvas.
  *
- * Three phases, zero dead ends, no wallet gating:
- *   review     — editable vault name, one-line summary, module chips,
- *                modeled APY, one primary key: Publish vault.
- *   publishing — three beats (Compose, Verify, Publish), ~1.8s, mock.
- *   done       — the composition is ON the vault: the published envelope is
- *                persisted and the single link opens /vault, where the NAV
- *                is attested from the replayed journals.
+ * Wired to the running loop server. On Publish vault we:
+ *   1. read the connected wallet (mandatory: no wallet, no publish),
+ *   2. persist the modeled envelope locally (unchanged: the existing vault
+ *      page reads this for the modeled register),
+ *   3. POST the composer's inputs to /api/loops -> loop server deploys a
+ *      fresh PriimeVault + workflow,
+ *   4. redirect to /vault/live/<loop-id> so the user sees the attested
+ *      ledger of their own handler.
  *
- * There is one vault, and publishing REPLACES its envelope rather than
- * creating another. The vault's capital, inception and every attested number
- * are untouched by this flow.
+ * The publishing animation covers whatever the network takes; on error we
+ * drop back to review with a message. No fake success on a failed deploy.
  */
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useAccount } from "wagmi";
+import { ConnectButton } from "@/components/nav/ConnectButton";
+
+import { LoopValidationError, publishLoopToServer } from "@/lib/vaults/publish-loop";
 import {
   deriveAutomations,
   publishEnvelope,
   type PublishInput,
   type PublishedEnvelope,
 } from "@/lib/vaults/store";
-import { HERO_SLUG } from "@/lib/vaults/hero";
 
 export interface PublishDraft extends Omit<PublishInput, "name"> {
   defaultName: string;
@@ -32,19 +35,27 @@ export interface PublishDraft extends Omit<PublishInput, "name"> {
 
 const BEATS = ["Compose", "Verify", "Publish"] as const;
 
+type TimerHandle = ReturnType<typeof setTimeout>;
+
+type Phase =
+  | { kind: "review" }
+  | { kind: "publishing"; beat: number }
+  | { kind: "error"; message: string; issues?: string[] }
+  | { kind: "done"; envelope: PublishedEnvelope; loopId: string; handler: string };
+
 export default function PublishFlow({ draft, onClose }: { draft: PublishDraft; onClose: () => void }) {
+  const router = useRouter();
+  const { address, isConnected } = useAccount();
   const [name, setName] = useState(draft.defaultName);
-  const [phase, setPhase] = useState<"review" | "publishing" | "done">("review");
-  const [beat, setBeat] = useState(0);
-  const [published, setPublished] = useState<PublishedEnvelope | null>(null);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [phase, setPhase] = useState<Phase>({ kind: "review" });
+  const timers = useRef<TimerHandle[]>([]);
   const nameRef = useRef<HTMLInputElement>(null);
-  const phaseRef = useRef(phase);
-  phaseRef.current = phase;
 
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  useEffect(() => () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  }, []);
 
-  // The default name is one keystroke to replace.
   useEffect(() => {
     nameRef.current?.select();
   }, []);
@@ -52,42 +63,65 @@ export default function PublishFlow({ draft, onClose }: { draft: PublishDraft; o
   const closeCbRef = useRef(onClose);
   closeCbRef.current = onClose;
 
-  // Escape closes (guarded against the publishing phase).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && phaseRef.current !== "publishing") closeCbRef.current();
+      if (e.key !== "Escape") return;
+      if (phase.kind === "publishing") return;
+      closeCbRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [phase.kind]);
 
-  const publish = () => {
-    if (phase !== "review") return;
-    setPhase("publishing");
-    setBeat(0);
-    timers.current.push(setTimeout(() => setBeat(1), 620));
-    timers.current.push(setTimeout(() => setBeat(2), 1240));
-    timers.current.push(
-      setTimeout(() => {
-        // Automation instrument parameters are fixed here, at publish time,
-        // from the composed graph: the hedge instrument exists iff a hedge
-        // module was installed on the canvas. The vault page renders these
-        // stored parameters, never re-derives them.
+  const runBeats = (): void => {
+    setPhase({ kind: "publishing", beat: 0 });
+    timers.current.push(setTimeout(() => setPhase({ kind: "publishing", beat: 1 }), 620));
+    timers.current.push(setTimeout(() => setPhase({ kind: "publishing", beat: 2 }), 1240));
+  };
+
+  const publish = (): void => {
+    if (phase.kind !== "review") return;
+    if (!isConnected || address === undefined) {
+      setPhase({ kind: "error", message: "Connect a wallet before publishing; the strategist is the connected address." });
+      return;
+    }
+    const finalName = name.trim() || draft.defaultName;
+    runBeats();
+    void (async () => {
+      try {
+        const { loopId, handler } = await publishLoopToServer({ name: finalName, strategist: address });
         const envelope = publishEnvelope({
           ...draft,
-          name: name.trim() || draft.defaultName,
+          name: finalName,
           automations: deriveAutomations(draft),
         });
-        setPublished(envelope);
-        setPhase("done");
-      }, 1860),
-    );
+        setPhase({ kind: "done", envelope, loopId, handler });
+      } catch (err) {
+        if (err instanceof LoopValidationError) {
+          setPhase({ kind: "error", message: "Deploy rejected by the server.", issues: err.issues });
+        } else {
+          setPhase({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+        }
+      }
+    })();
+  };
+
+  const openVault = (): void => {
+    if (phase.kind !== "done") return;
+    closeCbRef.current();
+    router.push(`/vault/live/${phase.loopId}`);
   };
 
   return (
-    <div className="bcrev-backdrop" onClick={phase === "publishing" ? undefined : onClose}>
-      <div className={`pf${phase === "done" ? " pf--done" : ""}`} onClick={(e) => e.stopPropagation()}>
-        {phase === "review" ? (
+    <div
+      className="bcrev-backdrop"
+      onClick={phase.kind === "publishing" ? undefined : onClose}
+    >
+      <div
+        className={`pf${phase.kind === "done" ? " pf--done" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {phase.kind === "review" || phase.kind === "error" ? (
           <>
             <div className="pf-head">
               <span className="pf-kicker">Review</span>
@@ -123,37 +157,65 @@ export default function PublishFlow({ draft, onClose }: { draft: PublishDraft; o
               <b>{(draft.modeledApy * 100).toFixed(1)}%</b>
               <i>modeled net APY</i>
             </div>
-            <button type="button" className="pf-publish" onClick={publish}>
+            {!isConnected ? (
+              <div className="pf-connect">
+                <p className="pf-hint">
+                  Connect a wallet first. The connected address becomes the strategist and holds the loop&apos;s exit key.
+                </p>
+                <ConnectButton />
+              </div>
+            ) : null}
+            {phase.kind === "error" ? (
+              <div className="pf-err">
+                <p>{phase.message}</p>
+                {phase.issues !== undefined ? (
+                  <ul>
+                    {phase.issues.map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="pf-publish"
+              onClick={publish}
+              disabled={!isConnected}
+            >
               Publish vault
             </button>
           </>
-        ) : phase === "publishing" ? (
+        ) : phase.kind === "publishing" ? (
           <div className="pf-beats">
             {BEATS.map((b, i) => (
-              <div key={b} className={`pf-beat${i < beat ? " done" : i === beat ? " now" : ""}`}>
+              <div
+                key={b}
+                className={`pf-beat${i < phase.beat ? " done" : i === phase.beat ? " now" : ""}`}
+              >
                 <span className="pf-beat-dot" />
                 {b}
               </div>
             ))}
           </div>
-        ) : published ? (
+        ) : (
           <>
             <div className="pf-done-k">Published</div>
-            <div className="pf-done-name">{published.name}</div>
+            <div className="pf-done-name">{phase.envelope.name}</div>
             <div className="pf-summary">
-              Running on the desk&apos;s own capital, with its NAV attested each strike.
+              Deployed to <b className="vn">{phase.handler}</b>. First strike lands within a cadence.
             </div>
             <div className="pf-apy">
               <b>{(draft.modeledApy * 100).toFixed(1)}%</b>
               <i>modeled net APY</i>
             </div>
             <div className="pf-done-acts">
-              <Link className="pf-publish" href={`/vault/${HERO_SLUG}`}>
+              <button type="button" className="pf-publish" onClick={openVault}>
                 Open your vault
-              </Link>
+              </button>
             </div>
           </>
-        ) : null}
+        )}
       </div>
     </div>
   );
