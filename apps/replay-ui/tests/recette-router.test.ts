@@ -59,7 +59,7 @@ describe("M3 review gating over every live-module subset", () => {
     for (const placed of subsets) {
       const gate = deriveReviewGate({ validationOk: true, lanes: [{ laneReviewable: true, eligible: true, hasMarket: true, placed } as never], orchOn: false, launchShapedCount: 1 });
       expect(typeof gate.armed).toBe("boolean");
-      if (!gate.armed) expect(gate.reason.length).toBeGreaterThan(0);
+      if (!gate.armed) expect((gate.reason ?? "").length).toBeGreaterThan(0);
     }
   });
   it("a coming-soon module refuses with the register's own reason", () => {
