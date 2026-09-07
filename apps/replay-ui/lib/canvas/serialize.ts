@@ -13,8 +13,9 @@
  */
 
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion --
- * Kit-verbatim file (priime-build-ui-kit integration); not rewriting kit
- * logic to satisfy lint, per the integration's own directive. */
+ * Kit-verbatim file, ported from build.priime.finance eb6d33a. The findings
+ * are the typed presets reading kit idioms; not rewriting kit logic to satisfy
+ * lint, per the integration's own directive (the RackCanvas.tsx precedent). */
 
 import type {
   AnyCanvasDraft,
@@ -45,7 +46,7 @@ interface CanonicalGraph {
 
 function sortedParams<T>(params: Record<string, T>): Record<string, T> {
   const out: Record<string, T> = {};
-  for (const k of Object.keys(params).sort()) out[k] = params[k]!;
+  for (const k of Object.keys(params).sort()) out[k] = params[k];
   return out;
 }
 
@@ -58,7 +59,7 @@ function sortNodes(nodes: ModuleNode[]): ModuleNode[] {
 }
 
 /** v1 canonical form — BYTE-IDENTICAL to the original canonicalize(). */
-function canonicalizeV1(graph: StrategyGraph): string {
+export function canonicalizeV1(graph: StrategyGraph): string {
   const canonical: CanonicalGraph = {
     v: 1,
     nodes: sortNodes(graph.nodes).map((n) => ({ id: n.id, defKey: n.data.defKey, params: sortedParams(n.data.params) })),
@@ -69,6 +70,9 @@ function canonicalizeV1(graph: StrategyGraph): string {
   return JSON.stringify(canonical);
 }
 
+/** @deprecated alias for canonicalizeV1 (v1-era import sites). */
+export const canonicalize = canonicalizeV1;
+
 async function sha256Hex(s: string): Promise<string> {
   const bytes = new TextEncoder().encode(s);
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
@@ -78,11 +82,11 @@ async function sha256Hex(s: string): Promise<string> {
 }
 
 /** sha-256 hex of the v1 canonical form (checks v1-era drafts on load). */
-async function contentHash(graph: StrategyGraph): Promise<string> {
+export async function contentHash(graph: StrategyGraph): Promise<string> {
   return sha256Hex(canonicalizeV1(graph));
 }
 
-function canonicalizeV2(p: PortfolioGraph): string {
+export function canonicalizeV2(p: PortfolioGraph): string {
   const canonical = {
     v: 2 as const,
     loops: [...p.loops]
@@ -103,7 +107,7 @@ function canonicalizeV2(p: PortfolioGraph): string {
   return JSON.stringify(canonical);
 }
 
-async function contentHashV2(p: PortfolioGraph): Promise<string> {
+export async function contentHashV2(p: PortfolioGraph): Promise<string> {
   return sha256Hex(canonicalizeV2(p));
 }
 
@@ -117,7 +121,7 @@ export async function toDraft(p: PortfolioGraph, savedAtMs: number): Promise<Can
  * edges re-derived (ids change with the namespacing, so re-derive rather
  * than rewrite), allocation 10000, orchestrator defaults (disabled).
  */
-function migrateV1(graph: StrategyGraph): PortfolioGraph {
+export function migrateV1(graph: StrategyGraph): PortfolioGraph {
   const nodes = graph.nodes.map((n) => ({ ...n, id: nodeId("loop_1", n.data.defKey) }));
   const loop: LoopGraph = { id: "loop_1", label: "Loop 1", nodes, edges: deriveEdges(nodes) };
   const orchestrator = defaultOrchestrator();

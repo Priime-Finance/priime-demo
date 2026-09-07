@@ -6,11 +6,18 @@
  * stays in data.defKey. "/" never appears in loop ids or module keys.
  */
 
-import type { LoopId, ModuleKey } from "./types";
+import { ORCHESTRATOR_NODE_ID, type LoopId, type ModuleKey } from "./types";
 
 /** Node id = `${loopId}/${defKey}`. */
 export function nodeId(loopId: LoopId, key: ModuleKey): string {
   return `${loopId}/${key}`;
+}
+
+export function parseNodeId(id: string): { loopId: LoopId; key: ModuleKey } | null {
+  if (id === ORCHESTRATOR_NODE_ID) return null;
+  const i = id.indexOf("/");
+  if (i <= 0) return null;
+  return { loopId: id.slice(0, i), key: id.slice(i + 1) as ModuleKey };
 }
 
 /**
