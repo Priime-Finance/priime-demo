@@ -15,6 +15,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { emptyPortfolio } from "@/lib/canvas/graph-ops";
 import { DEMO_COPILOT_SYSTEM_PROMPT } from "@/lib/canvas/copilot/scope";
+import {
+  DEMO_SUSTAIN_HOURS,
+  DEMO_UPGRADE_REARM,
+  DEMO_UPGRADE_THRESHOLD,
+} from "@/lib/canvas/orchestrator/demo-rules";
+import {
+  ROUTER_FLOOR_CANDIDATE_ID,
+  ROUTER_HISTORY_SOURCES,
+  routerPublishedToday,
+} from "@/lib/canvas/router-history";
 import { COPILOT_REJECT_COMING_SOON, HERO_MARKET_ID } from "@/lib/demo-scope";
 
 vi.mock("@/lib/canvas/catalog-server", async (importOriginal) => {
@@ -196,6 +206,100 @@ describe("copilot route", () => {
     expect(params.messages[0]!.content).toContain('"complete":true');
     expect(params.messages[1]).toEqual({ role: "user", content: "u0" });
     expect(g.__copilotMockCtor).toEqual({});
+  });
+
+  /* WP-4: the floor lane and the rule reach the model, and every figure in
+     that block comes out of the quant's owners rather than out of a literal
+     anywhere on this path (SEAM 4). */
+  it("S1b. the context carries the router: both published rates, the gap, the rule and the sources", async () => {
+    const r = await post(JSON.stringify(validBody()), "30.0.0.2");
+    await r.text();
+    const params = g.__copilotMockParams as { messages: { content: string }[] };
+    const block = params.messages[0]!.content;
+    const json = JSON.parse(block.slice(block.indexOf("{"), block.lastIndexOf("}") + 1)) as {
+      router: {
+        live: boolean;
+        modeled: boolean;
+        measuredOn: string;
+        gapPp: number;
+        loop: { publishedApyPct: number };
+        floor: {
+          candidateId: string;
+          venueLabel: string;
+          modules: string[];
+          redemptionRoute: string;
+          settlementDays: number;
+          publishedApyPct: number;
+        };
+        rule: { sustainHours: number; thresholdPp: number; rearmPp: number };
+        sources: { of: string; label: string }[];
+      };
+    };
+    const today = routerPublishedToday()!;
+    const rt = json.router;
+    expect(rt.live).toBe(true);
+    expect(rt.modeled).toBe(true);
+    expect(rt.measuredOn).toBe(today.date);
+    expect(rt.loop.publishedApyPct).toBe(Number((today.loop! * 100).toFixed(2)));
+    expect(rt.floor.publishedApyPct).toBe(Number((today.floor! * 100).toFixed(2)));
+    /* Differenced BEFORE rounding: 3.08 minus 2.97 would print 0.11. */
+    expect(rt.gapPp).toBe(Number(((today.loop! - today.floor!) * 100).toFixed(2)));
+    expect(rt.floor.candidateId).toBe(ROUTER_FLOOR_CANDIDATE_ID);
+    expect(rt.floor.venueLabel).toBe("Aave USDC · Base");
+    expect(rt.floor.modules).toEqual(["liquidity-source", "redemption-route"]);
+    expect(rt.floor.settlementDays).toBe(0);
+    expect(rt.floor.redemptionRoute.length).toBeGreaterThan(0);
+    expect(rt.rule.sustainHours).toBe(DEMO_SUSTAIN_HOURS);
+    expect(rt.rule.thresholdPp).toBe(Number((DEMO_UPGRADE_THRESHOLD * 100).toFixed(2)));
+    expect(rt.rule.rearmPp).toBe(Number((DEMO_UPGRADE_REARM * 100).toFixed(2)));
+    expect(rt.sources.map((s) => s.of)).toEqual(["floor", "loop collateral", "loop borrow"]);
+    expect(rt.sources[0]!.label).toBe(ROUTER_HISTORY_SOURCES.aaveUsdcSupply.label);
+    expect(block).toContain(ROUTER_HISTORY_SOURCES.aaveUsdcSupply.pool);
+    /* The move size is deliberately absent: the rule's weight and the weight
+       the concentration floor actually lets through are two numbers, and only
+       the second is on a screen. */
+    expect(block).not.toContain("moveWeight");
+  });
+
+  it("S1c. the floor market is in the market list the model reads, beside the loop", async () => {
+    const r = await post(JSON.stringify(validBody()), "30.0.0.3");
+    await r.text();
+    const params = g.__copilotMockParams as { messages: { content: string }[] };
+    expect(params.messages[0]!.content).toContain(ROUTER_FLOOR_CANDIDATE_ID);
+  });
+
+  it("S1d. a two-lane proposal on the loop and the floor is seated, and both lanes are priced", async () => {
+    g.__copilotMockFinal = toolUse("propose_portfolio", {
+      title: "Loop with a lending floor",
+      rationale: "The loop with the USDC lending lane beside it.",
+      loops: [
+        { candidateId: HERO_MARKET_ID, strategy: "loop", leverage: null, hedge: false, compound: true },
+        { candidateId: ROUTER_FLOOR_CANDIDATE_ID, strategy: "treasury", leverage: null, hedge: false, compound: false },
+      ],
+      allocationsBps: [5000, 5000],
+    });
+    const text = await (await post(JSON.stringify(validBody()), "35.0.0.1")).text();
+    expect(text).toContain("event: proposal\n");
+    expect(text).not.toContain("event: proposal_rejected");
+    const line = text.split("\n").find((l) => l.startsWith("data: ") && l.includes('"loops"'))!;
+    const payload = JSON.parse(line.slice(6)) as {
+      loops: { candidateId: string; strategy: string; lane: { vaultApy: number | null } }[];
+      allocationsBps: number[] | null;
+    };
+    expect(payload.loops.map((l) => l.candidateId)).toEqual([HERO_MARKET_ID, ROUTER_FLOOR_CANDIDATE_ID]);
+    expect(payload.loops.map((l) => l.strategy)).toEqual(["loop", "treasury"]);
+    expect(payload.allocationsBps).toEqual([5000, 5000]);
+    for (const l of payload.loops) expect(typeof l.lane.vaultApy).toBe("number");
+  });
+
+  it("S1e. the five other treasury issuers are still refused with the coming-soon sentence", async () => {
+    g.__copilotMockFinal = toolUse("explain_market", {
+      candidateId: "template:treasury-floor:treasury-buidl-ethereum:buidl",
+    });
+    const text = await (await post(JSON.stringify(validBody()), "35.0.0.2")).text();
+    expect(text).toContain("event: proposal_rejected");
+    expect(text).toContain(`"reason":${JSON.stringify(COPILOT_REJECT_COMING_SOON)}`);
+    expect(text).not.toContain("event: explain\n");
   });
 
   it("S2. a proposal on the live market is seated, priced from the lane, and its prose is linted", async () => {

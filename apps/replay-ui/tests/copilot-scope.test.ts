@@ -16,6 +16,8 @@ import { modeledRows } from "@/lib/canvas/unified-list";
 import { COPILOT_TOOLS, validateExplain, validateProposal } from "@/lib/canvas/copilot/tools";
 import { apyCaption, feeRows, WITHDRAWAL_ATTESTED_LINE } from "@/lib/canvas/fees";
 import { NO_BORROW_BANDS_VALUE } from "@/lib/canvas/labels";
+import { ORCH_HONESTY_LINE } from "@/lib/canvas/orchestrator/rule-schema";
+import { ROUTER_FLOOR_CANDIDATE_ID } from "@/lib/canvas/router-history";
 import { COMING_SOON, COPILOT_REJECT_COMING_SOON, HERO_MARKET_ID } from "@/lib/demo-scope";
 import { VAULT_STAGE_LABEL } from "@/lib/vaults/store";
 
@@ -28,8 +30,9 @@ import {
 
 const EM_DASH = "—";
 
-/** The D.1 bytes as ratified. A change here is a deliberate prompt edit. */
-const PROMPT_SHA256 = "316e62eb4a3ae0415ceb9397e753f1949b773b500fd1ec73514da809a36d7ad6";
+/** The D.1 bytes as ratified. A change here is a deliberate prompt edit.
+ *  Moved 2026-09-07 by WP-4: the register went from one live workflow to two. */
+const PROMPT_SHA256 = "90a7be3229e867f5f2c2dd7cc532ded9361b88004a4e45a578dc4672b98cc686";
 
 describe("D.1 the system prompt", () => {
   it("is the ratified bytes", () => {
@@ -53,8 +56,11 @@ describe("D.1 the system prompt", () => {
     expect(P).toContain("Priime Build");
   });
 
-  it("names the one live workflow and the register for everything else", () => {
-    expect(P).toContain("One workflow is live today: the USDe/USDC recursive loop on Morpho Blue, Base.");
+  it("names the two live workflows and the register for everything else", () => {
+    expect(P).toContain("Two workflows are live today. The first is the USDe/USDC recursive loop on Morpho Blue, Base.");
+    expect(P).toContain(
+      "The second is the USDC lending floor on Aave v3 Base and the capital router that pairs it with the loop.",
+    );
     expect(P).toContain(`Everything else is ${COMING_SOON.prose}`);
     expect(P).toContain("say in one sentence that it is coming soon, then offer the live loop");
     const toolSection = P.slice(P.indexOf("When to use tools:"));
@@ -62,6 +68,63 @@ describe("D.1 the system prompt", () => {
     expect(P).not.toContain("compare candidates");
     expect(P).not.toContain("Incubating");
     expect(P).not.toContain("backtest");
+  });
+
+  /* WP-4, R4(c) + the design director's item 12. Only the half of each rule
+     that stopped being true was retired: the router is live in the builder and
+     is still not executable, so the no-execution clause survives the edit. */
+  it("retires the router's coming-soon half and keeps the no-execution half", () => {
+    expect(P).toContain("2. The capital router is live in the builder and modeled only.");
+    expect(P).toContain(
+      "Never claim automated rebalancing, automated reallocation, or any execution capability the context does not mark as real",
+    );
+    expect(P).toContain(
+      "never say it relocates or unwinds a lane: it shifts weight between lanes inside the published concentration cap",
+    );
+    expect(P).toContain("3. One loop market and one lending reserve are live.");
+    /* The quant's honest register, quoted from its owner so the model
+       reproduces the line rather than a second version of it. */
+    expect(P).toContain(ORCH_HONESTY_LINE);
+  });
+
+  it("drops exactly three entries from the coming-soon list and keeps the rest", () => {
+    const list = P.slice(P.indexOf("Everything else is "), P.indexOf("When a user asks for any market"));
+    for (const gone of ["redemption route", "treasury floor", "capital router that allocates"]) {
+      expect(list, gone).not.toContain(gone);
+    }
+    for (const stays of [
+      "dynamic hedge",
+      "auto center",
+      "covered call",
+      "protective put",
+      "exogenous risk",
+      "funding carry",
+      "delta-neutral LP",
+      "treasury collar",
+    ]) {
+      expect(list, stays).toContain(stays);
+    }
+  });
+
+  /* SEAM 4: no surface retypes the quant's figures, and the prompt is a
+     surface. The bar, the re-arm, the window and both published rates reach
+     the model through the context block, never through these bytes. */
+  it("types no router figure into the prompt: the numbers travel in the context", () => {
+    const para = P.slice(P.indexOf("The second is the USDC lending floor"), P.indexOf("Everything else is "));
+    expect(para).toContain("paid more for a sustained window, by at least a fixed margin");
+    expect(para).toContain("are all in your context. Read them from there and never name one of them from memory");
+    /* The mechanism sentence names no quantity and points at no field. The
+       first draft of it said "the window your context names", and the model
+       copied that phrase verbatim into a blueprint rationale a user reads,
+       which is rule 9's leak entered through the copy rather than through a
+       field name. The pointer is now a separate sentence. */
+    expect(para).toContain("write the window and the margin as quantities rather than as a reference to where you read them");
+    /* `Aave v3` is a venue's name, not a figure; nothing else in the paragraph
+       carries a digit at all. */
+    expect(para.replace("Aave v3", "Aave")).not.toMatch(/\d/);
+    for (const typed of ["48 hour", "48-hour", "3.00pp", "3.0pp", "0.10pp"]) {
+      expect(P, typed).not.toContain(typed);
+    }
   });
 
   it("quotes the product's own copy from its owners", () => {
@@ -90,43 +153,98 @@ describe("D.2 scopedTools", () => {
     expect(COPILOT_TOOLS.map((t) => t.name)).toEqual(["propose_portfolio", "explain_market", "compare"]);
   });
 
-  it("seats one lane on the one market with the one strategy and no hedge", () => {
-    /* D.2 asks for `maxItems: 1`; the API refuses array constraints on a
-       strict schema, so the bound is a description and the validator's own
-       duplicate refusal (next test). */
+  it("seats at most two lanes on the two live markets with their two strategies and no hedge", () => {
+    /* D.2 asks for `maxItems`; the API refuses array constraints on a strict
+       schema, so the bound is a description and the validator's own duplicate
+       refusal (next test). */
     expect(loops.maxItems).toBeUndefined();
-    expect(loops.description).toBe("Exactly one lane, on the live market.");
+    expect(loops.description).toBe(
+      "At most two lanes: the live loop market, the live lending reserve, or both, each once.",
+    );
     expect(loops.minItems).toBe((COPILOT_TOOLS[0].input_schema.properties.loops as { minItems?: number }).minItems);
-    expect(loops.items.properties.candidateId).toEqual({ type: "string", enum: [HERO_MARKET_ID] });
-    expect(loops.items.properties.strategy.enum).toEqual(["loop"]);
+    expect(loops.items.properties.candidateId).toEqual({
+      type: "string",
+      enum: [HERO_MARKET_ID, ROUTER_FLOOR_CANDIDATE_ID],
+    });
+    expect(loops.items.properties.strategy.enum).toEqual(["loop", "treasury"]);
     expect(loops.items.properties.strategy.type).toBe("string");
     expect(loops.items.properties.hedge).toEqual({
       type: "boolean",
-      description: "Must be false: this loop has no price leg.",
+      description: "Must be false: neither live lane has a price leg.",
     });
     expect(loops.items.required).toEqual(COPILOT_TOOLS[0].input_schema.properties.loops.items.required);
   });
 
-  it("a second lane is refused by the unchanged validator, so one lane is a fact", () => {
+  /* R4(c): the copilot may PROPOSE ADDING the floor lane, and this is the
+     assertion that it can. No new tool was needed: APPLY replaces the canvas,
+     so "add the lending lane and the router" is the two-lane composition
+     through the existing `propose_portfolio`. */
+  it("validates the two-lane proposal R4(c) asks for, and still refuses a repeated market", () => {
     const rows = scopedLiveRows(liveVenues(1_800_000_000_000).venues);
-    expect(rows.size).toBe(1);
-    expect(rows.has(HERO_MARKET_ID)).toBe(true);
-    const lane = { candidateId: HERO_MARKET_ID, strategy: "loop", leverage: null, hedge: false, compound: true };
-    const two = validateProposal({ title: "t", rationale: "r", loops: [lane, lane], allocationsBps: [5000, 5000] }, rows);
-    expect(two.ok).toBe(false);
-    if (!two.ok) expect(two.reason).toBe("two lanes on the same market");
-    const one = validateProposal({ title: "t", rationale: "r", loops: [lane], allocationsBps: null }, rows);
+    expect([...rows.keys()]).toEqual([HERO_MARKET_ID, ROUTER_FLOOR_CANDIDATE_ID]);
+    const loop = { candidateId: HERO_MARKET_ID, strategy: "loop", leverage: null, hedge: false, compound: true };
+    const floor = {
+      candidateId: ROUTER_FLOOR_CANDIDATE_ID,
+      strategy: "treasury",
+      leverage: null,
+      hedge: false,
+      compound: false,
+    };
+    const pair = validateProposal(
+      { title: "t", rationale: "r", loops: [loop, floor], allocationsBps: [5000, 5000] },
+      rows,
+    );
+    expect(pair.ok).toBe(true);
+    if (pair.ok) {
+      expect(pair.payload.loops.map((l) => l.candidateId)).toEqual([HERO_MARKET_ID, ROUTER_FLOOR_CANDIDATE_ID]);
+      /* The floor borrows nothing: the validator's own leverage narrowing
+         seats it at the product floor with no note, because a strategy with
+         no dial is not a correction to anything. */
+      expect(pair.payload.loops[1]!.strategy).toBe("treasury");
+      expect(pair.payload.loops[1]!.leverageModule).toBe(false);
+      expect(pair.payload.loops[1]!.hedge).toBe(false);
+    }
+    const twice = validateProposal(
+      { title: "t", rationale: "r", loops: [loop, loop], allocationsBps: [5000, 5000] },
+      rows,
+    );
+    expect(twice.ok).toBe(false);
+    if (!twice.ok) expect(twice.reason).toBe("two lanes on the same market");
+    const one = validateProposal({ title: "t", rationale: "r", loops: [loop], allocationsBps: null }, rows);
     expect(one.ok).toBe(true);
+  });
+
+  /* Strategy forcing is the LIVE code's, unchanged: the model may name the
+     strategy, `strategyForRow` chooses it, and the mismatch prints. */
+  it("corrects a floor lane the model calls a loop, and states the correction", () => {
+    const rows = scopedLiveRows(liveVenues(1_800_000_000_000).venues);
+    const v = validateProposal(
+      {
+        title: "t",
+        rationale: "r",
+        loops: [{ candidateId: ROUTER_FLOOR_CANDIDATE_ID, strategy: "loop", leverage: 3, hedge: false, compound: false }],
+        allocationsBps: null,
+      },
+      rows,
+    );
+    expect(v.ok).toBe(true);
+    if (v.ok) {
+      expect(v.payload.loops[0]!.strategy).toBe("treasury");
+      expect(v.payload.notes.some((n) => n.includes("which is the strategy this market carries"))).toBe(true);
+    }
   });
 
   it("appends the scope sentence to the live propose description", () => {
     expect(propose.description).toBe(
-      `${COPILOT_TOOLS[0].description} candidateId is the live market id. hedge must be false. allocationsBps is null for a single loop.`,
+      `${COPILOT_TOOLS[0].description} candidateId is one of the two live market ids. hedge must be false. allocationsBps is null for one lane and sums to 10000 for two.`,
     );
   });
 
-  it("explain_market takes only the live id", () => {
-    expect(explain.input_schema.properties.candidateId).toEqual({ type: "string", enum: [HERO_MARKET_ID] });
+  it("explain_market takes either live id", () => {
+    expect(explain.input_schema.properties.candidateId).toEqual({
+      type: "string",
+      enum: [HERO_MARKET_ID, ROUTER_FLOOR_CANDIDATE_ID],
+    });
   });
 
   it("keeps strict where the live schema sets it", () => {
@@ -145,18 +263,24 @@ describe("D.2 scopedTools", () => {
 });
 
 describe("D.3 scopedLiveRows", () => {
-  it("drops the kit's modeled template rows the live map appends, so a collar or a dn-LP cannot validate", () => {
+  it("keeps the floor and drops every other modeled template row, so a collar, a dn-LP or a second issuer cannot validate", () => {
     const venues = liveVenues(1_800_000_000_000).venues;
     const unscoped = liveRowsFrom(venues);
     const scoped = scopedLiveRows(venues);
     expect(modeledRows().length).toBeGreaterThan(0);
     expect(unscoped.size).toBe(1 + modeledRows().length);
-    expect([...scoped.keys()]).toEqual([HERO_MARKET_ID]);
-    for (const r of modeledRows()) {
+    expect([...scoped.keys()]).toEqual([HERO_MARKET_ID, ROUTER_FLOOR_CANDIDATE_ID]);
+    /* The floor is one of the modeled rows, and it is the ONE that survives:
+       the other five treasury issuers (R1 keeps Aave Ethereum, BUIDL and the
+       rest coming soon), the dn-LP and the collar are all still refused. */
+    const soon = modeledRows().filter((r) => r.id !== ROUTER_FLOOR_CANDIDATE_ID);
+    expect(soon.length).toBe(modeledRows().length - 1);
+    for (const r of soon) {
       const v = validateExplain({ candidateId: r.id }, scoped);
       expect(v.ok).toBe(false);
       if (!v.ok) expect(mapRejectReason(v.reason)).toBe(COPILOT_REJECT_COMING_SOON);
     }
+    expect(validateExplain({ candidateId: ROUTER_FLOOR_CANDIDATE_ID }, scoped).ok).toBe(true);
   });
 });
 
