@@ -86,7 +86,7 @@ import {
   VAULT_STAGE_LABEL,
   vaultDescription,
   vaultStage,
-  venueParts,
+  recordVenueParts,
   VAULTS_EVENT,
   type PositionRecord,
   type VaultRecord,
@@ -616,7 +616,15 @@ export default function VaultDetail({ slug }: { slug: string }) {
   const inceptionToday =
     Math.floor(nowMs / DAY_MS) ===
     Math.floor(Date.parse(vault.createdAt) / DAY_MS);
-  const { venue, chain } = venueParts(vault.venue);
+  /* ONE OWNER for the venue line: on a routed record `vault.venue` is the
+     word `Multi-venue`, which the naive split reads as both the venue and the
+     chain. `recordVenueParts` reads the lanes instead and falls through to
+     `venueParts` on every record that is not routed. */
+  const { venue, chain } = recordVenueParts(vault);
+  /* Routed = the record carries the two lanes the router routes between. The
+     header reads it because that is the only record whose `venue` field is a
+     word rather than a venue. */
+  const routed = (vault.automations?.router?.lanes.length ?? 0) >= 2;
   const chainLine =
     typeof vault.chainId === "number" && Number.isFinite(vault.chainId)
       ? `${chain} · ${String(vault.chainId)}`
@@ -658,8 +666,14 @@ export default function VaultDetail({ slug }: { slug: string }) {
               {VAULT_STAGE_LABEL.incubating}
             </span>
           )}
+          {/* THE RAW FIELD ON EVERY RECORD THAT HAS ONE, and the composed line
+              only where the raw field is the word `Multi-venue`. Rewriting
+              this unconditionally would have re-spelled every shipped record's
+              header (a funding vault's `Hyperliquid · funding` resolves to a
+              chain of `Hyperliquid L1`), so the routed case is the only one
+              that moves. */}
           <span className="vx-card-mkt">
-            {vault.market} · {vault.venue}
+            {vault.market} · {routed ? `${venue} · ${chain}` : vault.venue}
           </span>
           <span className="vx-dmeta-cur">
             Curated by <b>{vault.curator}</b>

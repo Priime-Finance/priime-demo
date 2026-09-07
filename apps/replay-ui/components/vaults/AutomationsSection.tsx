@@ -48,7 +48,7 @@ import {
   rand01,
   routerMaxMoveFrac,
   recordModuleNames,
-  venueParts,
+  recordVenueParts,
   type LeverageAutomation,
   type RouterAutomation,
   type VaultRecord,
@@ -437,7 +437,11 @@ export function routerReadout(r: RouterAutomation): RouterReadout {
 
 function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomation }) {
   const { ref, inView } = useInView<HTMLDivElement>();
-  const { chain } = venueParts(vault.venue);
+  /* THROUGH THE ROUTED OWNER, and it has to be: a two-venue record publishes
+     the label `Multi-venue`, and the naive split reads that word as the chain
+     too, so the one instrument that spans both venues was the one printing
+     `Multi-venue · Capital routing` in its kicker. The lanes say Base. */
+  const { chain } = recordVenueParts(vault);
   const replay = measuredRouterReplay();
   const read = routerReadout(r);
   const { floorLabel, cells, filled, lit, zMove, zRearm, zHold } = read;
@@ -584,7 +588,7 @@ function LeverageInstrument({
   lev: LeverageAutomation;
   nowMs: number;
 }) {
-  const { chain } = venueParts(vault.venue);
+  const { chain } = recordVenueParts(vault);
   const { ref, inView } = useInView<HTMLDivElement>();
   // ONE envelope in this component. `curLev` used to come from a second
   // lookup on the record (`currentLeverage(vault, nowMs)`), which carried a
@@ -901,7 +905,7 @@ function CompoundInstrument({
   const tickLeft = Math.min(97, Math.max(0, (threshold / axisUsd) * 100));
   const checksNeeded = Math.ceil(threshold / perTick);
   const times = lastActionTimes(vault, nowMs);
-  const { venue } = venueParts(vault.venue);
+  const { venue } = recordVenueParts(vault);
   return (
     <div ref={ref} className={`vxi${inView ? " vxi--in" : ""}`}>
       <div className="vxi-head">
@@ -969,7 +973,7 @@ function RangeInstrument({
   nowMs: number;
 }) {
   const { ref, inView } = useInView<HTMLDivElement>();
-  const { venue } = venueParts(vault.venue);
+  const { venue } = recordVenueParts(vault);
   const w = cfg.halfWidthPct;
   const trigger = w * cfg.triggerShare;
   // Modeled price walk against the range center, in percent.
@@ -1089,7 +1093,7 @@ function CollarInstrument({
   nowMs: number;
 }) {
   const { ref, inView } = useInView<HTMLDivElement>();
-  const { venue } = venueParts(vault.venue);
+  const { venue } = recordVenueParts(vault);
   const { strikePct: k, floorPct: f, rollDays } = cfg;
   // Axis: the two published thresholds plus half a leg of headroom on each
   // installed side. A leg the vault does not carry contributes no zone, no

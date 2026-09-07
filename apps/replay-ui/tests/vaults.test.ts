@@ -39,6 +39,7 @@ import {
 import { DEMO_MARKET_ID, HERO_SEED_LEVERAGE } from "@/lib/demo/market";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
 import { heroNavUsd } from "@/lib/vaults/rows";
+import { onchainExecutionsFor } from "@/lib/vaults/onchain-executions";
 import { SEED_SLUGS, SEED_VAULTS } from "@/lib/vaults/seeds";
 import { measuredRouterReplay } from "@/lib/canvas/router-replay";
 import { routerPublishedToday } from "@/lib/canvas/router-history";
@@ -58,7 +59,9 @@ import {
   canonicalModuleName,
   moduleDepositorLine,
   recordModuleNames,
+  recordVenueParts,
   routerRuleSentence,
+  venueParts,
   type AutomationSource,
   type PublishedLane,
   deriveAutomations,
@@ -666,6 +669,22 @@ describe("the ledger's relocation rows", () => {
   it("come from nothing on a record with no router", () => {
     expect(routerActivityRows(heroRecord())).toEqual([]);
   });
+
+  /* THE STAND-DOWN'S PREMISE, pinned. `routerActivityRows` deliberately does
+     not ask whether a chain ledger exists; the section places the call inside
+     its own `if (!hasChain)` block, so what a test CAN hold still is that the
+     attested slug is the one carrying a ledger and that the rows the router
+     would contribute are all older than it. Walked in a browser on a record
+     carrying both: eight chain rows, a Verify column, zero `Weight moved`. */
+  it("the attested slug is the one with a chain ledger, and the move predates it", () => {
+    const chain = onchainExecutionsFor(HERO_SLUG);
+    expect(chain.length).toBeGreaterThan(0);
+    const oldestChainMs = Math.min(...chain.map((x) => x.timestamp * 1000));
+    const record = { ...heroRecord(), automations: deriveAutomations(routedSource()) };
+    const rows = routerActivityRows(record);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.ms).toBeLessThan(oldestChainMs);
+  });
 });
 
 describe("an older single-lane record renders exactly as it did", () => {
@@ -699,6 +718,13 @@ describe("an older single-lane record renders exactly as it did", () => {
     expect(recordModuleNames(legacy)).not.toContain("Capital router");
   });
 
+  it("the venue line and the automation count are the record's, unchanged", () => {
+    const legacyRecord = { ...heroRecord(), automations: deriveAutomations(legacy) };
+    // `venueParts` is what every record in the product resolves through today.
+    expect(recordVenueParts(legacyRecord)).toEqual(venueParts(legacyRecord.venue));
+    expect(automationCountFor(heroRecord())).toBe(3);
+  });
+
   it("the shipped seed vaults publish neither field, so none of them route", () => {
     for (const v of SEED_VAULTS) {
       expect(v.lanes).toBeUndefined();
@@ -707,5 +733,61 @@ describe("an older single-lane record renders exactly as it did", () => {
     }
     expect(heroRecord().lanes).toBeUndefined();
     expect(deriveAutomations(heroRecord()).router).toBeNull();
+  });
+});
+
+describe("the rail names one vault on a routed record", () => {
+  /* `vault.venue` on a two-venue publish is the word `Multi-venue`, which the
+     naive split reads as the chain as well, so the Projection card printed
+     `Multi-venue · Multi-venue` for a vault that never leaves Base while the
+     Modeled APY row below it printed a composed two-lane number. */
+  const routed = {
+    ...heroRecord(),
+    venue: "Multi-venue",
+    automations: deriveAutomations(routedSource()),
+  };
+
+  it("reads the lanes, in the page's own `<name> · <chain>` shape", () => {
+    expect(recordVenueParts(routed)).toEqual({
+      venue: "Morpho Blue and Aave v3",
+      chain: "Base",
+    });
+    // The shape the old owner produced, and the reason it had to be replaced.
+    expect(venueParts("Multi-venue")).toEqual({
+      venue: "Multi-venue",
+      chain: "Multi-venue",
+    });
+  });
+
+  it("counts the router among the vault's automations", () => {
+    /* THE CARD AND THE PAGE COUNT THE SAME VAULT. The directory prints this
+       number beside the link, and the page mounts the router FIRST, so a
+       routed record that counted three while showing four made one vault
+       read as two. Asserted as a DELTA on the hero's own automations, never
+       against a typed total: the base is three (Dynamic leverage,
+       Auto-compound, the quorum) and the router is the fourth. */
+    const hero = heroRecord();
+    expect(automationCountFor(hero)).toBe(3);
+    const withRouter = {
+      ...hero,
+      automations: { ...hero.automations!, router: deriveAutomations(routedSource()).router },
+    };
+    expect(automationCountFor(withRouter)).toBe(4);
+  });
+
+  it("falls through to the label on a record whose lanes are on two chains", () => {
+    const crossChain = {
+      ...heroRecord(),
+      venue: "Multi-venue",
+      automations: deriveAutomations(
+        routedSource({
+          lanes: [
+            ROUTED_LANES[0]!,
+            { ...ROUTED_LANES[1]!, venueLabel: "Aave v3 · Ethereum" },
+          ],
+        }),
+      ),
+    };
+    expect(recordVenueParts(crossChain).chain).toBe("Cross-venue");
   });
 });

@@ -2103,7 +2103,12 @@ export function automationCount(v: VaultRecord): number {
     v.modules.some((m) => canonicalModuleName(m) === name),
   ).length;
   if (!a) return family;
-  return [a.leverage, a.hedge, a.compound].filter(Boolean).length + family;
+  /* THE ROUTER COUNTS. The directory card prints this number beside the card
+     that links to the page, and the page mounts the router as its FIRST
+     instrument, so a routed record that counted three while showing four made
+     the card and the page disagree about the same vault. `router` is absent
+     on every record written before it existed, so nothing else moves. */
+  return [a.leverage, a.hedge, a.compound, a.router].filter(Boolean).length + family;
 }
 
 /** Split "Morpho Blue · Base" into venue + chain; single-name venues map honestly.
@@ -2168,6 +2173,53 @@ function soleVenue(label: string, venueIds?: readonly string[] | null): string |
   }
   if (distinctParts.size > 1) return null;
   return parts[0] ?? label;
+}
+
+/**
+ * THE VENUE LINE A ROUTED RECORD ACTUALLY HAS, and the one owner of it.
+ *
+ * `venueParts` splits ONE label, and the label a two-venue composition
+ * publishes is the word `Multi-venue`, which the split then reads as both the
+ * venue AND the chain. The Projection card printed `Multi-venue · Multi-venue`
+ * on a vault whose two lanes never leave Base, while the Modeled APY row two
+ * lines below it printed a composed two-lane number: one card, two answers to
+ * "what is this vault". All three rail rows move together on a routed record
+ * or the rail contradicts itself.
+ *
+ * THE SHAPE IS THE PAGE'S OWN `<name> · <chain>` and not a counted phrase: the
+ * lanes name themselves, joined by the word the depositor would use, and the
+ * chain is stated once because it is one chain. A routed record whose lanes
+ * genuinely sit on different chains keeps the label's own answer, because at
+ * that point `Cross-venue` is the true one.
+ *
+ * Falls through to `venueParts` on every record that is not routed, which is
+ * every record in the product today, so nothing that ships moves.
+ */
+export function recordVenueParts(v: {
+  venue: string;
+  automations?: VaultAutomations | null;
+}): { venue: string; chain: string } {
+  const lanes = v.automations?.router?.lanes ?? null;
+  if (!lanes || lanes.length < 2) return venueParts(v.venue);
+  const split = lanes.map((l) => {
+    const ix = l.venueLabel.indexOf("·");
+    return ix >= 0
+      ? { name: l.venueLabel.slice(0, ix).trim(), chain: l.venueLabel.slice(ix + 1).trim() }
+      : { name: l.venueLabel.trim(), chain: "" };
+  });
+  const names = Array.from(new Set(split.map((x) => x.name).filter(Boolean)));
+  const chains = Array.from(new Set(split.map((x) => x.chain).filter(Boolean)));
+  if (names.length === 0 || chains.length !== 1) {
+    return venueParts(
+      v.venue,
+      lanes.map((l) => l.venue),
+    );
+  }
+  const joined =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return { venue: joined, chain: chains[0] };
 }
 
 // ── live derivation helpers (all deterministic, slug + clock seeded) ───────
@@ -2554,7 +2606,11 @@ export function resolvedPositionCounts(
 
 export function vaultDescription(v: VaultRecord): string {
   const a = v.automations;
-  const { venue, chain } = venueParts(v.venue);
+  /* THROUGH THE ROUTED OWNER. On a two-venue record `v.venue` is the word
+     `Multi-venue`, and the split reads it as the chain too, so this sentence
+     said a vault runs "via Multi-venue on Multi-venue" while the panel beside
+     it named both venues and Base. */
+  const { venue, chain } = recordVenueParts(v);
   const lev = a?.leverage;
   const hedged = Boolean(a?.hedge);
   const cad = a?.compound?.cadenceHours;
