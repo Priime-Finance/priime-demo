@@ -125,6 +125,24 @@ import { pricingParamsFor } from "@/lib/canvas/pricing-params";
 import type { LaneComposition } from "@/lib/canvas/mock-quote";
 import type { SourcedProjectedVenue } from "@/lib/canvas/server-shim";
 import { defaultSelFor, laneEconomicsFor, seatedModulesFor, strategyForRow } from "./lane-frame";
+/* ⚠ THESE THREE IMPORTS COME AFTER THE KIT'S, AND THAT IS LOAD-BEARING.
+   `orchestrator/demo-rules` reaches `orchestrator/rule-schema`, whose bindings
+   `orchestrator/index` reads in its own module body; entering that cycle before
+   `templates` throws "Cannot access 'CONCENTRATION_BASE_FLOOR_PCT' before
+   initialization" (the same trap `demo-rules.ts` documents at its own first
+   import). `unified-list` above has already walked `templates`, so by this line
+   the cycle is entered in the order the app enters it. */
+import {
+  DEMO_SUSTAIN_HOURS,
+  DEMO_UPGRADE_REARM,
+  DEMO_UPGRADE_THRESHOLD,
+} from "@/lib/canvas/orchestrator/demo-rules";
+import {
+  ROUTER_FLOOR_CANDIDATE_ID,
+  ROUTER_HISTORY_SOURCES,
+  routerPublishedToday,
+} from "@/lib/canvas/router-history";
+import { fastestExitRoute, issuerRedemptionTerms } from "@/lib/canvas/templates";
 
 export const CONTEXT_BUDGET_CHARS = 28_000;
 export const MAX_HISTORY_MESSAGES = 20;
@@ -396,6 +414,80 @@ function dropNulls(row: ContextRow): ContextRow {
     if (v !== null && v !== undefined) out[k] = v;
   }
   return out as unknown as ContextRow;
+}
+
+/**
+ * THE ROUTER'S OWN FACTS, AND EVERY ONE OF THEM READ OFF ITS OWNER.
+ *
+ * The second live workflow is a pair, not a market: the USDC lending floor on
+ * Aave v3 Base and the rule that moves weight between it and the loop. Neither
+ * half is expressible as a `ContextRow`. The floor's row is in the market list
+ * already (it is one of `modeledRows()`), but a row states what a market pays
+ * at the catalog composition and says nothing about the pair, the rule, or the
+ * clock the two rates were measured on.
+ *
+ * WHAT IS HERE, AND WHOSE IT IS:
+ *  · `loopPct` / `floorPct` / `gapPp`: `routerPublishedToday()`
+ *    (lib/canvas/router-history.ts), which prices both lanes through
+ *    `publishedNetApy` on the LAST ALIGNED DAY, so the two numbers are on one
+ *    clock. `gapPp` is differenced BEFORE rounding: 3.0757 against 2.9709 is
+ *    +0.10pp, and differencing the two rounded figures would print +0.11.
+ *  · `sources`: `ROUTER_HISTORY_SOURCES`, the three public series a reader
+ *    can re-fetch, so a rate the model quotes carries where it came from.
+ *  · `rule`: `DEMO_UPGRADE_THRESHOLD`, `DEMO_UPGRADE_REARM` and
+ *    `DEMO_SUSTAIN_HOURS` (lib/canvas/orchestrator/demo-rules.ts). The bar and
+ *    the re-arm are DERIVED from the measured friction of this exact move; the
+ *    window is the founder's ruling. Nothing here is typed.
+ *
+ * WHAT IS DELIBERATELY ABSENT: the size of a move. `DEMO_ROUTER_MOVE_WEIGHT`
+ * is the rule's weight (12.5pp of the book) and the evaluator then clamps it
+ * against the concentration floor, which on the measured history landed the
+ * one move at 10.0pp. Two numbers for one quantity, and only the second is on
+ * the screen, so the model is given neither and rule 1 covers the question.
+ */
+function routerBlock(rows: readonly UnifiedRow[]) {
+  const today = routerPublishedToday();
+  if (!today) return null;
+  const { loop, floor } = today;
+  /* A null on either side is a broken owner, not an absent rate: the aligned
+     window has every field present by construction. The block stands down
+     rather than shipping a half pair. */
+  if (loop === null || floor === null) return null;
+  const floorRow = rows.find((r) => r.id === ROUTER_FLOOR_CANDIDATE_ID) ?? null;
+  const terms = issuerRedemptionTerms(ROUTER_FLOOR_CANDIDATE_ID);
+  const route = terms ? fastestExitRoute(terms) : null;
+  const s = ROUTER_HISTORY_SOURCES;
+  return {
+    /* The register, as a field rather than as prose: this pair is live in the
+       builder and every number under it is modeled. */
+    live: true,
+    modeled: true,
+    measuredOn: today.date,
+    floor: {
+      candidateId: ROUTER_FLOOR_CANDIDATE_ID,
+      venueLabel: floorRow?.venueLabel ?? null,
+      /* The two module groups the treasury family requires. A lane with the
+         position and no route out is a position you cannot leave. */
+      modules: ["liquidity-source", "redemption-route"],
+      redemptionRoute: route?.label ?? null,
+      settlementDays: route?.settlementDays ?? null,
+      publishedApyPct: pctOf(floor),
+    },
+    loop: { publishedApyPct: pctOf(loop) },
+    /* Loop minus floor, in percentage points, differenced before rounding. */
+    gapPp: pctOf(loop - floor),
+    rule: {
+      of: "the capital router, both directions, one mechanism",
+      sustainHours: DEMO_SUSTAIN_HOURS,
+      thresholdPp: pctOf(DEMO_UPGRADE_THRESHOLD),
+      rearmPp: pctOf(DEMO_UPGRADE_REARM),
+    },
+    sources: [
+      { of: "floor", ...s.aaveUsdcSupply },
+      { of: "loop collateral", ...s.loopReward },
+      { of: "loop borrow", ...s.loopBorrow },
+    ],
+  };
 }
 
 /**
@@ -686,6 +778,10 @@ function buildJson(
       shelf,
     },
     lanes,
+    /* THE SECOND LIVE WORKFLOW. Outside `opportunities` on purpose: it is a
+       PAIR and a rule, not a market row, and the floor's own row is already in
+       the list above. See `routerBlock`. */
+    router: routerBlock([...list.hedged, ...list.unhedged, ...modeled]),
     orchestrator: {
       enabled: orch.enabled,
       reactivity: orch.params.reactivity ?? "standard",
