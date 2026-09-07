@@ -73,6 +73,7 @@ import {
   TREASURY_CANDIDATES,
   issuerRedemptionTerms,
   treasuryIssuerFacts,
+  treasuryIssuerRegisterFor,
   treasuryModel,
   type HandAuthoredCandidate,
 } from "@/lib/canvas/templates";
@@ -335,11 +336,19 @@ export function floorRowForRate(apy: number): HandAuthoredCandidate | null {
   const facts = treasuryIssuerFacts(ROUTER_FLOOR_CANDIDATE_ID);
   const redemption = issuerRedemptionTerms(ROUTER_FLOOR_CANDIDATE_ID);
   if (!FLOOR_ROW || !facts || !redemption) return null;
+  /* ⚠ THE REGISTER TRAVELS WITH THE ROW. This rebuilds the issuer from its
+     parts to price it on a measured day, and the reserve's own capacity
+     binding and leg label live on the issuer, not in the family's model. A
+     rebuild that dropped them printed `the fund's outstanding tokenized
+     shares` and `Issuer rate, 30-day mean` back onto a lending pool on every
+     surface the router serves. */
+  const register = treasuryIssuerRegisterFor(ROUTER_FLOOR_CANDIDATE_ID);
   const fit = treasuryModel({
     venue: "treasury-ausdc-base",
     token: "aUSDC",
     facts: { ...facts, apyMean30d: apy },
     redemption,
+    ...(register ? { register } : {}),
   });
   return {
     ...FLOOR_ROW,

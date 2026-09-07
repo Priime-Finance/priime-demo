@@ -25,10 +25,15 @@
 import { describe, expect, it } from "vitest";
 
 import { GET } from "@/app/api/canvas/orchestrate/route";
+import { canonicalRules, clampConcentrationPct, rulesHash } from "@/lib/canvas/orchestrator";
+import type { LoopSlot } from "@/lib/canvas/orchestrator/types";
+import { clampOrchDials, ORCH_DIAL_DEFAULTS } from "@/lib/canvas/param-schema";
+import { sha256Hex } from "@/lib/canvas/scenario/hash";
 import {
   DEMO_ROUTER_BOOK_USD,
   DEMO_SUSTAIN_PINS_DAILY,
   DEMO_UPGRADE_THRESHOLD,
+  demoDeriveAllRouterRules,
 } from "@/lib/canvas/orchestrator/demo-rules";
 import {
   DEFAULT_REGIME,
@@ -96,7 +101,8 @@ async function get(regime?: string): Promise<{ status: number; body: Run }> {
   const url = regime === undefined
     ? "http://localhost/api/canvas/orchestrate"
     : `http://localhost/api/canvas/orchestrate?regime=${encodeURIComponent(regime)}`;
-  const res = await GET(new Request(url));
+  /* The handler is synchronous (the fold is); `res.json()` is not. */
+  const res = GET(new Request(url));
   return { status: res.status, body: (await res.json()) as Run };
 }
 
@@ -134,6 +140,35 @@ for (const id of REGIME_IDS) {
 }
 
 describe("GET /api/canvas/orchestrate", () => {
+  /* ONE FOLD, ONE POLICY IDENTITY (integration).
+     `foldRouterRun` is synchronous, so it hashes the rule set through
+     `sha256Hex(canonicalRules(rules))` rather than through the shipped
+     `rulesHash`, whose body is that same line behind an async signature. If
+     the shipped owner ever stops being that line, the panel's `policy` value
+     stops naming the same policy as the rest of the product, silently. This
+     asserts the two on the rule set the fold actually builds. */
+  it("the fold's synchronous rules hash IS the shipped rulesHash", async () => {
+    const slotCount = 2;
+    const dials = clampOrchDials(ORCH_DIAL_DEFAULTS);
+    const maxWeight = clampConcentrationPct(dials.maxConcentrationPct, slotCount) / 100;
+    const minWeight = Math.max(0, 1 - (slotCount - 1) * maxWeight);
+    const slots: LoopSlot[] = ["loop", "floor"].map((slotId) => ({
+      slotId,
+      venue: slotId === "loop" ? "morpho-blue-base" : "treasury-ausdc-base",
+      candidateId: slotId,
+      marketKey: slotId,
+      cls: "N1",
+      targetWeight: 0.5,
+      minWeight,
+      maxWeight,
+      screenedAtApy: null,
+      metrics: { funding: false, basis: false },
+    }));
+    const rules = demoDeriveAllRouterRules(dials, slots, DEMO_SUSTAIN_PINS_DAILY);
+    expect(sha256Hex(canonicalRules(rules))).toBe(await rulesHash(rules));
+    expect(runs.get("measured")!.rulesHash).toBe(await rulesHash(rules));
+  });
+
   it("every regime answers 200, ok and modeled, naming itself and its own label", () => {
     for (const id of REGIME_IDS) {
       const run = runs.get(id)!;

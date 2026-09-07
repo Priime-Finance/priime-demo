@@ -1295,6 +1295,37 @@ function LaneBands({
     })
     .filter((n): n is NonNullable<typeof n> => n !== null);
 
+  /* WHICH PAYBACK LABELS MAY DRAW (integration, found in the whipsaw run).
+     Three moves inside a 24-tick stretch put three brackets on one 8px line
+     and their labels rendered on top of each other, reading `36 days40 days
+     back pay back`: three true numbers composing one false word. The bracket
+     LINE always draws, because it is the distance and it is legible even
+     when it overlaps; the label draws only where it does not sit on top of a
+     label already drawn, left to right. Nothing is lost by the drop: the
+     same `paybackDays` is stated in that decision's own receipt below, and
+     hovering the notch lights the decision it belongs to.
+
+     The width is estimated from the string rather than measured, because SVG
+     text has no layout box before it renders and a second render pass to
+     measure one would be a beat the reader can see. `var(--fm)` at 8px runs
+     about 4.6px per character, so half the string is `length * 2.3`, plus a
+     4px gutter so two labels never touch. */
+  const labelled = new Set<string>();
+  {
+    let lastRight = -Infinity;
+    for (const n of [...notches].sort((a, b) => a.t - b.t)) {
+      const pb = n.d.cost.paybackDays;
+      if (n.d.rule.metric !== "better_elsewhere" || pb === null) continue;
+      const x = g.xOf(n.t);
+      const end = g.xOf(Math.min(T - 1, n.t + pb));
+      const half = `${Math.round(pb)} days to pay back`.length * 2.3 + 4;
+      const mid = (x + end) / 2;
+      if (mid - half < lastRight) continue;
+      labelled.add(n.d.decisionId);
+      lastRight = mid + half;
+    }
+  }
+
   return (
     <div>
       {/* THE FRAME, NAMED ON THE AXIS RATHER THAN IN A TOOLTIP (INV-11).
@@ -1494,7 +1525,9 @@ function LaneBands({
                       It is the decision's own `cost.paybackDays`, the same
                       field the receipt states, rounded to whole days because
                       the tick IS a day and a fraction of one claims a
-                      resolution the run does not have. */}
+                      resolution the run does not have. Drawn only where
+                      `labelled` says it clears the label to its left. */}
+                  {labelled.has(d.decisionId) ? (
                   <text
                     x={(x + bracketEnd) / 2}
                     y={by - 4}
@@ -1505,6 +1538,7 @@ function LaneBands({
                   >
                     {`${Math.round(pb as number)} days to pay back`}
                   </text>
+                  ) : null}
                 </>
               ) : null}
             </g>
@@ -1575,16 +1609,42 @@ function LaneBands({
           one rule flapping across a threshold refuses the same way many
           times, and a list that repeats a sentence twelve times is a count
           wearing prose. */}
-      {[...new Map(run.refusals.map((r) => [r.reason, r])).values()].map((r) => (
+      {groupRefusals(run.refusals).map((r) => (
         <div
-          key={`${r.ruleId}:${r.code}:${r.tickIndex}`}
+          key={`${r.ruleId}:${r.code}:${r.ticks[0]}`}
           style={{ marginTop: 4, fontFamily: "var(--fm)", fontSize: 9, color: "var(--bc-muted)" }}
         >
-          {`tick ${r.tickIndex} · ${r.reason}`}
+          {`${r.ticks.length === 1 ? "tick" : "ticks"} ${r.ticks.join(", ")} · ${r.reason}`}
         </div>
       ))}
     </div>
   );
+}
+
+/**
+ * THE REFUSALS, ONE LINE PER REASON AND EVERY TICK ON IT.
+ *
+ * Deduplicating by the reason itself is right and stays: one rule flapping
+ * across a threshold refuses the same way many times, and a list that repeats
+ * a sentence twelve times is a count wearing prose. But keeping the LAST
+ * refusal per reason and printing its tick alone made the earlier ones
+ * invisible on the one surface that exists to show refusals: the whipsaw run
+ * carries three refusals, two of them the reverse-edge lock, and the panel
+ * printed two lines and named only the later lock. The ticks now travel with
+ * the sentence, in the order they happened, so a mechanism that refused twice
+ * says so in one line.
+ */
+function groupRefusals(
+  refusals: readonly RouterRun["refusals"][number][],
+): { ruleId: string; code: string; reason: string; ticks: number[] }[] {
+  const byReason = new Map<string, { ruleId: string; code: string; reason: string; ticks: number[] }>();
+  for (const r of refusals) {
+    const hit = byReason.get(r.reason);
+    if (hit) hit.ticks.push(r.tickIndex);
+    else byReason.set(r.reason, { ruleId: r.ruleId, code: r.code, reason: r.reason, ticks: [r.tickIndex] });
+  }
+  for (const g of byReason.values()) g.ticks.sort((a, b) => a - b);
+  return [...byReason.values()];
 }
 
 function BandKey({

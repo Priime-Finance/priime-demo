@@ -1171,12 +1171,38 @@ export interface TreasuryIssuerFacts {
   minSubscriptionSource: string;
 }
 
+/**
+ * THE THREE STRINGS A NON-FUND ISSUER HAS TO SPELL FOR ITSELF.
+ *
+ * Five of the six rows on this family ARE tokenized funds, so the family's
+ * own nouns are true of them and this block is absent. The Aave v3 Base USDC
+ * reserve is not a fund: it issues no shares, publishes no NAV and holds no
+ * bills. Left on the family's defaults it printed `$938K in the fund's
+ * outstanding tokenized shares`, `Unwinding aUSDC through the fund's
+ * outstanding tokenized shares` and `Issuer rate, 30-day mean` over a spot
+ * daily supply read, three claims about a lending pool that are simply false.
+ *
+ * It is a per-issuer OVERRIDE rather than a branch in the family's model, so
+ * the five funds keep byte for byte the register they shipped with and the
+ * seventh issuer added tomorrow inherits the default by saying nothing.
+ */
+interface TreasuryIssuerRegister {
+  /** The noun `limited by <binding>` names: the resource that runs out. */
+  readonly capacityBinding: string;
+  /** What the row's one leg IS, where `Issuer rate, 30-day mean` is wrong. */
+  readonly legLabel: string;
+  /** The vintage stamp, where the family's fund-file date does not apply. */
+  readonly asOfNote: string;
+}
+
 interface TreasuryIssuer {
   venue: CanvasVenueId;
   /** The share token's symbol, which is also the collateral symbol. */
   token: string;
   facts: TreasuryIssuerFacts;
   redemption: IssuerRedemptionTerms;
+  /** Absent on every issuer the family's own nouns describe correctly. */
+  register?: TreasuryIssuerRegister;
 }
 
 /**
@@ -1242,6 +1268,22 @@ const TREASURY_ISSUERS: readonly TreasuryIssuer[] = [
       ],
       transferRestriction: "None. USDC is freely transferable and the aToken is not permissioned.",
       notPublished: [],
+    },
+    /* NOT A FUND, so it does not borrow the family's fund nouns. The
+       denominator under `capacityUsd` is the same 5% of the same measured
+       figure the five funds use, and on this row that figure is the reserve's
+       SUPPLIED balance ($18,760,507 on 2026-09-03, in the route source
+       above), so the binding names the supply rather than shares nobody
+       issued. The leg is a spot daily supply read on the day the row is
+       priced, not a 30-day mean: the router serves this row from the
+       2026-09-07 capture (`floorRowForRate`) and the label has to survive
+       that. The stamp names its own fact, which is why it says supply depth
+       and not `fund readings`: the RATE beside it is measured on a later day
+       and says so itself. */
+    register: {
+      capacityBinding: "the reserve's supplied liquidity",
+      legLabel: "Reserve supply rate, measured",
+      asOfNote: "Supply depth measured 2026-09-03. No block pinned.",
     },
   },
   {
@@ -1532,12 +1574,12 @@ export function treasuryModel(issuer: TreasuryIssuer): FamilyModel {
     // return on deployed capital and the return on deposit are one number.
     netCarry: rate,
     hedgelessApy: rate,
-    legs: [{ label: "Issuer rate, 30-day mean", apr: rate }],
+    legs: [{ label: issuer.register?.legLabel ?? "Issuer rate, 30-day mean", apr: rate }],
     // No perp short on this family, so there is no hedge decomposition to
     // state (the collar answers the same question the same way).
     hedgeTerms: null,
     capacityUsd: Math.round(issuer.facts.fundTvlUsd * TREASURY_MODEL.maxFundSharePct),
-    capacityBinding: TREASURY_CAPACITY_BINDING,
+    capacityBinding: issuer.register?.capacityBinding ?? TREASURY_CAPACITY_BINDING,
   };
 }
 
@@ -1625,6 +1667,16 @@ export function issuerRedemptionTerms(
   return candidateId ? (treasuryIssuerFor(candidateId)?.redemption ?? null) : null;
 }
 
+/** The per-issuer register overrides, or null where the family's own nouns
+ *  are already true of the row. Exported because `floorRowForRate` rebuilds
+ *  this issuer from its parts to price it on a measured day, and a rebuild
+ *  that dropped this block would print the fund nouns back onto the reserve. */
+export function treasuryIssuerRegisterFor(
+  candidateId: string | null | undefined,
+): TreasuryIssuerRegister | null {
+  return candidateId ? (treasuryIssuerFor(candidateId)?.register ?? null) : null;
+}
+
 /** The measured fund facts behind this row, or null on every other row. */
 export function treasuryIssuerFacts(
   candidateId: string | null | undefined,
@@ -1678,8 +1730,9 @@ export function settlementWindowValue(route: ExitRoute): string {
  * misdescribes it.
  */
 export function treasuryAsOfNote(candidateId: string | null | undefined): string | null {
-  if (!candidateId || !treasuryIssuerFor(candidateId)) return null;
-  return `Fund readings measured ${TREASURY_SOURCE.asOf}. No block pinned.`;
+  const issuer = candidateId ? treasuryIssuerFor(candidateId) : null;
+  if (!issuer) return null;
+  return issuer.register?.asOfNote ?? `Fund readings measured ${TREASURY_SOURCE.asOf}. No block pinned.`;
 }
 
 /**

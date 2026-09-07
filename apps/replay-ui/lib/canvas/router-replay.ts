@@ -9,26 +9,38 @@
  *
  * ── NOTHING HERE IS A NEW NUMBER ─────────────────────────────────────────
  * The two published series come from `router-history.ts`
- * (`loopPublishedApyByDay` / `floorPublishedApyByDay`); the bar, the
- * hysteresis, the sustain and the move weight come from `demo-rules.ts`; the
- * state machine, the sizing, the anti-cycle lock and the weight transfer come
- * from `rule-schema.ts`. This file owns the SEQUENCING and nothing else, and
- * the sequencing is the same one `tests/router-backtest.test.ts` folds, line
- * for line, including the two-line breach test quoted from the live app's
+ * (`loopPublishedApyByDay` / `floorPublishedApyByDay`, through the fold); the
+ * bar, the hysteresis, the sustain and the move weight come from
+ * `demo-rules.ts`; the moves come from `evaluateOrchestrator`. The one test
+ * this file performs itself is the breach test, quoted from
  * `lib/canvas/orchestrator/evaluate.ts:304-305`:
  *
  *     if (!Number.isFinite(improvement)) return { breaching: false, safeSide: true };
  *     return { breaching: improvement >= rule.threshold, safeSide: improvement <= rule.rearmLevel };
  *
- * ── THE SEAM, STATED RATHER THAN DISCOVERED ──────────────────────────────
- * WP-2 lands `app/api/canvas/orchestrate/route.ts` and ports `evaluate.ts`
- * verbatim. That route folds the SAME history through the SAME rules for the
- * dock's run panel. When it lands it must call `measuredRouterReplay()` (or
- * this module must call it) rather than keep a second fold: two answers to
- * "how many moves did the measured 90 days produce" is exactly the defect the
- * shipping harness names. Filed as a cross-package request by WP-3.
- * `tests/vaults.test.ts` pins this fold's answer to the quant's published
- * measurement (docs/plans/ROUTER_QUANT.md), so a divergence fails here first.
+ * and it performs it only to count the days a lane has been behind, which is
+ * the clock the instrument draws and not a decision.
+ *
+ * ── THE SEAM, CLOSED (integration) ───────────────────────────────────────
+ * This module shipped its own hand fold because the route did not exist at
+ * the base commit. It no longer has one. `foldRouterRun("measured")` in
+ * `lib/canvas/router-fold.ts` is the ONE fold, the same call the dock's run
+ * panel reaches through `GET /api/canvas/orchestrate`, and the difference was
+ * never cosmetic: the shipped `evaluateOrchestrator` ranks a destination
+ * through `selectDestination`, gates each firing on payback and locks the
+ * reverse edge until the last move has paid back, and a hand fold does none
+ * of those. On the measured window both answered one move on 2026-06-12 at
+ * 10.0pp, which is why the divergence was invisible; on `whipsaw` a hand fold
+ * takes five moves where the evaluator takes three.
+ *
+ * WHAT THIS MODULE STILL OWNS is the READING of that run for the vault page:
+ * the trailing streak that fills the 48 hour clock, the cooldown test, and
+ * the day labels. The streak is a reading of the two published series against
+ * the rule's own bar, not a second evaluation of the rules: the evaluator
+ * zeroes its pin count on the pin that fires, and the clock has to keep
+ * counting the days a lane is behind after it does.
+ * `tests/vaults.test.ts` pins the answer to the quant's published measurement
+ * (docs/plans/ROUTER_QUANT.md), so a divergence fails there first.
  *
  * ── ONE CLOCK ────────────────────────────────────────────────────────────
  * "Today" is the last aligned day of the capture, never `Date.now()`. The
@@ -38,71 +50,23 @@
  */
 
 import {
-  ROUTER_FLOOR_CANDIDATE_ID,
-  ROUTER_HISTORY_ALIGNED,
-  floorPublishedApyByDay,
-  loopPublishedApyByDay,
-} from "@/lib/canvas/router-history";
+  ROUTER_FLOOR_SLOT,
+  ROUTER_LOOP_SLOT,
+  foldRouterRun,
+} from "@/lib/canvas/router-fold";
 import {
-  DEMO_ROUTER_BOOK_USD,
   DEMO_SUSTAIN_HOURS,
   DEMO_SUSTAIN_PINS_DAILY,
+  DEMO_UPGRADE_THRESHOLD,
   demoDeriveAllRouterRules,
-  demoExitProfile,
 } from "@/lib/canvas/orchestrator/demo-rules";
-import {
-  PAYBACK_HORIZON_DAYS,
-  advanceRuleState,
-  applyMove,
-  edgeLocked,
-  initialRuleState,
-  lockReverseEdge,
-  paybackMs,
-  sizeMove,
-  type EdgeLockState,
-} from "@/lib/canvas/orchestrator/rule-schema";
-import type { LoopSlot, OrchRule, OrchRuleState } from "@/lib/canvas/orchestrator/types";
-import { ORCH_DIAL_DEFAULTS } from "@/lib/canvas/param-schema";
-import { DEMO_MARKET_ID } from "@/lib/demo/market";
+import { clampOrchDials, ORCH_DIAL_DEFAULTS } from "@/lib/canvas/param-schema";
+import { clampConcentrationPct } from "@/lib/canvas/orchestrator";
+import type { LoopSlot, OrchRule } from "@/lib/canvas/orchestrator/types";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** The two lanes, by the slot ids the rules are keyed on. The loop's id is
- *  exported because the ledger's detail line reads a move's direction off it
- *  and a second spelling of "loop" is how that sentence comes to run backwards;
- *  the floor's is internal, nothing outside this fold asks for it. */
-export const ROUTER_LOOP_SLOT = "loop";
-const ROUTER_FLOOR_SLOT = "floor";
+export { ROUTER_LOOP_SLOT };
 
 export type RouterLaneId = typeof ROUTER_LOOP_SLOT | typeof ROUTER_FLOOR_SLOT;
-
-const MAX_WEIGHT = ORCH_DIAL_DEFAULTS.maxConcentrationPct / 100;
-/** The B.5 derivation `max(0, 1 - (N - 1) * maxWeight)` at N = 2 lanes. */
-const MIN_WEIGHT = Math.max(0, 1 - 1 * MAX_WEIGHT);
-
-function slot(slotId: string, venue: string, candidateId: string): LoopSlot {
-  return {
-    slotId,
-    venue,
-    candidateId,
-    marketKey: candidateId,
-    cls: "N1",
-    targetWeight: 0.5,
-    minWeight: MIN_WEIGHT,
-    maxWeight: MAX_WEIGHT,
-    /* NULL, and load-bearing: this market never passed a levered-loop scan
-       gate (lib/demo/market.ts lists it under `ineligible`), so handing it a
-       screen would leave an evacuation rule permanently breaching and delete
-       the founder's return leg. Same reasoning as the backtest's slot. */
-    screenedAtApy: null,
-    metrics: { funding: false, basis: false },
-  };
-}
-
-const SLOTS: readonly LoopSlot[] = [
-  slot(ROUTER_LOOP_SLOT, "morpho-blue-base", DEMO_MARKET_ID),
-  slot(ROUTER_FLOOR_SLOT, "treasury-ausdc-base", ROUTER_FLOOR_CANDIDATE_ID),
-];
 
 /** One decision the measured replay actually took. */
 export interface RouterMove {
@@ -144,6 +108,25 @@ export interface RouterReplay {
   readonly endWeights: Readonly<Record<RouterLaneId, number>>;
 }
 
+/* THE SAME TWO SLOTS THE FOLD BUILDS, for the rule derivation only: no
+   weight, decision or series is read off them here, and the fold is the one
+   that folds them. `screenedAtApy` stays null for the reason stated there. */
+const DIALS = clampOrchDials(ORCH_DIAL_DEFAULTS);
+const MAX_WEIGHT = clampConcentrationPct(DIALS.maxConcentrationPct, 2) / 100;
+const MIN_WEIGHT = Math.max(0, 1 - 1 * MAX_WEIGHT);
+const SLOTS: LoopSlot[] = [ROUTER_LOOP_SLOT, ROUTER_FLOOR_SLOT].map((slotId) => ({
+  slotId,
+  venue: slotId === ROUTER_LOOP_SLOT ? "morpho-blue-base" : "treasury-ausdc-base",
+  candidateId: slotId,
+  marketKey: slotId,
+  cls: "N1",
+  targetWeight: 0.5,
+  minWeight: MIN_WEIGHT,
+  maxWeight: MAX_WEIGHT,
+  screenedAtApy: null,
+  metrics: { funding: false, basis: false },
+}));
+
 function ruleFor(rules: readonly OrchRule[], slotId: string): OrchRule | null {
   return rules.find((r) => r.ruleId === `${slotId}:upgrade`) ?? null;
 }
@@ -180,92 +163,71 @@ let CACHED: RouterReplay | null = null;
 export function measuredRouterReplay(): RouterReplay {
   if (CACHED !== null) return CACHED;
 
-  const loopSeries = loopPublishedApyByDay();
-  const floorSeries = floorPublishedApyByDay();
-  const rules = demoDeriveAllRouterRules(ORCH_DIAL_DEFAULTS, SLOTS);
+  /* THE ONE FOLD. Same call the dock's run panel makes through the route, on
+     the same default regime, so the two surfaces cannot state two move
+     counts. Everything below READS this run; nothing re-decides it. */
+  const run = foldRouterRun("measured");
+  const dates = run.days;
+  const apyByLane: Record<RouterLaneId, number[]> = {
+    loop: run.laneSeries.carryPublishedApy,
+    floor: run.laneSeries.floorPublishedApy,
+  };
+
+  /* The rule set the fold itself built, re-derived from the same three
+     owners: the cooldown the instrument states and the bar the clock counts
+     against are the rule's own, and re-deriving from `demoDeriveAllRouterRules`
+     is the same pure call rather than a second table. */
+  const rules = demoDeriveAllRouterRules(DIALS, SLOTS, DEMO_SUSTAIN_PINS_DAILY);
   const loopRule = ruleFor(rules, ROUTER_LOOP_SLOT);
-  const floorRule = ruleFor(rules, ROUTER_FLOOR_SLOT);
 
-  const dates: string[] = [];
-  const apyByLane: Record<RouterLaneId, number[]> = { loop: [], floor: [] };
-  for (const day of ROUTER_HISTORY_ALIGNED) {
-    const l = loopSeries.find((p) => p.date === day.date);
-    const f = floorSeries.find((p) => p.date === day.date);
-    // A day either side prices is dropped, never filled: the two owners
-    // decline in the same way `router-history` declines on a gap day.
-    if (!l || !f) continue;
-    dates.push(day.date);
-    apyByLane.loop.push(l.apy);
-    apyByLane.floor.push(f.apy);
-  }
+  const moves: RouterMove[] = run.decisions
+    .filter((d) => d.moved.destSlotId === ROUTER_LOOP_SLOT || d.moved.destSlotId === ROUTER_FLOOR_SLOT)
+    .map((d): RouterMove | null => {
+      const tick = d.scenarioRef.tick;
+      const date = dates[tick];
+      if (date === undefined) return null;
+      const source = d.moved.sourceSlotId === ROUTER_LOOP_SLOT ? ROUTER_LOOP_SLOT : ROUTER_FLOOR_SLOT;
+      const dest: RouterLaneId = source === ROUTER_LOOP_SLOT ? ROUTER_FLOOR_SLOT : ROUTER_LOOP_SLOT;
+      return {
+        date,
+        ms: Date.parse(`${date}T00:00:00.000Z`),
+        source,
+        dest,
+        /* What the band actually let through, off the decision's own record
+           of the source lane's weight either side of the move. The rule's
+           12.5pp dial is not this number and never was. */
+        weightFrac: Number((d.moved.weightBefore - d.moved.weightAfter).toFixed(9)),
+        /* The improvement that fired it, read off the two published series at
+           the tick it fired on: the same difference the rule tested. */
+        improvementApy: (apyByLane[dest][tick] ?? 0) - (apyByLane[source][tick] ?? 0),
+      };
+    })
+    .filter((m): m is RouterMove => m !== null);
 
-  const states: Record<RouterLaneId, OrchRuleState> = {
-    loop: initialRuleState(),
-    floor: initialRuleState(),
-  };
-  const bounds: Record<string, { min: number; max: number }> = {
-    [ROUTER_LOOP_SLOT]: { min: MIN_WEIGHT, max: MAX_WEIGHT },
-    [ROUTER_FLOOR_SLOT]: { min: MIN_WEIGHT, max: MAX_WEIGHT },
-  };
-  let weights: Record<string, number> = { [ROUTER_LOOP_SLOT]: 0.5, [ROUTER_FLOOR_SLOT]: 0.5 };
-  let locks: EdgeLockState = { reverseLockedUntilMs: {} };
-  const moves: RouterMove[] = [];
-  /* The trailing streak per lane, kept beside the state machine rather than
-     read out of it: `advanceRuleState` zeroes `streak` on the pin that fires,
-     and the clock has to keep counting the days the lane is behind. */
+  /* THE CLOCK, and it is a reading rather than a decision. `advanceRuleState`
+     zeroes its own pin count on the pin that fires, so the fold cannot answer
+     "how many consecutive days has this lane been behind by at least the
+     bar"; the two published series can, through the same breach test
+     `evaluate.ts:304-305` performs. */
   const streak: Record<RouterLaneId, number> = { loop: 0, floor: 0 };
-
   for (let i = 0; i < dates.length; i += 1) {
-    const date = dates[i];
-    const nowMs = Date.parse(`${date}T00:00:00.000Z`);
     for (const source of [ROUTER_LOOP_SLOT, ROUTER_FLOOR_SLOT] as RouterLaneId[]) {
       const dest: RouterLaneId = source === ROUTER_LOOP_SLOT ? ROUTER_FLOOR_SLOT : ROUTER_LOOP_SLOT;
-      const rule = source === ROUTER_LOOP_SLOT ? loopRule : floorRule;
-      if (rule === null) continue;
-      const improvement = (apyByLane[dest][i]) - (apyByLane[source][i]);
-      // evaluate.ts:304-305, verbatim.
-      const breaching = Number.isFinite(improvement) && improvement >= rule.threshold;
-      const safeSide = !Number.isFinite(improvement) || improvement <= rule.rearmLevel;
+      const improvement = (apyByLane[dest][i] ?? NaN) - (apyByLane[source][i] ?? NaN);
+      const breaching = Number.isFinite(improvement) && improvement >= DEMO_UPGRADE_THRESHOLD;
       streak[source] = breaching ? streak[source] + 1 : 0;
-
-      const advanced = advanceRuleState(rule, states[source], {
-        ref: { kind: "modeled", seq: i, hash: "", label: `day ${date}` },
-        breaching,
-        safeSide,
-        nowMs,
-      });
-      states[source] = advanced.state;
-      if (!advanced.fired) continue;
-      if (edgeLocked(locks, source, dest, nowMs)) continue;
-      const exit = demoExitProfile();
-      const pbMs = paybackMs(exit, improvement);
-      if (!(pbMs / DAY_MS <= PAYBACK_HORIZON_DAYS)) continue;
-      const sizing = sizeMove({
-        moveWeight: rule.moveWeight,
-        orchestratedTvlUsd: DEMO_ROUTER_BOOK_USD,
-        sourceEquityUsd: (weights[source]) * DEMO_ROUTER_BOOK_USD,
-        destMarginBands: null,
-      });
-      if (sizing.deferred) continue;
-      const before = weights[dest];
-      const next = applyMove(weights, bounds, source, dest, sizing.moveUsd / DEMO_ROUTER_BOOK_USD);
-      const actual = Number(((next[dest]) - before).toFixed(9));
-      if (!(actual > 0)) continue;
-      weights = next;
-      moves.push({ date, ms: nowMs, source, dest, weightFrac: actual, improvementApy: improvement });
-      locks = lockReverseEdge(locks, source, dest, nowMs, rule.cooldownMs, pbMs);
     }
   }
 
   const last = dates.length - 1;
-  const asOfDate = (dates[last] ?? ROUTER_HISTORY_ALIGNED[ROUTER_HISTORY_ALIGNED.length - 1]?.date ?? "");
+  const asOfDate = dates[last] ?? "";
   const asOfMs = Date.parse(`${asOfDate}T00:00:00.000Z`);
-  const gapApy = last >= 0 ? (apyByLane.loop[last]) - (apyByLane.floor[last]) : 0;
+  const gapApy = last >= 0 ? (apyByLane.loop[last] ?? 0) - (apyByLane.floor[last] ?? 0) : 0;
   const behindLane: RouterLaneId | null =
     streak.loop > 0 ? ROUTER_LOOP_SLOT : streak.floor > 0 ? ROUTER_FLOOR_SLOT : null;
   const breachDays = behindLane === null ? 0 : streak[behindLane];
   const hoursBehind = Math.min(DEMO_SUSTAIN_HOURS, breachDays * ROUTER_HOURS_PER_DAILY_PIN);
-  const lastMove = moves.length > 0 ? (moves[moves.length - 1]) : null;
+  const lastMove = moves.length > 0 ? (moves[moves.length - 1] ?? null) : null;
   const cooldownMs = loopRule?.cooldownMs ?? 0;
   const inCooldown = lastMove !== null && asOfMs - lastMove.ms < cooldownMs;
 
@@ -283,8 +245,8 @@ export function measuredRouterReplay(): RouterReplay {
     moves,
     lastMove,
     endWeights: {
-      loop: weights[ROUTER_LOOP_SLOT],
-      floor: weights[ROUTER_FLOOR_SLOT],
+      loop: run.weights[ROUTER_LOOP_SLOT] ?? 0,
+      floor: run.weights[ROUTER_FLOOR_SLOT] ?? 0,
     },
   };
   return CACHED;
