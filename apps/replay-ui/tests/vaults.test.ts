@@ -1,13 +1,13 @@
 /**
  * Vault engine tests: the NAV conversion that bridges the journal to the vault
  * page, the async-deposit fill math, and the single-vault resolution of the
- * published envelope over the standing record.
+ * record published onto the live slug over the standing record.
  *
  * Journals come from `lib/source.ts` (the only sanctioned way into the
  * captures), so these assertions double as a check that the frozen samples
  * still say what the vault pages assume.
  */
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { DEMO_JOURNALS, STRIKE_IDS } from "@/lib/source";
 import {
@@ -24,7 +24,7 @@ import {
   sharesForDeposit,
   strikeRows,
 } from "@/lib/vaults/attested";
-import { HERO_MARKET_ID, HERO_VAULT, automationCountFor, resolveVault } from "@/lib/vaults/hero";
+import { HERO_MARKET_ID, HERO_SLUG, automationCountFor, heroRecord, resolveVault } from "@/lib/vaults/hero";
 import {
   MIN_DEPOSIT_USD,
   STRIKE_ARRIVAL_MS,
@@ -36,8 +36,22 @@ import {
   strikeDueAt,
   type DepositRequest,
 } from "@/lib/vaults/requests";
-import { DEMO_MARKET_ID } from "@/lib/canvas/opportunities";
-import { deriveAutomations, guessLiqLtv, riskGrade } from "@/lib/vaults/store";
+import { DEMO_MARKET_ID, HERO_SEED_LEVERAGE } from "@/lib/demo/market";
+import { DEMO_SCOPE } from "@/lib/demo-scope";
+import { heroNavUsd } from "@/lib/vaults/rows";
+import { SEED_SLUGS, SEED_VAULTS } from "@/lib/vaults/seeds";
+import {
+  deriveAutomations,
+  guessLiqLtv,
+  loadPositions,
+  loadUserVaults,
+  loadWithdrawals,
+  publishVault,
+  VAULTS_EVENT,
+  vaultStage,
+  withdrawPosition,
+  addPosition,
+} from "@/lib/vaults/store";
 
 const settled = DEMO_JOURNALS[0]!.journal;
 const sabotage = DEMO_JOURNALS[1]!.journal;
@@ -218,7 +232,7 @@ describe("fill math", () => {
 describe("request lifecycle", () => {
   const pending: DepositRequest = {
     id: "req_1",
-    vaultSlug: HERO_VAULT.slug,
+    vaultSlug: HERO_SLUG,
     amountUsd: 1000,
     requestedAt: new Date(1_700_000_000_000).toISOString(),
     status: "pending",
@@ -261,63 +275,191 @@ describe("request lifecycle", () => {
 /* ──────────────────────────────────────────────────────────── the vault ── */
 
 describe("the vault", () => {
-  it("advertises the demo's own $500 of capital, not a fake TVL", () => {
-    expect(HERO_VAULT.baseTvlUsd).toBe(500);
-    expect(HERO_VAULT.baseTvlUsd).toBe(attestedNavUsd(settled));
+  it("advertises the demo's own $500 of capital, attested, not a typed TVL", () => {
+    const hero = heroRecord();
+    expect(hero.baseTvlUsd).toBe(500);
+    expect(hero.baseTvlUsd).toBe(attestedNavUsd(settled));
+    expect(hero.baseTvlUsd).toBe(heroNavUsd());
   });
 
   it("carries the operator quorum as an extra instrument", () => {
     // Dynamic leverage + Auto-compound, plus the quorum that attests the NAV.
-    expect(automationCountFor(HERO_VAULT)).toBe(3);
+    expect(automationCountFor(heroRecord())).toBe(3);
   });
 
   it("pins the same market the canvas catalog offers", () => {
     expect(HERO_MARKET_ID).toBe(DEMO_MARKET_ID);
   });
 
+  it("prices through the live owners at the seed leverage, with the fee inside", () => {
+    const hero = heroRecord();
+    expect(hero.appliedLeverage).toBe(HERO_SEED_LEVERAGE);
+    expect(Math.abs(hero.modeledApy - 0.043)).toBeLessThan(0.0005);
+    expect(hero.stage).toBe("attested");
+    expect(vaultStage(hero)).toBe("attested");
+    expect(hero.register).toBe("sample");
+    expect(hero.modules).toEqual(["Liquidity source", "Dynamic leverage", "Auto-compound"]);
+    expect(hero.liqLtv).toBe(0.915);
+    expect(hero.automations?.hedge).toBeNull();
+    expect(hero.automations?.leverage?.targetLeverage).toBe(HERO_SEED_LEVERAGE);
+    expect(hero.automations?.compound?.cadenceHours).toBe(24);
+  });
+
+  it("types no dead figure", () => {
+    const text = JSON.stringify(heroRecord());
+    expect(text).not.toMatch(/5\.0x|1\.08x|0\.25%|\$50M|"modeledApy":0\.08\b|"thresholdUsd":25\b/);
+    expect(text).not.toContain("\u2014");
+  });
+
+  it("leads the seeds, once, with seven coming-soon samples behind it", () => {
+    expect(SEED_VAULTS).toHaveLength(8);
+    expect(SEED_VAULTS[0]!.slug).toBe("verifiable-usde-loop");
+    expect(SEED_VAULTS.filter((v) => v.stage === "attested")).toHaveLength(1);
+    expect(SEED_VAULTS.filter((v) => v.stage !== "attested")).toHaveLength(7);
+    expect(SEED_SLUGS.has("btc-carry-collector")).toBe(false);
+    expect(SEED_SLUGS.has(HERO_SLUG)).toBe(true);
+  });
+
   it("resolves to the standing record when nothing has been published", () => {
-    // Node environment: no localStorage, so the envelope is always absent —
-    // the same path the server render and the first paint take.
-    expect(resolveVault()).toEqual(HERO_VAULT);
+    // Node environment: no localStorage, so the store is always empty; the
+    // same path the server render and the first paint take.
+    expect(resolveVault()).toEqual(heroRecord());
   });
 });
 
-describe("published envelope", () => {
+/* ───────────────────────────────────────── publish onto the live record ── */
+
+/**
+ * A window with a Map-backed localStorage, so the store's persistence path
+ * runs as it does in a browser. Installed for this block only.
+ */
+function installBrowserShim(): () => void {
+  const bag = new Map<string, string>();
+  const localStorage = {
+    getItem: (k: string) => bag.get(k) ?? null,
+    setItem: (k: string, v: string) => void bag.set(k, String(v)),
+    removeItem: (k: string) => void bag.delete(k),
+    clear: () => bag.clear(),
+    key: (i: number) => [...bag.keys()][i] ?? null,
+    get length() {
+      return bag.size;
+    },
+  };
+  const win = Object.assign(new EventTarget(), { localStorage, location: { hostname: "localhost" } });
+  const g = globalThis as unknown as Record<string, unknown>;
+  g.window = win;
+  g.localStorage = localStorage;
+  return () => {
+    delete g.window;
+    delete g.localStorage;
+  };
+}
+
+describe("publish onto the live record", () => {
+  let restore: () => void;
+  beforeAll(() => {
+    restore = installBrowserShim();
+  });
+  afterAll(() => restore());
+
   const draft = {
+    name: "My USDe Loop",
+    strategy: "loop" as const,
+    strategyLabel: "Leveraged loop",
+    summary: "Composed on the canvas.",
     venue: "Morpho Blue · Base",
     market: "USDe/USDC",
     modules: ["Liquidity source", "Dynamic leverage", "Auto-compound"],
+    moduleLines: [],
     params: [
-      { label: "Target leverage", value: "4.00x" },
+      { label: "Applied leverage", value: "3.25x" },
       { label: "Compound cadence", value: "6h" },
     ],
+    modeledApy: 0.048,
+    capacityUsd: 10_000_000,
+    capacityBindingLabel: "modeled",
+    liqLtv: 0.915,
+    appliedLeverage: 3.25,
   };
+
+  it("writes the composition onto the live slug rather than minting one", () => {
+    const events: string[] = [];
+    (globalThis as unknown as { window: EventTarget }).window.addEventListener(VAULTS_EVENT, () =>
+      events.push(VAULTS_EVENT),
+    );
+    const rec = publishVault(draft, SEED_SLUGS);
+    expect(rec).not.toBeNull();
+    expect(rec!.slug).toBe(DEMO_SCOPE.liveSlug);
+    expect(rec!.slug).toBe(HERO_SLUG);
+    expect(rec!.mine).toBe(true);
+    expect(rec!.stage).toBe("attested");
+    expect(rec!.register).toBe("published");
+    expect(rec!.appliedLeverage).toBe(3.25);
+    expect(rec!.baseTvlUsd).toBe(heroNavUsd());
+    expect(rec!.automations?.leverage?.targetLeverage).toBe(3.25);
+    expect(rec!.automations?.compound?.cadenceHours).toBe(6);
+    expect(events.length).toBeGreaterThan(0);
+    expect(loadUserVaults().map((v) => v.slug)).toEqual([HERO_SLUG]);
+  });
+
+  it("resolves to the published name afterwards", () => {
+    expect(resolveVault().name).toBe("My USDe Loop");
+    expect(resolveVault().stage).toBe("attested");
+  });
+
+  it("replaces the record on a second publish instead of adding one", () => {
+    publishVault({ ...draft, name: "Renamed" }, SEED_SLUGS);
+    expect(loadUserVaults()).toHaveLength(1);
+    expect(resolveVault().name).toBe("Renamed");
+  });
 
   it("installs an instrument only for a module the canvas actually composed", () => {
     const a = deriveAutomations(draft);
-    expect(a.leverage?.targetLeverage).toBe(4);
+    expect(a.leverage?.targetLeverage).toBe(3.25);
     expect(a.compound?.cadenceHours).toBe(6);
     expect(a.hedge).toBeNull();
-  });
-
-  it("derives the envelope from the market's own liquidation LTV", () => {
     expect(guessLiqLtv("USDe/USDC")).toBe(0.915);
-    const a = deriveAutomations(draft);
-    expect(a.leverage?.liqLtv).toBe(0.915);
-    // Zones are ordered emergency < delever < target < leverUp.
     const l = a.leverage!;
     expect(l.emergencyHf).toBeLessThan(l.deleverHf);
     expect(l.deleverHf).toBeLessThan(l.targetHf);
     expect(l.targetHf).toBeLessThan(l.leverUpHf);
   });
 
-  it("grades risk off the published envelope, never a restated adjective", () => {
-    const graded = riskGrade(HERO_VAULT);
-    expect(graded.rows.map((r) => r.label)).toEqual([
-      "Distance to liquidation",
-      "Auto-deleverage begins",
+  it("withdraws FIFO: reduces the oldest position, then deletes it", () => {
+    const first = addPosition({
+      vaultSlug: HERO_SLUG,
+      vaultName: "Renamed",
+      amountUsd: 1000,
+      shareValueAtDeposit: 1,
+      depositedAt: new Date(1_700_000_000_000).toISOString(),
+    });
+    const second = addPosition({
+      vaultSlug: HERO_SLUG,
+      vaultName: "Renamed",
+      amountUsd: 250,
+      shareValueAtDeposit: 1,
+      depositedAt: new Date(1_700_000_001_000).toISOString(),
+    });
+    expect(first && second).toBeTruthy();
+
+    const afterPartial = withdrawPosition(HERO_SLUG, 400);
+    expect(afterPartial).not.toBeNull();
+    expect(afterPartial!.map((p) => [p.id, p.amountUsd])).toEqual([
+      [second!.id, 250],
+      [first!.id, 600],
     ]);
-    expect(graded.sentence).toContain("USDe/USDC");
-    expect(graded.sentence).toContain(HERO_VAULT.automations!.leverage!.deleverHf.toFixed(2));
+    expect(loadPositions()).toEqual(afterPartial);
+
+    const afterMax = withdrawPosition(HERO_SLUG, 850);
+    expect(afterMax).toEqual([]);
+    expect(loadPositions()).toEqual([]);
+    expect(loadWithdrawals().map((w) => w.amountUsd)).toEqual([850, 400]);
+    expect(loadWithdrawals()[0]!.vaultSlug).toBe(HERO_SLUG);
+  });
+
+  it("refuses a withdrawal with nothing to redeem or a bad amount", () => {
+    expect(withdrawPosition(HERO_SLUG, 10)).toBeNull();
+    expect(withdrawPosition(HERO_SLUG, 0)).toBeNull();
+    expect(withdrawPosition(HERO_SLUG, Number.NaN)).toBeNull();
   });
 });

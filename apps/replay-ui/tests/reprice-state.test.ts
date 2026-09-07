@@ -4,6 +4,8 @@ import {
   classifyRepriceFailure,
   invalidatesQuote,
   laneDisplayApy,
+  laneQuoteState,
+  quoteFailureLabel,
 } from "@/lib/canvas/reprice-state";
 
 describe("classifyRepriceFailure", () => {
@@ -26,12 +28,31 @@ describe("classifyRepriceFailure", () => {
   });
 });
 
+describe("laneQuoteState", () => {
+  it("reads a standing mock quote as priced, never as the failure register", () => {
+    const state = laneQuoteState({ repricing: false, reprice: { ok: true } });
+    expect(state).toBe("priced");
+    expect(state).not.toBe("failed");
+    expect(state).not.toBe(quoteFailureLabel("failed"));
+  });
+
+  it("lets an in-flight retry outrank a prior failure", () => {
+    expect(laneQuoteState({ repricing: true, reprice: { ok: false, kind: "failed" } })).toBe("quoting");
+  });
+
+  it("names the definitive failure kinds and the idle state", () => {
+    expect(laneQuoteState({ repricing: false, reprice: null })).toBe("idle");
+    expect(laneQuoteState({ repricing: false, reprice: { ok: false, kind: "gone" } })).toBe("gone");
+    expect(laneQuoteState({ repricing: false, reprice: { ok: false } })).toBe("unreachable");
+  });
+});
+
 describe("invalidatesQuote", () => {
-  it("holds the quote only for the cadence-only module", () => {
-    expect(invalidatesQuote("auto-compound")).toBe(false);
+  it("is derived from the priced fields: every module that reaches the quote invalidates it", () => {
     expect(invalidatesQuote("liquidity-source")).toBe(true);
     expect(invalidatesQuote("safety-buffer")).toBe(true);
     expect(invalidatesQuote("hedge")).toBe(true);
+    expect(invalidatesQuote("auto-compound")).toBe(true);
   });
 });
 
