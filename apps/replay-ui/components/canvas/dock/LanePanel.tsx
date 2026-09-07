@@ -1,11 +1,16 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/non-nullable-type-assertion-style, @typescript-eslint/prefer-nullish-coalescing, react-hooks/exhaustive-deps --
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/non-nullable-type-assertion-style, react-hooks/exhaustive-deps --
  * Kit-verbatim file, ported from build.priime.finance eb6d33a. The rules
  * above are the kit's own idiom (untyped fetch/localStorage JSON, loose
  * equality on sentinel values, the hook dependency lists it ships with);
  * not rewriting kit logic to satisfy lint, per the integration's own
- * directive. */
+ * directive.
+ *
+ * `@typescript-eslint/prefer-nullish-coalescing` LEFT THIS LIST when WP-2
+ * rewrote `loadRun`'s error path: the `j.error || "…"` that needed it is
+ * gone, and eslint reports an unused directive as a warning, which this
+ * package's gate counts. It returns the moment a kit idiom needs it again. */
 /**
  * LanePanel (IT4_DOCK_SPEC §5, mockup register 2026-08-20) — the dock's
  * PORTFOLIO mode, plus the shared lane view type and allocation editor.
@@ -49,6 +54,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { CSSProperties } from "react";
 import type { LoopGraph, LoopId, ParamValue, PortfolioGraph } from "@/lib/canvas/types";
 import { laneFamily, nodeFor } from "@/lib/canvas/graph-ops";
 import { pricingParamsFor } from "@/lib/canvas/pricing-params";
@@ -965,16 +971,24 @@ function SustainMeter({
   const cells = Math.max(1, Math.min(24, of));
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-      <span style={{ display: "inline-flex", gap: 1 }}>
+      {/* THE ONE INSTRUMENT THAT IS THE FOUNDER'S RULE, so a pin landing
+          mid-replay crossfades the ONE cell that changed rather than the
+          whole meter hard-swapping. The stagger is capped at eight cells:
+          past that the delay would outrun the beat it belongs to. The colour
+          is set by the background value, so reduced motion simply snaps. */}
+      <span className="rk-sustain" style={{ display: "inline-flex", gap: 1 }}>
         {Array.from({ length: cells }, (_, i) => (
           <i
             key={i}
-            style={{
-              width: 3,
-              height: 8,
-              borderRadius: 1,
-              background: i < filled ? HW.lit : HW.rail,
-            }}
+            style={
+              {
+                width: 3,
+                height: 8,
+                borderRadius: 1,
+                background: i < filled ? HW.lit : HW.rail,
+                "--i": i,
+              } as CSSProperties
+            }
           />
         ))}
       </span>
@@ -1053,6 +1067,12 @@ interface RouterRun {
   firings: number;
 }
 
+/** THE ONE STRING A READER MAY SEE WHEN THE RUN DOES NOT ARRIVE. Owned here
+ *  because this is the surface that renders it; the route's own authored
+ *  `error` is the only other sentence allowed through, and a parser's message
+ *  is never one of the two. */
+const RUN_ERROR_FALLBACK = "the router run did not answer";
+
 type RunPhase = "idle" | "loading" | "ready" | "error";
 
 interface RunState {
@@ -1111,13 +1131,31 @@ async function loadRun(regime: RegimeId) {
        route already owns that number. Passing it here would be a second
        spelling of `PAYBACK_HORIZON_DAYS`. */
     const res = await fetch(`/api/canvas/orchestrate?regime=${encodeURIComponent(regime)}`);
-    const j = (await res.json()) as { ok?: boolean; error?: string } & RouterRun;
-    if (!res.ok || j.ok !== true) throw new Error(j.error || "the router run did not answer");
+    /* THE STATUS IS READ BEFORE THE BODY, and the parse happens inside its own
+       try. Reading `res.json()` first meant that on the route's absence, where
+       Next answers a 404 carrying an HTML document, the parser threw and the
+       panel rendered a JavaScript SyntaxError to the user in the same mono, at
+       the same size and at the same offset as the loading line: a reader could
+       not tell working from broken. Every non-ok and every non-JSON answer now
+       collapses to ONE owned string, and the only alternative a reader can see
+       is the route's own authored `error`, which is a sentence this product
+       wrote. */
+    let body: ({ ok?: boolean; error?: string } & RouterRun) | null = null;
+    try {
+      body = (await res.json()) as { ok?: boolean; error?: string } & RouterRun;
+    } catch {
+      body = null;
+    }
+    const routeError = typeof body?.error === "string" ? body.error : "";
+    if (!res.ok || body?.ok !== true) {
+      throw new Error(routeError.length > 0 ? routeError : RUN_ERROR_FALLBACK);
+    }
+    const j = body;
     runCache.set(regime, j);
     if (runState.regime === regime) emitRun({ regime, run: j, phase: "ready", error: null });
   } catch (e) {
     if (runState.regime === regime) {
-      emitRun({ regime, run: null, phase: "error", error: e instanceof Error ? e.message : "the router run did not answer" });
+      emitRun({ regime, run: null, phase: "error", error: e instanceof Error ? e.message : RUN_ERROR_FALLBACK });
     }
   } finally {
     if (runInFlight === regime) runInFlight = null;
@@ -1222,10 +1260,16 @@ function LaneBands({
   run,
   tick,
   onScrub,
+  hoverId,
+  onHover,
 }: {
   run: RouterRun;
   tick: number;
   onScrub: (t: number) => void;
+  /** The decision under the hand, from EITHER end of the binding: a notch on
+   *  the chart or a marker in the list below it. Ink only, never geometry. */
+  hoverId: string | null;
+  onHover: (id: string | null) => void;
 }) {
   const series = runSeries(run);
   const blended = useMemo(() => blendedSeries(run), [run]);
@@ -1358,26 +1402,56 @@ function LaneBands({
             heavier value. A colour never grades anything here. */}
         {carry ? (
           <>
-            <path d={areaPath(g, carry.apy)} fill="url(#rk-fill-carry-up)" clipPath="url(#rk-band-up)" />
-            <path d={areaPath(g, carry.apy)} fill="url(#rk-fill-carry-dn)" clipPath="url(#rk-band-dn)" />
+            <path className="rk-band-area" d={areaPath(g, carry.apy)} fill="url(#rk-fill-carry-up)" clipPath="url(#rk-band-up)" />
+            <path className="rk-band-area" d={areaPath(g, carry.apy)} fill="url(#rk-fill-carry-dn)" clipPath="url(#rk-band-dn)" />
           </>
         ) : null}
         {floor ? (
           <>
-            <path d={areaPath(g, floor.apy)} fill="url(#rk-fill-floor-up)" clipPath="url(#rk-band-up)" />
-            <path d={areaPath(g, floor.apy)} fill="url(#rk-fill-floor-dn)" clipPath="url(#rk-band-dn)" />
+            <path className="rk-band-area" d={areaPath(g, floor.apy)} fill="url(#rk-fill-floor-up)" clipPath="url(#rk-band-up)" />
+            <path className="rk-band-area" d={areaPath(g, floor.apy)} fill="url(#rk-fill-floor-dn)" clipPath="url(#rk-band-dn)" />
           </>
         ) : null}
-        {carry ? (
-          <path d={linePath(g, carry.apy)} fill="none" stroke="var(--bc-accent-text)" strokeWidth={1.5} />
-        ) : null}
+        {/* THE DRAW-IN, IN THE ORDER THE ARGUMENT IS MADE: the floor arrives
+            first, because it is the thing the loop has to beat, then the loop,
+            then the vault the two compose into. `pathLength="1"` normalises
+            the three, whose real lengths differ by more than 2x, so one
+            dasharray serves all of them. */}
         {floor ? (
-          <path d={linePath(g, floor.apy)} fill="none" stroke="var(--bc-muted)" strokeWidth={1.5} />
+          <path
+            className="rk-band-line"
+            pathLength="1"
+            style={{ animationDelay: "0s" }}
+            d={linePath(g, floor.apy)}
+            fill="none"
+            stroke="var(--bc-muted)"
+            strokeWidth={1.5}
+          />
+        ) : null}
+        {carry ? (
+          <path
+            className="rk-band-line"
+            pathLength="1"
+            style={{ animationDelay: ".07s" }}
+            d={linePath(g, carry.apy)}
+            fill="none"
+            stroke="var(--bc-accent-text)"
+            strokeWidth={1.5}
+          />
         ) : null}
 
         {/* THE VAULT. Heavier, and it rides above the floor line at all times
             in the base case, which is what makes the floor a floor. */}
-        <path d={linePath(g, blended)} fill="none" stroke="var(--bc-ink)" strokeWidth={2.4} strokeLinejoin="round" />
+        <path
+          className="rk-band-line"
+          pathLength="1"
+          style={{ animationDelay: ".14s" }}
+          d={linePath(g, blended)}
+          fill="none"
+          stroke="var(--bc-ink)"
+          strokeWidth={2.4}
+          strokeLinejoin="round"
+        />
 
         {/* F.4 — the notch and the payback bracket. */}
         {notches.map(({ d, dest, t, cost }) => {
@@ -1388,10 +1462,28 @@ function LaneBands({
           const pb = d.cost.paybackDays;
           const bracketEnd = upgrade && pb !== null ? g.xOf(Math.min(T - 1, t + pb)) : null;
           const by = CHART_H - PAD.b + 6;
+          const lit = hoverId === d.decisionId;
+          const w = lit ? 2.2 : 1.4;
           return (
-            <g key={d.decisionId}>
-              <line x1={x} x2={x} y1={top} y2={bottom} stroke="var(--bc-ink)" strokeWidth={1.4} />
-              <line x1={x - 3} x2={x + 3} y1={bottom} y2={bottom} stroke="var(--bc-ink)" strokeWidth={1.4} />
+            <g
+              key={d.decisionId}
+              className="rk-band-mark rk-notch"
+              data-decision={d.decisionId}
+              onMouseEnter={() => onHover(d.decisionId)}
+              onMouseLeave={() => onHover(null)}
+            >
+              {/* THE HIT AREA, transparent and 10px wide, spanning the plot.
+                  A 1.4px line is not a target a hand can find, and widening
+                  the ink to make it one would light the notch at rest. */}
+              <rect
+                x={x - 5}
+                y={PAD.t}
+                width={10}
+                height={Math.max(0, CHART_H - PAD.b - PAD.t)}
+                fill="transparent"
+              />
+              <line x1={x} x2={x} y1={top} y2={bottom} stroke="var(--bc-ink)" strokeWidth={w} />
+              <line x1={x - 3} x2={x + 3} y1={bottom} y2={bottom} stroke="var(--bc-ink)" strokeWidth={w} />
               {bracketEnd !== null ? (
                 <>
                   <line x1={x} x2={bracketEnd} y1={by} y2={by} stroke="var(--bc-ink)" strokeWidth={1} />
@@ -1408,7 +1500,7 @@ function LaneBands({
                     y={by - 4}
                     textAnchor="middle"
                     fontSize={8}
-                    fill="var(--bc-muted)"
+                    fill={lit ? "var(--bc-ink)" : "var(--bc-muted)"}
                     fontFamily="var(--fm)"
                   >
                     {`${Math.round(pb as number)} days to pay back`}
@@ -1428,7 +1520,7 @@ function LaneBands({
             const x = g.xOf(r.tickIndex);
             const by = CHART_H - PAD.b + 6;
             return (
-              <g key={`${r.ruleId}:${r.tickIndex}`}>
+              <g className="rk-band-mark" key={`${r.ruleId}:${r.tickIndex}`}>
                 <line x1={x} x2={CHART_W - PAD.r} y1={by} y2={by} stroke="var(--bc-ink)" strokeWidth={1} strokeDasharray="2 2" />
                 <line x1={x} x2={x} y1={by - 3} y2={by + 3} stroke="var(--bc-ink)" strokeWidth={1} />
               </g>
@@ -1531,42 +1623,68 @@ function BandKey({
 
 // ── The regime switcher ───────────────────────────────────────────────────
 
-function RegimeSwitcher({ regime }: { regime: RegimeId }) {
+/**
+ * THE DOCK ALREADY SHIPS A CAPSULE FOR EXACTLY THIS JOB, so this control is
+ * that one and not a third invention: `.mt-filters` with `.hm-key` and its
+ * LED is what a reader has already learned one panel away, picking one and
+ * watching the panel below re-render. It also carries the press for free
+ * (`hm.css:191`, reduced-motion guarded there), which the inline capsule this
+ * replaced did not: a regime chip was the only capsule on the canvas that
+ * returned nothing under the hand.
+ *
+ * TWO COLUMNS, NOT A WRAPPING ROW. At the dock's measured 327px interior four
+ * keys in a flex row clear by about three pixels, so one extra character in
+ * one label widows a key. A 2x2 grid cannot widow.
+ */
+function RegimeSwitcher({ regime, degraded }: { regime: RegimeId; degraded: boolean }) {
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-        {REGIME_IDS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setRouterRegime(id)}
-            style={{
-              fontFamily: "var(--fm)",
-              fontSize: 9,
-              letterSpacing: ".04em",
-              padding: "3px 7px",
-              borderRadius: 20,
-              cursor: "pointer",
-              border: `1px solid ${id === regime ? "var(--bc-accent-edge)" : "var(--bc-line)"}`,
-              background: id === regime ? "var(--bc-accent-wash)" : "transparent",
-              color: id === regime ? "var(--bc-accent-text)" : "var(--bc-muted)",
-            }}
-          >
-            {REGIME_LABEL[id]}
-          </button>
-        ))}
-      </div>
       <div
-        style={{
-          marginTop: 6,
-          fontFamily: "var(--fm)",
-          fontSize: 9,
-          lineHeight: 1.5,
-          color: "var(--bc-muted)",
-        }}
+        className="mt-filters"
+        style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 4 }}
       >
-        {REGIME_MECHANISM[regime]}
+        {REGIME_IDS.map((id) => {
+          const on = id === regime;
+          return (
+            <div
+              key={id}
+              className={"hm-key" + (on ? " lit" : "")}
+              role="button"
+              tabIndex={0}
+              /* Dimmed while the run is broken: an unpressed key that cannot
+                 produce a run should not read as available. The pressed one
+                 keeps its ink, because it names what failed. */
+              style={degraded && !on ? { opacity: 0.45 } : undefined}
+              onClick={() => setRouterRegime(id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setRouterRegime(id);
+                }
+              }}
+            >
+              <span className="hm-led" />
+              {REGIME_LABEL[id]}
+            </div>
+          );
+        })}
       </div>
+      {/* SUPPRESSED WHILE THE RUN IS BROKEN. The sentence describes a
+          scenario that did not run, and printing it under a failed fetch
+          states a transform nothing performed. */}
+      {degraded ? null : (
+        <div
+          style={{
+            marginTop: 6,
+            fontFamily: "var(--fm)",
+            fontSize: 9,
+            lineHeight: 1.5,
+            color: "var(--bc-muted)",
+          }}
+        >
+          {REGIME_MECHANISM[regime]}
+        </div>
+      )}
     </div>
   );
 }
@@ -2041,7 +2159,7 @@ export function PortfolioVariant({
           ))}
           <div className="rt-floor">
             Every rule: at most {table.maxMovePct.toFixed(0)}% of the book per move · one failing
-            scan never moves capital · an emergency pauses the loop, bypassing cooldowns.{" "}
+            observation never moves capital · an emergency pauses the loop, bypassing cooldowns.{" "}
             {ORCH_HONESTY_LINE}
           </div>
         </div>
@@ -2056,6 +2174,45 @@ export function PortfolioVariant({
     </div>
   );
 }
+
+/**
+ * THE RUN PANEL'S OWN MOTION, AND ITS OWN REDUCED-MOTION FALLBACK.
+ *
+ * MANDATORY, not belt and braces: `build.css:2710` animates `.dock-scroll > *`
+ * with a DIRECT-CHILD combinator and its fallback at `:2806` names the same
+ * selector, and `RouterRunSection` is nested two levels deeper than that. So
+ * neither the arrival nor its guard reaches anything below, and an animation
+ * declared here without a local `prefers-reduced-motion` block would be the
+ * exact failure `build.css:2799-2803` warns about: a `both` fill plus a delay
+ * holds the element at opacity 0 under a shortened but still delayed
+ * animation.
+ *
+ * Declared as a plain `<style>` because this package does not own `build.css`.
+ * Duplicate identical rules are inert, so mounting twice costs nothing.
+ */
+const RUN_STYLE = `
+@keyframes rkdraw { to { stroke-dashoffset: 0 } }
+@keyframes rkfade { to { opacity: 1 } }
+@keyframes rktrackland {
+  0% { box-shadow: 0 0 0 0 rgba(77,139,255,.5) }
+  100% { box-shadow: 0 0 0 7px rgba(77,139,255,0) }
+}
+.rk-band-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: rkdraw .62s cubic-bezier(.4,0,.2,1) both }
+.rk-band-area { opacity: 0; animation: rkfade .3s ease-out .5s forwards }
+.rk-band-mark { opacity: 0; animation: rkfade .28s ease-out .68s forwards }
+.rk-notch line, .rk-notch text { transition: stroke-width 120ms ease-out, fill 120ms ease-out }
+.rk-runstate { animation: dockswapin 160ms cubic-bezier(.4,0,.2,1) 40ms both }
+.rk-sustain i { transition: background 180ms ease-out; transition-delay: calc(min(var(--i,0),8) * 28ms) }
+.rk-track--moved { animation: rktrackland 420ms cubic-bezier(.3,1.2,.4,1) 1 }
+@media (prefers-reduced-motion: reduce) {
+  .rk-band-line { stroke-dasharray: none; stroke-dashoffset: 0; animation: none }
+  .rk-band-area, .rk-band-mark { opacity: 1; animation: none }
+  .rk-notch line, .rk-notch text { transition: none }
+  .rk-runstate { animation: none; opacity: 1; transform: none }
+  .rk-sustain i { transition: none; transition-delay: 0s }
+  .rk-track--moved { animation: none }
+}
+`;
 
 /**
  * THE ROUTER, RUN (spec G, beats 1:40 to 5:00).
@@ -2074,6 +2231,15 @@ function RouterRunSection() {
   const { regime, run, phase, error } = useRouterRun();
   const [tick, setTick] = useState(0);
   const [pinned, setPinned] = useState<string | null>(null);
+  /* ONE hoverId, set from either end of the binding and cleared from either.
+     Ink only: no fill, no scale, no glow, because a notch 200px away is not
+     under the hand. */
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  /* THE LANE WHOSE TRACK JUST RECEIVED WEIGHT, and only on the tick
+     TRANSITION that landed it. Never on mount and never on a scrub landing
+     where the weight was already there. */
+  const [landed, setLanded] = useState<string | null>(null);
+  const prevTick = useRef<number | null>(null);
   const T = run?.laneSeries.carryPublishedApy.length ?? 0;
   const at = Math.max(0, Math.min(Math.max(0, T - 1), tick));
 
@@ -2096,6 +2262,31 @@ function RouterRunSection() {
     if (shown) for (const [slotId, ref] of Object.entries(shown.observed)) m[slotId] = unitFromRef(ref);
     return m;
   }, [shown]);
+
+  /* THE PLAYHEAD COMES HOME WITH THE REDRAW. Without it a regime change
+     leaves the scrub where it was and indexes a series of a different length,
+     which the `min(max(0, T - 1), tick)` clamp hides rather than fixes. */
+  useEffect(() => {
+    setTick(0);
+    setPinned(null);
+    setHoverId(null);
+    setLanded(null);
+    prevTick.current = null;
+  }, [regime]);
+
+  /* THE RELOCATION BEAT, on the DESTINATION only: blooming both ends would
+     claim two events where the mechanism performed one. Blue, not green: a
+     protection mechanism firing is not a confirmation. */
+  useEffect(() => {
+    if (!run) return;
+    const from = prevTick.current;
+    prevTick.current = at;
+    if (from === null || from === at) return;
+    const d = run.decisions.find(
+      (x) => x.scenarioRef.tick === at && x.moved.destSlotId !== PAUSE_DESTINATION,
+    );
+    setLanded(d ? d.moved.destSlotId : null);
+  }, [run, at]);
 
   const budget = run?.budgetByTick[at] ?? null;
 
@@ -2127,35 +2318,71 @@ function RouterRunSection() {
 
   return (
     <div style={{ marginTop: 18, borderTop: "1px solid var(--bc-line)", paddingTop: 12 }}>
-      <div
-        style={{
-          fontFamily: "var(--fm)",
-          fontSize: 9,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "var(--bc-faint)",
-          marginBottom: 6,
-        }}
-      >
-        The router, run
-      </div>
+      <style>{RUN_STYLE}</style>
+      {/* The head the three siblings in this dock already render: Fraunces
+          italic, sentence case, no tracking. The letterspaced-uppercase
+          register it replaced was an inline style the retiring block in
+          build.css could not reach. */}
+      <div className="mt-sec-h">The router, run</div>
 
-      <RegimeSwitcher regime={regime} />
+      <RegimeSwitcher regime={regime} degraded={phase === "error"} />
 
       {phase === "loading" ? (
-        <div style={{ marginTop: 10, fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--bc-muted)" }}>
+        <div
+          className="rk-runstate"
+          style={{ marginTop: 10, fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--bc-faint)" }}
+        >
           folding the scenario through the evaluator
         </div>
       ) : null}
+      {/* THE TWO REGISTERS ARE SEPARATED, and the slot is held. Waiting and
+          broken used to print in the same ink at the same offset, and the
+          panel collapsed from about 300px to 60px on failure, so the dock
+          jumped under the reader at the moment it had the least to say. */}
       {phase === "error" ? (
-        <div style={{ marginTop: 10, fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--bc-muted)" }}>
-          {error}
+        <div
+          className="rk-runstate"
+          style={{
+            marginTop: 10,
+            minHeight: 44,
+            padding: 10,
+            border: "1px dashed var(--bc-line)",
+            borderRadius: 4,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            fontFamily: "var(--fm)",
+            fontSize: 9.5,
+            color: "var(--bc-warn)",
+          }}
+        >
+          <span>{error}</span>
+          <div
+            className="hm-key"
+            role="button"
+            tabIndex={0}
+            style={{ flex: "0 0 auto", height: 26, padding: "0 10px", fontSize: 7.5 }}
+            onClick={() => setRouterRegime(regime)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setRouterRegime(regime);
+              }
+            }}
+          >
+            <span className="hm-led" />
+            Retry
+          </div>
         </div>
       ) : null}
 
       {run ? (
         <>
-          <div style={{ marginTop: 10 }}>
+          {/* KEYED ON THE REGIME so the whole chart remounts and the draw-in
+              replays. Without it three lines, N markers, both tracks and the
+              receipt hard-swap with no transition at all. */}
+          <div key={regime} style={{ marginTop: 10 }}>
             <LaneBands
               run={run}
               tick={at}
@@ -2163,6 +2390,8 @@ function RouterRunSection() {
                 setTick(t);
                 setPinned(null);
               }}
+              hoverId={hoverId}
+              onHover={setHoverId}
             />
           </div>
 
@@ -2181,7 +2410,10 @@ function RouterRunSection() {
                  the only slot that can be waiting for one. */
               const inFlight = l.slotId === waitingSlot ? inFlightTotal : 0;
               return (
-                <div key={l.slotId} className="rk-orchrow">
+                <div
+                  key={l.slotId}
+                  className={"rk-orchrow" + (landed === l.slotId ? " rk-track--moved" : "")}
+                >
                   <span>{l.book}</span>
                   {/* NO FLOOR TICK: the route publishes no band per slot, and
                       re-deriving B.5's formula here to draw one would be a
@@ -2223,28 +2455,45 @@ function RouterRunSection() {
               receipt, which is beat 4:30. */}
           {run.decisions.length > 0 ? (
             <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {run.decisions.map((d) => (
-                <button
-                  key={d.decisionId}
-                  type="button"
-                  onClick={() => {
-                    setPinned(d.decisionId);
-                    setTick(d.scenarioRef.tick);
-                  }}
-                  style={{
-                    fontFamily: "var(--fm)",
-                    fontSize: 9,
-                    padding: "2px 6px",
-                    borderRadius: 4,
-                    cursor: "pointer",
-                    border: `1px solid ${shown?.decisionId === d.decisionId ? "var(--bc-accent-edge)" : "var(--bc-line)"}`,
-                    background: "transparent",
-                    color: "var(--bc-muted)",
-                  }}
-                >
-                  {`tick ${d.scenarioRef.tick} · ${d.rule.metric}`}
-                </button>
-              ))}
+              {run.decisions.map((d) => {
+                const lit = hoverId === d.decisionId;
+                return (
+                  <button
+                    key={d.decisionId}
+                    type="button"
+                    data-decision={d.decisionId}
+                    onClick={() => {
+                      setPinned(d.decisionId);
+                      setTick(d.scenarioRef.tick);
+                    }}
+                    /* Both ends of the binding, and focus as well as hover, so
+                       a keyboard reader gets the same correspondence: in the
+                       whipsaw regime the markers and the notches are otherwise
+                       two unlabelled sets of the same size. */
+                    onMouseEnter={() => setHoverId(d.decisionId)}
+                    onMouseLeave={() => setHoverId(null)}
+                    onFocus={() => setHoverId(d.decisionId)}
+                    onBlur={() => setHoverId(null)}
+                    style={{
+                      fontFamily: "var(--fm)",
+                      fontSize: 9,
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      transition: "border-color 120ms ease-out, color 120ms ease-out",
+                      border: `1px solid ${
+                        lit || shown?.decisionId === d.decisionId
+                          ? "var(--bc-accent-edge)"
+                          : "var(--bc-line)"
+                      }`,
+                      background: "transparent",
+                      color: lit ? "var(--bc-ink)" : "var(--bc-muted)",
+                    }}
+                  >
+                    {`tick ${d.scenarioRef.tick} · ${d.rule.metric}`}
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div style={{ marginTop: 10, fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--bc-muted)" }}>
@@ -2272,7 +2521,11 @@ function RouterRunSection() {
               wordBreak: "break-all",
             }}
           >
-            {`seed ${run.scenario.seed} · ${run.scenario.ticks} ticks · scenario ${short(run.scenario.hash)} · policy ${short(run.rulesHash)}`}
+            {/* NOT `seed N`. This replay is measured history, not a generated
+                scenario, so there is no seed to print and `scenario.seed` is
+                zero as a stated absence. What identifies the run is the
+                capture it replays, which is the field the route fills. */}
+            {`calibrated to ${run.scenario.calibratedTo} · ${run.scenario.ticks} ticks · scenario ${short(run.scenario.hash)} · policy ${short(run.rulesHash)}`}
           </div>
         </>
       ) : null}

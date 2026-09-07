@@ -110,7 +110,13 @@ export const ORCH_DIAL_DEFS: ParamDescriptor[] = [
       { value: "standard", label: "Standard", numeric: 1.0 },
       { value: "reactive", label: "Reactive", numeric: 0.6 },
     ],
-    help: "One control, many parameters: tempo scales every rule's sustain window and cooldown. The system owns the optimization.",
+    /* THE SUSTAIN CLAIM WAS FALSE ON THE ONE RULE THE DEMO ADVERTISES.
+       `demo-rules.ts` fixes the router's `better_elsewhere` window at 48
+       hours by founder ruling, so it does not move with the tempo; what the
+       tempo still scales is the cooldown. The cell names `Patient |
+       Standard | Reactive` are unchanged: that was ruled a founder call and
+       this is a tempo claim, not a risk claim. */
+    help: "One control: tempo scales every rule's cooldown. The 48 hour sustain on the router's own rule is fixed and does not move with it.",
   },
   {
     field: "maxConcentrationPct",

@@ -1,114 +1,72 @@
 /**
- * THE SIX REGIMES, AND NOTHING ELSE.
+ * THE FOUR REGIMES THE DEMO'S ROUTER REPLAY RUNS, AND NOTHING ELSE.
  *
- * This file is DELIBERATELY IMPORT-FREE. The regime switcher (WP-9 / F.1) is a
- * client control, and every other file in this package reaches either the
- * committed scan fixture or `strategy-factory/venues/hyperliquid-funding`,
- * whose module graph pulls `node:crypto` through `hl-scan`. A client component
- * that only needs the list of regimes imports THIS file and nothing deeper.
+ * This file is DELIBERATELY IMPORT-FREE and it stays that way. The regime
+ * switcher is a client control inside `LanePanel`, and every other module the
+ * replay touches reaches `router-history.ts`, which reaches `templates.ts` and
+ * the pricing owners. A client control that only needs the list of regimes
+ * imports THIS file and nothing deeper, so the browser bundle never grows a
+ * pricing graph to draw four keys.
  *
- * ── THE SEED TOKENS ───────────────────────────────────────────────────────
- * Section E writes the seeds as leetspeak tokens (`0xD3AD`, `0xC0MP`, `0x1NV`,
- * `0xTA1L`, `0xFL1P`, `0xW8`). Exactly one of them (`0xD3AD`) is a legal hex
- * literal; the other five contain letters that are not hex digits. Rather than
- * pick a number beside the spec's token and lose the spec's own value, the
- * token is carried verbatim and the number is DERIVED from it by one function
- * with two branches:
+ * ── WHAT CHANGED, AND WHY THE SEEDS WENT WITH IT ─────────────────────────
+ * The six regimes this file used to carry were the live app's SYNTHETIC
+ * funding scenarios: premiums, venue clamps and funding percentiles, each
+ * generated from a seed token. The demo's replay is not generated. It is the
+ * measured history in `lib/canvas/router-history.ts`, 89 aligned days of two
+ * published series, and the three stress regimes are TRANSFORMS of that
+ * history rather than draws from a generator.
  *
- *   - a legal hex literal is its own value, so `0xD3AD` is exactly 54189;
- *   - anything else is FNV-1a over the token's bytes.
+ * A history replay has no seed, so `REGIME_SEED_TOKEN`, `REGIME_SEED`,
+ * `seedOf` and `fnv1a32` are gone rather than kept at a value nobody can act
+ * on. Nothing outside this file referenced them (checked by grep across
+ * `app`, `components`, `lib` and `tests` before the deletion).
  *
- * Both branches are pure and reproducible from the token alone, so the record
- * can print the token a reader recognises next to the number the generator
- * actually ran on.
+ * ── THE SENTENCES ────────────────────────────────────────────────────────
+ * `REGIME_MECHANISM` states the TRANSFORM on the measured series, in the
+ * present tense, mechanism only, never a risk adjective. The route owns the
+ * transforms; these sentences are the same statements in words, and the
+ * dates and sizes in them are the dates and sizes the route actually runs
+ * (`app/api/canvas/orchestrate/route.ts`, the regime table).
  */
 
-export type RegimeId =
-  | "dead-band"
-  | "compression"
-  | "inversion"
-  | "right-tail"
-  | "whipsaw"
-  | "settlement-stress";
+export type RegimeId = "measured" | "incentive-halves" | "usdc-squeeze" | "whipsaw";
 
-/** Render order, and the order the switcher draws. Dead band is the default
- *  on load (section E), because it is the state 66% of live books print. */
+/** Render order, and the order the switcher draws. */
 export const REGIME_IDS: readonly RegimeId[] = [
-  "dead-band",
-  "compression",
-  "inversion",
-  "right-tail",
+  "measured",
+  "incentive-halves",
+  "usdc-squeeze",
   "whipsaw",
-  "settlement-stress",
 ] as const;
 
-export const DEFAULT_REGIME: RegimeId = "dead-band";
+/** The measured history is the default: the run a reader should meet first is
+ *  the one that happened, not a stress. */
+export const DEFAULT_REGIME: RegimeId = "measured";
 
-/** Rendered verbatim. No em dash, no risk adjective, no disclaimer clause. */
+/** Rendered verbatim. One noun phrase each, sentence case, one part of
+ *  speech across the set: four labels are one control. */
 export const REGIME_LABEL: Record<RegimeId, string> = {
-  "dead-band": "Dead band",
-  compression: "Compression",
-  inversion: "Inversion",
-  "right-tail": "Right tail",
+  measured: "Measured",
+  "incentive-halves": "Incentive halved",
+  "usdc-squeeze": "USDC squeeze",
   whipsaw: "Whipsaw",
-  "settlement-stress": "Settlement stress",
 };
 
 /**
- * What the regime is FOR, in one present-tense sentence naming the mechanism
- * it exercises. These are the strings a panel puts under the switcher; they
- * state what the run does, never how risky it is.
+ * What each regime DOES to the measured series, in one present-tense
+ * sentence. The measured one carries the honest register: the window holds
+ * no qualifying return crossing, so the return leg is shown by the stresses
+ * and not by history.
  */
 export const REGIME_MECHANISM: Record<RegimeId, string> = {
-  "dead-band":
-    "The premium stays inside the venue's clamp, so every book prints the administered rate and the streak advances on an unchanged number.",
-  compression:
-    "The premium drifts below the clamp, so funding decays past the treasury rate and the two published series cross once.",
-  inversion:
-    "The premium sits below the clamp on every book at once, so the funding percentile goes negative and the router looks for a peer.",
-  "right-tail":
-    "The premium rises above the clamp, so funding prints above the administered rate while the book it prints on thins.",
+  measured:
+    "The last 89 days as they happened, to 2026-09-07. The rule fires once, on 2026-06-12, and nothing in this window crosses back by the margin.",
+  "incentive-halves":
+    "The USDe incentive halves from 2026-07-25, so the loop's reason to exist weakens and the router moves to the floor and stays.",
+  "usdc-squeeze":
+    "Aave USDC supply lifts 5pp for 20 days from 2026-08-10, then reverts, so the reverse has to clear the same bar on its own.",
   whipsaw:
-    "The premium crosses the rule threshold in runs of growing length, so sustain, cooldown and the turnover budget each get to refuse.",
-  "settlement-stress":
-    "The premium inverts while the destination's publication clock holds, so weight in flight is visible and earns nothing until it lands.",
-};
-
-/** The spec's own token for each regime's seed, carried verbatim. */
-export const REGIME_SEED_TOKEN: Record<RegimeId, string> = {
-  "dead-band": "0xD3AD",
-  compression: "0xC0MP",
-  inversion: "0x1NV",
-  "right-tail": "0xTA1L",
-  whipsaw: "0xFL1P",
-  "settlement-stress": "0xW8",
-};
-
-const HEX_LITERAL = /^0x[0-9a-fA-F]+$/;
-
-/** FNV-1a, 32 bit. Pure, no table, byte-identical on every engine. */
-export function fnv1a32(s: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i) & 0xff;
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h >>> 0;
-}
-
-/** A token's seed: its own hex value when it is one, else FNV-1a over it. */
-export function seedOf(token: string): number {
-  return HEX_LITERAL.test(token) ? Number.parseInt(token.slice(2), 16) >>> 0 : fnv1a32(token);
-}
-
-/** The seed each regime runs on by default. Derived from the token above. */
-export const REGIME_SEED: Record<RegimeId, number> = {
-  "dead-band": seedOf(REGIME_SEED_TOKEN["dead-band"]),
-  compression: seedOf(REGIME_SEED_TOKEN.compression),
-  inversion: seedOf(REGIME_SEED_TOKEN.inversion),
-  "right-tail": seedOf(REGIME_SEED_TOKEN["right-tail"]),
-  whipsaw: seedOf(REGIME_SEED_TOKEN.whipsaw),
-  "settlement-stress": seedOf(REGIME_SEED_TOKEN["settlement-stress"]),
+    "The two published series cross in runs of growing length, so the sustain, the cooldown, the reverse-edge lock and the concentration band each get to refuse.",
 };
 
 export function isRegimeId(v: unknown): v is RegimeId {
