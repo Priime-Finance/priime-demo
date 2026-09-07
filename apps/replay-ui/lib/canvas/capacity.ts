@@ -672,8 +672,17 @@ export function capacityBindingLabel(
  * read this to put the word `modeled` beside the figure.
  */
 export function isModeledBinding(b: string | null | undefined): boolean {
-  return b === COLLAR_CAPACITY_BINDING;
+  return b === COLLAR_CAPACITY_BINDING || b === MODELED_CAPACITY_BINDING;
 }
+
+/**
+ * The demo market's binding key (lib/demo/market.ts `capacityBinding`). It is
+ * a register, not a venue noun: nothing on the venue binds the $10M, the
+ * figure is typed. So it never enters the `limited by …` / `… in …` grammar
+ * the venue bindings use; every surface prints the word `modeled` beside the
+ * figure instead (docs/plans/LATEST_UI_PORT_SPEC.md E.3, E.7, 2.9).
+ */
+export const MODELED_CAPACITY_BINDING = "modeled";
 
 /**
  * The Review sub-register. `shared by N loops` is the load-bearing clause:
@@ -684,6 +693,7 @@ export function capacityBindingSentence(
   sharedCount = 1,
   hasHedge = true,
 ): string {
+  if (c?.economics?.capacityBinding === MODELED_CAPACITY_BINDING) return MODELED_CAPACITY_BINDING;
   const label = capacityBindingLabel(c, hasHedge);
   if (!label) return "";
   return `limited by ${label}${sharedCount >= 2 ? `, shared by ${sharedCount} loops` : ""}`;

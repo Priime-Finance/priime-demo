@@ -111,6 +111,7 @@ import {
 import {
   capacityBindingLabel,
   capacityBindingSentence,
+  isModeledBinding,
   fmtCapacityUsd,
   laneCapacityUsd,
 } from "@/lib/canvas/capacity";
@@ -436,7 +437,7 @@ function RowBody({
         ) : (
           <>
             {v.capacity}
-            {v.binds ? ` in ${v.binds}` : null}
+            {v.binds ? (isModeledBinding(v.binds) ? ` ${v.binds}` : ` in ${v.binds}`) : null}
             {v.shared >= 2 ? `, shared by ${v.shared}` : null}
           </>
         )}

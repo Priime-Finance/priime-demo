@@ -22,6 +22,7 @@
  * unchanged, so the mockup's no-blocking rule stays intact.
  */
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAccount, useConnectModal } from "@/lib/wallet";
 import {
@@ -503,12 +504,12 @@ export default function PublishFlow({
                 companion prints again. One fact, both phases. */}
             {draft.apyCompanion ? <div className="pf-apy-companion">{draft.apyCompanion}</div> : null}
             <div className="pf-done-acts">
-              <a className="pf-publish" href={`/vaults/${vault.slug}`}>
+              <Link className="pf-publish" href={`/vaults/${vault.slug}`}>
                 Open your vault
-              </a>
-              <a className="pf-ghostlink" href="/vaults">
+              </Link>
+              <Link className="pf-ghostlink" href="/vaults">
                 All vaults
-              </a>
+              </Link>
             </div>
             {/* I6 — THE THIRD DOOR. Both links above leave the canvas, and
                 coming back to it landed on the composition that had just

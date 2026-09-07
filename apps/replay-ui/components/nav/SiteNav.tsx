@@ -29,6 +29,7 @@
  * The banner names only the rules this file trips: ESLint 9 reports every
  * unused disable directive as a warning, and the gate allows one. */
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount } from "@/lib/wallet";
 import { useBuildHref } from "@/lib/host";
@@ -291,21 +292,21 @@ export function SiteNav() {
           </a>
 
           <div className="nav-links">
-            <a
+            <Link
               className={`link${here("/vaults") ? " active" : ""}`}
               aria-current={here("/vaults") ? "page" : undefined}
               href="/vaults"
             >
               Vaults
-            </a>
+            </Link>
             {showPortfolio && (
-              <a
+              <Link
                 className={`link link--reveal${here("/portfolio") ? " active" : ""}`}
                 aria-current={here("/portfolio") ? "page" : undefined}
                 href="/portfolio"
               >
                 Portfolio
-              </a>
+              </Link>
             )}
             <a className="link" href={`${SITE}/ecosystem`}>
               Ecosystem
@@ -399,13 +400,13 @@ export function SiteNav() {
           </button>
 
           <div className="nav-mobile">
-            <a href="/vaults" aria-current={here("/vaults") ? "page" : undefined} onClick={() => setOpen(false)}>
+            <Link href="/vaults" aria-current={here("/vaults") ? "page" : undefined} onClick={() => setOpen(false)}>
               Vaults
-            </a>
+            </Link>
             {showPortfolio && (
-              <a href="/portfolio" aria-current={here("/portfolio") ? "page" : undefined} onClick={() => setOpen(false)}>
+              <Link href="/portfolio" aria-current={here("/portfolio") ? "page" : undefined} onClick={() => setOpen(false)}>
                 Portfolio
-              </a>
+              </Link>
             )}
             <a href={`${SITE}/ecosystem`} onClick={() => setOpen(false)}>
               Ecosystem

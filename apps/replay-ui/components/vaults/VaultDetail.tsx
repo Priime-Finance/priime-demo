@@ -516,7 +516,9 @@ export default function VaultDetail({ slug }: { slug: string }) {
         "Capacity",
         ceiling.bindingLabel
           ? `${fmtUsd(ceiling.capacityUsd)}, ${ceiling.bindingLabel}`
-          : fmtUsd(ceiling.capacityUsd),
+          : isModeledBinding(vault.capacityBinding)
+            ? `${fmtUsd(ceiling.capacityUsd)} · modeled`
+            : fmtUsd(ceiling.capacityUsd),
       );
       push("Remaining capacity", fmtUsd(ceiling.remainingUsd ?? 0));
     }

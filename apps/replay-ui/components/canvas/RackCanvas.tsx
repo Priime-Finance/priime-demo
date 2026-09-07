@@ -34,7 +34,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useLayoutEffect } from "react";
 import { useAccount } from "@/lib/wallet";
-import { COMING_SOON, DEMO_SCOPE } from "@/lib/demo-scope";
+import { COMING_SOON, DEMO_SCOPE, isLiveMarket } from "@/lib/demo-scope";
 
 import type { LoopGraph, LoopId, ModuleKey, ParamValue, PortfolioGraph } from "@/lib/canvas/types";
 import type { StrategyKind } from "@/lib/vaults/store";
@@ -85,6 +85,7 @@ import {
   acceptsDeposits,
   capacityBindingSentence,
   fmtCapacityUsd,
+  isModeledBinding,
   vaultCapacity,
 } from "@/lib/canvas/capacity";
 import {
@@ -2091,6 +2092,22 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
            is what `AutomationsSection` has always called it. */
         ...(appliedLeverage !== null ? [{ label: APPLIED_LEVERAGE_LABEL, value: levText }] : []),
         ...(liqLtv !== null ? [{ label: "Liquidation LTV", value: pct(liqLtv) }] : []),
+        /* The live market's two inputs are TYPED (lib/demo/market.ts), not
+           scanned, and the record says so in the same words the seeded hero
+           record uses (lib/vaults/hero.ts), so a publish onto the one live
+           record keeps the rows the reader had before the publish
+           (docs/plans/LATEST_UI_PORT_SPEC.md E.7). Scoped to the live market:
+           a scanned row states its inputs elsewhere. */
+        ...(single &&
+        first?.ok?.candidate &&
+        isLiveMarket(first.ok.candidate.id) &&
+        typeof first.ok.candidate.economics?.collateralYieldApy === "number" &&
+        typeof first.ok.candidate.economics.borrowApyMarginal === "number"
+          ? [
+              { label: "Collateral yield, typed", value: pct(first.ok.candidate.economics.collateralYieldApy) },
+              { label: "Borrow rate, typed", value: pct(first.ok.candidate.economics.borrowApyMarginal) },
+            ]
+          : []),
         /* ONE ROUNDING, AND NO SENTINEL RENDERED AS A NUMBER. Both rules live
            in `healthBandsRow` (module scope, above) so a test can hold the
            record to them without mounting the canvas. */
@@ -2126,8 +2143,16 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
           : []),
         ...(vaultCap
           ? [
-              { label: "Capacity", value: fmtCapacityUsd(vaultCap.usd) },
-              ...(record.capacityBinding
+              /* A modeled binding is a register, not a venue noun: it prints
+                 beside the figure and never as a `Capacity binding` row
+                 (capacity.ts MODELED_CAPACITY_BINDING). */
+              {
+                label: "Capacity",
+                value: isModeledBinding(record.capacityBinding)
+                  ? `${fmtCapacityUsd(vaultCap.usd)} · modeled`
+                  : fmtCapacityUsd(vaultCap.usd),
+              },
+              ...(record.capacityBinding && !isModeledBinding(record.capacityBinding)
                 ? [{ label: "Capacity binding", value: record.capacityBinding }]
                 : []),
             ]

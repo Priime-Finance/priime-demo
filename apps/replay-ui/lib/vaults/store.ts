@@ -1993,6 +1993,10 @@ export function currentLeverage(
   lev: LeverageAutomation | null | undefined = v.automations?.leverage,
 ): number {
   if (!lev) return 1;
+  // The attested record prints its stored leverage: the intraday wobble is a
+  // modeled illusion, and nothing modeled moves a number on the record whose
+  // NAV is read off the journal (docs/plans/LATEST_UI_PORT_SPEC.md E.6).
+  if (vaultStage(v) === "attested") return lev.targetLeverage;
   return lev.targetLeverage * (1 + smoothWobble(hashString(v.slug) * 13 + 7, nowMs, HOUR_MS) * 0.03);
 }
 
@@ -2237,7 +2241,7 @@ export function modeledActivity(v: VaultRecord, nowMs = Date.now(), tvlUsd?: num
   rows.push({
     action: "Vault published",
     detail: `by ${v.curator} · ${fmtUsd(v.baseTvlUsd)} ${
-      vaultStage(v) === "incubating" ? "modeled" : "seeded"
+      vaultStage(v) === "incubating" ? "modeled" : vaultStage(v) === "attested" ? "attested" : "seeded"
     }`,
     ms: created,
     kind: "publish",
