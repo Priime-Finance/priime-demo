@@ -1,3 +1,9 @@
+/* eslint-disable @typescript-eslint/no-redundant-type-constituents --
+ * Kit-verbatim file, ported from build.priime.finance eb6d33a. The rules
+ * above are the kit's own idiom (untyped fetch/localStorage JSON, loose
+ * equality on sentinel values, the hook dependency lists it ships with);
+ * not rewriting kit logic to satisfy lint, per the integration's own
+ * directive. */
 /** Client-side shapes for the canvas API responses (BC-P3/P6; v2 portfolio). */
 
 import type { CompiledConfig } from "@/lib/canvas/server-shim";
