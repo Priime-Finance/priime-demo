@@ -23,6 +23,7 @@
  */
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAccount, useConnectModal } from "@/lib/wallet";
 import {
@@ -43,6 +44,9 @@ import { apyCaption, feeRows } from "@/lib/canvas/fees";
 import { SEED_SLUGS } from "@/lib/vaults/seeds";
 import { heroNavUsd } from "@/lib/vaults/rows";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
+
+/** How long the done card holds before the router opens the vault page. */
+const DONE_BEAT_MS = 900;
 
 export interface PublishDraft extends Omit<PublishInput, "name"> {
   defaultName: string;
@@ -157,6 +161,14 @@ export default function PublishFlow({
      directly. connectModalOpen is mirrored into a ref so the Escape handler
      never closes the review card underneath an open connect sheet. */
   const { isConnected } = useAccount();
+  /* THE VAULT PAGE IS WHERE A PUBLISH ENDS (founder, 2026-09-07: "publish it
+     and arrive on the vault page automatically"). The done beat used to sit
+     on the canvas behind a card with an "Open your vault" key, and closing
+     that card left the builder on the canvas they had just published from,
+     which read as being sent back there. Now the card shows its done state
+     for one beat and the router carries the reader to the record it wrote.
+     The two links stay for a reader who moves before the beat lands. */
+  const router = useRouter();
   const { openConnectModal, connectModalOpen } = useConnectModal();
   const connectOpenRef = useRef(connectModalOpen);
   connectOpenRef.current = connectModalOpen;
@@ -243,6 +255,9 @@ export default function PublishFlow({
         }
         setVault(rec);
         setPhase("done");
+        timers.current.push(
+          setTimeout(() => router.push(`/vaults/${rec.slug}`), DONE_BEAT_MS),
+        );
       }, 1860),
     );
   };

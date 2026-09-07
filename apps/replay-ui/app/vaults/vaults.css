@@ -670,7 +670,6 @@
 .vxa-verify:hover{color:var(--vx-blue);border-color:var(--vx-blue);transform:translateY(-1px)}
 .vxa-verify:hover svg{opacity:1}
 .vxa-verify:focus-visible{outline:2px solid var(--vx-blue);outline-offset:2px}
-@media (max-width:640px){.vxa-verify{padding:5px 9px}.vxa-verify span{display:none}}
 [data-theme="dark"] .vxa-verify{background:var(--p-well,#02040B);border-color:var(--vx-line)}
 [data-theme="dark"] .vxa-verify:hover{color:var(--vx-blue-text,var(--vx-blue-lg));border-color:var(--vx-blue-text,var(--vx-blue-lg))}
 
