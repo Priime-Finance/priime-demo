@@ -1,0 +1,4456 @@
+{
+  "version": 2,
+  "venue": "hyperliquid-funding",
+  "chainId": 999,
+  "blockNumber": 0,
+  "blockHash": "",
+  "hlSnapshotHash": "2e5104b52d84e4e66b009dbe2f1af0526008882472048385fb605a5eb3d56fa2",
+  "marketIdSetHash": null,
+  "merklCampaignSetHash": null,
+  "candidates": [
+    {
+      "id": "hyperliquid-funding:999:khype:HYPE",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "kHYPE",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "HYPE",
+      "underlying": "HYPE",
+      "marketKey": "HYPE",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL HYPE idx=159 maxLev=10 mark 79.854"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $13,298,726 (OI $1,994,808,974), depth bound $10,514 (top-10 $31,542 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $78.86"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $10,514 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 10.1943% over 30d (720h), the MINIMUM of 30d 10.1943%, 90d 10.9500%, 180d 10.9500%, 365d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 8.5% of 720h (max 25%), longest run 5h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "spot leg kHYPE (Kinetiq, Hyperliquid L1) — defillama Kinetiq apyBase7d 1.9716% at 2026-08-23T01:01:32.442Z"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 7.6961% (floor 8.0000%) = 67.4157% escrow x (spot 1.9716% + funding 10.1943% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0.019716400000000002,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.101942748,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.11415914799999999,
+        "netApyOnDepositApy": 0.07696122337078651,
+        "capacityUsd": 10514.099633333333,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.101942748,
+            "meanApr": 0.11144253973333265,
+            "fractionNegative": 0.08472222222222223,
+            "longestNegativeStreakHours": 5
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.11417967270555934,
+            "fractionNegative": 0.07175925925925926,
+            "longestNegativeStreakHours": 10
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.0867584799277791,
+            "fractionNegative": 0.12361111111111112,
+            "longestNegativeStreakHours": 15
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.10550183009998516,
+            "fractionNegative": 0.08710045662100456,
+            "longestNegativeStreakHours": 15
+          }
+        ],
+        "fundingAsOfMs": 1787451278799,
+        "fundingSpanDays": 364.96,
+        "spotLeg": {
+          "symbol": "kHYPE",
+          "protocol": "Kinetiq",
+          "chain": "Hyperliquid L1",
+          "chainId": 999,
+          "apy": 0.019716400000000002,
+          "source": "defillama Kinetiq apyBase7d 1.9716% at 2026-08-23T01:01:32.442Z",
+          "reachable": true,
+          "tvlUsd": 1117245888
+        }
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 30d won at 10.1943%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:pump:PUMP",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "PUMP",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "PUMP",
+      "underlying": "PUMP",
+      "marketKey": "PUMP",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL PUMP idx=200 maxLev=10 mark 0.004935"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $1,201,054 (OI $180,158,144), depth bound $25,319 (top-10 $75,957 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $189.89"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $25,319 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 10.9500% over 30d (720h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 10.9500%, 365d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 3.8% of 720h (max 25%), longest run 7h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for PUMP; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 6.8764% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 10.9500% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.10949999999999999,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.10199999999999998,
+        "netApyOnDepositApy": 0.06876404494382021,
+        "capacityUsd": 25318.974198666667,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.14823944533333255,
+            "fractionNegative": 0.0375,
+            "longestNegativeStreakHours": 7
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.10355783163333586,
+            "fractionNegative": 0.07777777777777778,
+            "longestNegativeStreakHours": 36
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.08770401121111383,
+            "fractionNegative": 0.09699074074074074,
+            "longestNegativeStreakHours": 36
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.10311266469998402,
+            "fractionNegative": 0.07385844748858447,
+            "longestNegativeStreakHours": 36
+          }
+        ],
+        "fundingAsOfMs": 1787451366431,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 30d won at 10.9500%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:fartcoin:FARTCOIN",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "FARTCOIN",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "FARTCOIN",
+      "underlying": "FARTCOIN",
+      "marketKey": "FARTCOIN",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL FARTCOIN idx=165 maxLev=10 mark 0.17607"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $230,971 (OI $34,645,580), depth bound $1,628 (top-10 $4,883 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $12.21"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $1,628 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 10.9500% over 30d (720h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 10.9500%, 365d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 1.4% of 720h (max 25%), longest run 4h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for FARTCOIN; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 6.8764% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 10.9500% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.10949999999999999,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.10199999999999998,
+        "netApyOnDepositApy": 0.06876404494382021,
+        "capacityUsd": 1627.6703193333333,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.22567234235000014,
+            "fractionNegative": 0.013888888888888888,
+            "longestNegativeStreakHours": 4
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.1547936465111136,
+            "fractionNegative": 0.028703703703703703,
+            "longestNegativeStreakHours": 18
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.14337583087777192,
+            "fractionNegative": 0.02939814814814815,
+            "longestNegativeStreakHours": 18
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.14623719769998325,
+            "fractionNegative": 0.024771689497716895,
+            "longestNegativeStreakHours": 18
+          }
+        ],
+        "fundingAsOfMs": 1787451433824,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 30d won at 10.9500%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:near:NEAR",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "NEAR",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "NEAR",
+      "underlying": "NEAR",
+      "marketKey": "NEAR",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL NEAR idx=74 maxLev=10 mark 1.88396"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $520,145 (OI $78,021,790), depth bound $11,557 (top-10 $34,670 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $86.67"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $11,557 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 10.9500% over 30d (720h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 10.9500%, 365d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 2.9% of 720h (max 25%), longest run 9h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for NEAR; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 6.8764% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 10.9500% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.10949999999999999,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.10199999999999998,
+        "netApyOnDepositApy": 0.06876404494382021,
+        "capacityUsd": 11556.63485,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.14351719821666561,
+            "fractionNegative": 0.029166666666666667,
+            "longestNegativeStreakHours": 9
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.12113760808889255,
+            "fractionNegative": 0.03657407407407407,
+            "longestNegativeStreakHours": 9
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.11348817452777304,
+            "fractionNegative": 0.06643518518518518,
+            "longestNegativeStreakHours": 14
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.09939956699998863,
+            "fractionNegative": 0.08755707762557077,
+            "longestNegativeStreakHours": 18
+          }
+        ],
+        "fundingAsOfMs": 1787451456354,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 30d won at 10.9500%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:lit:LIT",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "LIT",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "LIT",
+      "underlying": "LIT",
+      "marketKey": "LIT",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL LIT idx=223 maxLev=5 mark 3.1629"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "5843 hourly prints over 243.4d (floor 1944h); windows 30d/90d/180d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $980,673 (OI $147,101,007), depth bound $1,658 (top-10 $4,975 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $12.44"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $1,658 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 10.9500% over 30d (720h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 10.4% of 720h (max 25%), longest run 9h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for LIT; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 6.8764% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 10.9500% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.10949999999999999,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.10199999999999998,
+        "netApyOnDepositApy": 0.06876404494382021,
+        "capacityUsd": 1658.4148000000002,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.11369163444999918,
+            "fractionNegative": 0.10416666666666667,
+            "longestNegativeStreakHours": 9
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.11878900788333642,
+            "fractionNegative": 0.08796296296296297,
+            "longestNegativeStreakHours": 19
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.10096308901388554,
+            "fractionNegative": 0.09328703703703704,
+            "longestNegativeStreakHours": 19
+          }
+        ],
+        "fundingAsOfMs": 1787451471387,
+        "fundingSpanDays": 243.42,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 3 qualifying window(s); 30d won at 10.9500%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:xmr:XMR",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "XMR",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "XMR",
+      "underlying": "XMR",
+      "marketKey": "XMR",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL XMR idx=224 maxLev=5 mark 442.96"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "5274 hourly prints over 219.7d (floor 1944h); windows 30d/90d/180d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $521,511 (OI $78,226,654), depth bound $1,984 (top-10 $5,952 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $14.88"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $1,984 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 10.9500% over 30d (720h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 12.9% of 720h (max 25%), longest run 12h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for XMR; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 6.8764% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 10.9500% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.10949999999999999,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.10199999999999998,
+        "netApyOnDepositApy": 0.06876404494382021,
+        "capacityUsd": 1983.9426766666666,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.3163993387166679,
+            "fractionNegative": 0.12916666666666668,
+            "longestNegativeStreakHours": 12
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.2920550172611059,
+            "fractionNegative": 0.05925925925925926,
+            "longestNegativeStreakHours": 12
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.27950153312498976,
+            "fractionNegative": 0.03518518518518519,
+            "longestNegativeStreakHours": 12
+          }
+        ],
+        "fundingAsOfMs": 1787451507674,
+        "fundingSpanDays": 219.71,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 3 qualifying window(s); 30d won at 10.9500%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:tao:TAO",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "TAO",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "TAO",
+      "underlying": "TAO",
+      "marketKey": "TAO",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL TAO idx=116 maxLev=5 mark 220.97"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $244,090 (OI $36,613,431), depth bound $4,671 (top-10 $14,014 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $35.03"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $4,671 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 10.9500% over 30d (720h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 10.9500%, 365d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 1.8% of 720h (max 25%), longest run 12h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for TAO; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 6.8764% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 10.9500% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.10949999999999999,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.10199999999999998,
+        "netApyOnDepositApy": 0.06876404494382021,
+        "capacityUsd": 4671.3086,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.1540335964666658,
+            "fractionNegative": 0.018055555555555554,
+            "longestNegativeStreakHours": 12
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.10916073574444729,
+            "fractionNegative": 0.06805555555555555,
+            "longestNegativeStreakHours": 12
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.05854654202500138,
+            "fractionNegative": 0.14351851851851852,
+            "longestNegativeStreakHours": 35
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.06654063669999254,
+            "fractionNegative": 0.1408675799086758,
+            "longestNegativeStreakHours": 35
+          }
+        ],
+        "fundingAsOfMs": 1787451620577,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 30d won at 10.9500%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:aster:ASTER",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "ASTER",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "ASTER",
+      "underlying": "ASTER",
+      "marketKey": "ASTER",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL ASTER idx=207 maxLev=5 mark 0.64861"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8104 hourly prints over 337.6d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $157,675 (OI $23,651,211), depth bound $1,783 (top-10 $5,350 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $13.37"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $1,783 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 10.9500% over 30d (720h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 10.9500%, 365d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 6.8% of 720h (max 25%), longest run 12h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for ASTER; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 6.8764% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 10.9500% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.10949999999999999,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.10199999999999998,
+        "netApyOnDepositApy": 0.06876404494382021,
+        "capacityUsd": 1783.2459466666667,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.13226851263333259,
+            "fractionNegative": 0.06805555555555555,
+            "longestNegativeStreakHours": 12
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.11912565062778178,
+            "fractionNegative": 0.03194444444444444,
+            "longestNegativeStreakHours": 12
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.08822197399166878,
+            "fractionNegative": 0.11921296296296297,
+            "longestNegativeStreakHours": 37
+          },
+          {
+            "days": 365,
+            "hours": 8104,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.14749576744173593,
+            "fractionNegative": 0.12031095755182626,
+            "longestNegativeStreakHours": 45
+          }
+        ],
+        "fundingAsOfMs": 1787451731757,
+        "fundingSpanDays": 337.62,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 30d won at 10.9500%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:uni:UNI",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "UNI",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "UNI",
+      "underlying": "UNI",
+      "marketKey": "UNI",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL UNI idx=39 maxLev=10 mark 4.2302"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $159,254 (OI $23,888,042), depth bound $1,808 (top-10 $5,423 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $13.56"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $1,808 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 10.5729% over 180d (4320h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 10.5729%, 365d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 11.1% of 4320h (max 25%), longest run 28h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for UNI; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 6.6222% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 10.5729% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.10572882,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.09822882,
+        "netApyOnDepositApy": 0.06622167640449438,
+        "capacityUsd": 1807.5353133333329,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.11201049798333251,
+            "fractionNegative": 0.07222222222222222,
+            "longestNegativeStreakHours": 10
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.10445803032222527,
+            "fractionNegative": 0.053703703703703705,
+            "longestNegativeStreakHours": 10
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10572882,
+            "meanApr": 0.08533733215000228,
+            "fractionNegative": 0.11087962962962963,
+            "longestNegativeStreakHours": 28
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.09777640509998463,
+            "fractionNegative": 0.10102739726027397,
+            "longestNegativeStreakHours": 30
+          }
+        ],
+        "fundingAsOfMs": 1787451643544,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 180d won at 10.5729%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:stlink:LINK",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "stLINK",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "LINK",
+      "underlying": "LINK",
+      "marketKey": "LINK",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL LINK idx=18 maxLev=10 mark 11.559"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $495,598 (OI $74,339,727), depth bound $37,678 (top-10 $113,035 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $282.59"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $37,678 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 5.6349% over 30d (720h), the MINIMUM of 30d 5.6349%, 90d 10.9500%, 180d 10.9500%, 365d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 12.5% of 720h (max 25%), longest run 15h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "spot leg stLINK (stake.link, Ethereum) — defillama stake.link apyBase 4.6098% at 2026-08-23T01:01:33.351Z"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 6.4009% (floor 8.0000%) = 67.4157% escrow x (spot 4.6098% + funding 5.6349% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0.046097599999999996,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.0563487,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.09494629999999998,
+        "netApyOnDepositApy": 0.0640087415730337,
+        "capacityUsd": 37678.23053333333,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.0563487,
+            "meanApr": 0.12011743389999943,
+            "fractionNegative": 0.125,
+            "longestNegativeStreakHours": 15
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.10427382698889158,
+            "fractionNegative": 0.075,
+            "longestNegativeStreakHours": 15
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.09952878278333302,
+            "fractionNegative": 0.06574074074074074,
+            "longestNegativeStreakHours": 15
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.10220119989998681,
+            "fractionNegative": 0.05331050228310502,
+            "longestNegativeStreakHours": 15
+          }
+        ],
+        "fundingAsOfMs": 1787451598048,
+        "fundingSpanDays": 364.96,
+        "spotLeg": {
+          "symbol": "stLINK",
+          "protocol": "stake.link",
+          "chain": "Ethereum",
+          "chainId": 1,
+          "apy": 0.046097599999999996,
+          "source": "defillama stake.link apyBase 4.6098% at 2026-08-23T01:01:33.351Z",
+          "reachable": true,
+          "tvlUsd": 83974793
+        }
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 30d won at 5.6349%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:zec:ZEC",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "ZEC",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "ZEC",
+      "underlying": "ZEC",
+      "marketKey": "ZEC",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL ZEC idx=214 maxLev=10 mark 787.93"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "7789 hourly prints over 324.5d (floor 1944h); windows 30d/90d/180d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $3,058,527 (OI $458,779,097), depth bound $17,924 (top-10 $53,771 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $134.43"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $17,924 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 9.4908% over 180d (4320h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 9.4908% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 16.9% of 4320h (max 25%), longest run 98h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for ZEC; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 5.8926% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 9.4908% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.094907592,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.087407592,
+        "netApyOnDepositApy": 0.05892646651685394,
+        "capacityUsd": 17923.7525,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.14298616579999934,
+            "fractionNegative": 0.09583333333333334,
+            "longestNegativeStreakHours": 10
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.05299436054444394,
+            "fractionNegative": 0.16574074074074074,
+            "longestNegativeStreakHours": 98
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.094907592,
+            "meanApr": 0.056734354538890634,
+            "fractionNegative": 0.1685185185185185,
+            "longestNegativeStreakHours": 98
+          }
+        ],
+        "fundingAsOfMs": 1787451298978,
+        "fundingSpanDays": 324.5,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 3 qualifying window(s); 180d won at 9.4908%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:crv:CRV",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "CRV",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "CRV",
+      "underlying": "CRV",
+      "marketKey": "CRV",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL CRV idx=16 maxLev=10 mark 0.32218"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $102,796 (OI $15,419,464), depth bound $3,621 (top-10 $10,864 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $27.16"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $3,621 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 8.1078% over 90d (2160h), the MINIMUM of 30d 10.9500%, 90d 8.1078%, 180d 8.3938%, 365d 8.5169% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 18.3% of 2160h (max 25%), longest run 38h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for CRV; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 4.9603% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 8.1078% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.08107818,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.07357817999999999,
+        "netApyOnDepositApy": 0.04960326741573033,
+        "capacityUsd": 3621.399866333333,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 90,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.11002514739999947,
+            "fractionNegative": 0.12638888888888888,
+            "longestNegativeStreakHours": 16
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.08107818,
+            "meanApr": 0.06394327162777796,
+            "fractionNegative": 0.18287037037037038,
+            "longestNegativeStreakHours": 38
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.08393832000000001,
+            "meanApr": 0.06330414020278079,
+            "fractionNegative": 0.17152777777777778,
+            "longestNegativeStreakHours": 38
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.0851691,
+            "meanApr": 0.06927470709999126,
+            "fractionNegative": 0.1523972602739726,
+            "longestNegativeStreakHours": 38
+          }
+        ],
+        "fundingAsOfMs": 1787451665404,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 90d won at 8.1078%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:wsteth:ETH",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "wstETH",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "ETH",
+      "underlying": "ETH",
+      "marketKey": "ETH",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL ETH idx=1 maxLev=25 mark 2420"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": true,
+          "detail": "OI bound $12,623,614 (OI $1,893,542,173), depth bound $621,481 (top-10 $1,864,443 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $4661.11"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $621,481 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 1.1613% over 180d (4320h), the MINIMUM of 30d 4.3224%, 90d 4.3852%, 180d 1.1613%, 365d 3.2627% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 22.0% of 4320h (max 25%), longest run 64h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "spot leg wstETH (Lido, Ethereum) — defillama Lido apyBase 2.3800% at 2026-08-23T01:01:36.682Z"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 1.8818% (floor 8.0000%) = 67.4157% escrow x (spot 2.3800% + funding 1.1613% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0.023799999999999998,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.011613132,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.027913132,
+        "netApyOnDepositApy": 0.01881784179775281,
+        "capacityUsd": 621481.0350266666,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.043224467999999995,
+            "meanApr": 0.07616649301666614,
+            "fractionNegative": 0.09166666666666666,
+            "longestNegativeStreakHours": 6
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.043851683999999995,
+            "meanApr": 0.0698176631444455,
+            "fractionNegative": 0.14583333333333334,
+            "longestNegativeStreakHours": 56
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.011613132,
+            "meanApr": 0.050327218552779496,
+            "fractionNegative": 0.2199074074074074,
+            "longestNegativeStreakHours": 64
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.032627496,
+            "meanApr": 0.06168010529999535,
+            "fractionNegative": 0.17157534246575343,
+            "longestNegativeStreakHours": 64
+          }
+        ],
+        "fundingAsOfMs": 1787451256267,
+        "fundingSpanDays": 364.96,
+        "spotLeg": {
+          "symbol": "wstETH",
+          "protocol": "Lido",
+          "chain": "Ethereum",
+          "chainId": 1,
+          "apy": 0.023799999999999998,
+          "source": "defillama Lido apyBase 2.3800% at 2026-08-23T01:01:36.682Z",
+          "reachable": true,
+          "tvlUsd": 23177743349
+        }
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 180d won at 1.1613%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:aave:AAVE",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "AAVE",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "AAVE",
+      "underlying": "AAVE",
+      "marketKey": "AAVE",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL AAVE idx=28 maxLev=10 mark 124.8921"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $668,752 (OI $100,312,753), depth bound $11,315 (top-10 $33,945 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $84.86"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $11,315 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 3.2937% over 30d (720h), the MINIMUM of 30d 3.2937%, 90d 9.9715%, 180d 10.9500%, 365d 10.9500% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": true,
+          "detail": "short PAID 19.9% of 720h (max 25%), longest run 19h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for AAVE; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 1.7148% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 3.2937% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.032936724,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.025436724,
+        "netApyOnDepositApy": 0.017148353258426965,
+        "capacityUsd": 11314.9406,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 30,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.032936724,
+            "meanApr": 0.10742326923333327,
+            "fractionNegative": 0.1986111111111111,
+            "longestNegativeStreakHours": 19
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.09971508,
+            "meanApr": 0.09456126742778002,
+            "fractionNegative": 0.12222222222222222,
+            "longestNegativeStreakHours": 19
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.08874669697778083,
+            "fractionNegative": 0.11967592592592592,
+            "longestNegativeStreakHours": 23
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.09301167889998768,
+            "fractionNegative": 0.09189497716894977,
+            "longestNegativeStreakHours": 23
+          }
+        ],
+        "fundingAsOfMs": 1787451552962,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 30d won at 3.2937%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:kpepe:kPEPE",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "kPEPE",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "kPEPE",
+      "underlying": "kPEPE",
+      "marketKey": "kPEPE",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL kPEPE idx=15 maxLev=10 mark 0.004089"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $217,453 (OI $32,617,894), depth bound $62,627 (top-10 $187,882 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $469.70"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $62,627 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 2.1995% over 365d (8760h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 5.2160%, 365d 2.1995% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 22.6% of 8760h (max 25%), longest run 83h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for kPEPE; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 0.9772% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding 2.1995% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": 0.021995484,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.014495484,
+        "netApyOnDepositApy": 0.00977223640449438,
+        "capacityUsd": 62627.24708033333,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 365,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.12623907276666596,
+            "fractionNegative": 0.07777777777777778,
+            "longestNegativeStreakHours": 7
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.08784032695000159,
+            "fractionNegative": 0.1162037037037037,
+            "longestNegativeStreakHours": 28
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.052159668000000006,
+            "meanApr": 0.0433410885416681,
+            "fractionNegative": 0.20694444444444443,
+            "longestNegativeStreakHours": 83
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.021995484,
+            "meanApr": 0.041515217800002994,
+            "fractionNegative": 0.22568493150684932,
+            "longestNegativeStreakHours": 83
+          }
+        ],
+        "fundingAsOfMs": 1787451575562,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 365d won at 2.1995%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:doge:DOGE",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "DOGE",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "DOGE",
+      "underlying": "DOGE",
+      "marketKey": "DOGE",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL DOGE idx=12 maxLev=10 mark 0.092121"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $510,473 (OI $76,570,882), depth bound $15,512 (top-10 $46,536 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $116.34"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $15,512 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": false,
+          "detail": "p25 -0.0023% over 180d (4320h), the MINIMUM of 30d 6.6693%, 90d 1.2551%, 180d -0.0023%, 365d 0.1035% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 25.0% of 4320h (max 25%), longest run 79h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for DOGE; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit -0.5072% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding -0.0023% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": -0.000022776,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": -0.007522776,
+        "netApyOnDepositApy": -0.005071534382022472,
+        "capacityUsd": 15512.02622933333,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.066692508,
+            "meanApr": 0.11201269528333269,
+            "fractionNegative": 0.1,
+            "longestNegativeStreakHours": 8
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.012551328000000002,
+            "meanApr": 0.06696573564444502,
+            "fractionNegative": 0.21712962962962962,
+            "longestNegativeStreakHours": 54
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": -0.000022776,
+            "meanApr": 0.05393425298333499,
+            "fractionNegative": 0.2502314814814815,
+            "longestNegativeStreakHours": 79
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.001035432,
+            "meanApr": 0.053485022999998966,
+            "fractionNegative": 0.24805936073059362,
+            "longestNegativeStreakHours": 92
+          }
+        ],
+        "fundingAsOfMs": 1787451411383,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 180d won at -0.0023%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:btc:BTC",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "BTC",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "BTC",
+      "underlying": "BTC",
+      "marketKey": "BTC",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL BTC idx=0 maxLev=40 mark 77179"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": true,
+          "detail": "OI bound $18,640,126 (OI $2,796,018,909), depth bound $187,987 (top-10 $563,962 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $1409.90"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $187,987 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": false,
+          "detail": "p25 -0.3539% over 180d (4320h), the MINIMUM of 30d 3.5880%, 90d 3.8715%, 180d -0.3539%, 365d 2.2839% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 26.0% of 4320h (max 25%), longest run 45h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for BTC; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit -0.7442% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding -0.3539% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": -0.00353904,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": -0.01103904,
+        "netApyOnDepositApy": -0.007442049438202247,
+        "capacityUsd": 187987.18103999997,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.035880084,
+            "meanApr": 0.07174850259999958,
+            "fractionNegative": 0.11388888888888889,
+            "longestNegativeStreakHours": 20
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.03871482,
+            "meanApr": 0.07163489432222345,
+            "fractionNegative": 0.12083333333333333,
+            "longestNegativeStreakHours": 20
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": -0.00353904,
+            "meanApr": 0.04062645356111205,
+            "fractionNegative": 0.2601851851851852,
+            "longestNegativeStreakHours": 45
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": 0.022839072000000002,
+            "meanApr": 0.060767071799995236,
+            "fractionNegative": 0.18550228310502284,
+            "longestNegativeStreakHours": 45
+          }
+        ],
+        "fundingAsOfMs": 1787451233522,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 180d won at -0.3539%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:ena:ENA",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "ENA",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "ENA",
+      "underlying": "ENA",
+      "marketKey": "ENA",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL ENA idx=122 maxLev=10 mark 0.15169"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $363,779 (OI $54,566,829), depth bound $5,600 (top-10 $16,801 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $42.00"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $5,600 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": false,
+          "detail": "p25 -1.4273% over 365d (8760h), the MINIMUM of 30d 10.9500%, 90d 10.9500%, 180d 4.3547%, 365d -1.4273% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 26.7% of 8760h (max 25%), longest run 156h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for ENA; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit -1.4678% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding -1.4273% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": -0.014272667999999999,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": -0.021772668,
+        "netApyOnDepositApy": -0.014678203146067414,
+        "capacityUsd": 5600.252536666667,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 365,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.12690352484999926,
+            "fractionNegative": 0.09722222222222222,
+            "longestNegativeStreakHours": 6
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.10949999999999999,
+            "meanApr": 0.09360904772222436,
+            "fractionNegative": 0.1087962962962963,
+            "longestNegativeStreakHours": 13
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": 0.043546836,
+            "meanApr": 0.05778410974722395,
+            "fractionNegative": 0.1988425925925926,
+            "longestNegativeStreakHours": 35
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": -0.014272667999999999,
+            "meanApr": 0.01772647590000204,
+            "fractionNegative": 0.26666666666666666,
+            "longestNegativeStreakHours": 156
+          }
+        ],
+        "fundingAsOfMs": 1787451494112,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 365d won at -1.4273%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:wld:WLD",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "WLD",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "WLD",
+      "underlying": "WLD",
+      "marketKey": "WLD",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL WLD idx=31 maxLev=10 mark 0.38854"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $187,981 (OI $28,197,180), depth bound $2,211 (top-10 $6,634 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $16.58"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $2,211 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": false,
+          "detail": "p25 -1.5638% over 180d (4320h), the MINIMUM of 30d -0.1608%, 90d 8.9788%, 180d -1.5638%, 365d -0.2864% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 26.0% of 4320h (max 25%), longest run 104h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for WLD; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit -1.5599% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding -1.5638% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": -0.015638352,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": -0.023138352,
+        "netApyOnDepositApy": -0.015598888988764045,
+        "capacityUsd": 2211.1724753333333,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": -0.001608336,
+            "meanApr": 0.04660654948333339,
+            "fractionNegative": 0.2513888888888889,
+            "longestNegativeStreakHours": 23
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.089788248,
+            "meanApr": 0.059676784194445845,
+            "fractionNegative": 0.1837962962962963,
+            "longestNegativeStreakHours": 37
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": -0.015638352,
+            "meanApr": -0.014822667641664105,
+            "fractionNegative": 0.2604166666666667,
+            "longestNegativeStreakHours": 104
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": -0.002863644,
+            "meanApr": 0.012596188400002253,
+            "fractionNegative": 0.25296803652968036,
+            "longestNegativeStreakHours": 104
+          }
+        ],
+        "fundingAsOfMs": 1787451688248,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 180d won at -1.5638%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:sui:SUI",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "SUI",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "SUI",
+      "underlying": "SUI",
+      "marketKey": "SUI",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL SUI idx=14 maxLev=10 mark 0.8141"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $204,744 (OI $30,711,540), depth bound $3,659 (top-10 $10,978 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $27.44"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $3,659 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": false,
+          "detail": "p25 -2.9335% over 180d (4320h), the MINIMUM of 30d 3.8247%, 90d 8.8439%, 180d -2.9335%, 365d -0.3774% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 30.9% of 4320h (max 25%), longest run 47h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for SUI; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit -2.4832% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding -2.9335% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": -0.029334612,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": -0.036834612,
+        "netApyOnDepositApy": -0.024832322696629213,
+        "capacityUsd": 3659.2882783333334,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.038247036,
+            "meanApr": 0.09426546818333309,
+            "fractionNegative": 0.18194444444444444,
+            "longestNegativeStreakHours": 21
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": 0.088439208,
+            "meanApr": 0.08317071121111282,
+            "fractionNegative": 0.14166666666666666,
+            "longestNegativeStreakHours": 31
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": -0.029334612,
+            "meanApr": 0.037120705413889475,
+            "fractionNegative": 0.30949074074074073,
+            "longestNegativeStreakHours": 47
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": -0.003773808,
+            "meanApr": 0.049001335900000394,
+            "fractionNegative": 0.2562785388127854,
+            "longestNegativeStreakHours": 47
+          }
+        ],
+        "fundingAsOfMs": 1787451530258,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 180d won at -2.9335%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:xrp:XRP",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "XRP",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "XRP",
+      "underlying": "XRP",
+      "marketKey": "XRP",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL XRP idx=25 maxLev=20 mark 1.488"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $1,789,598 (OI $268,439,750), depth bound $74,555 (top-10 $223,665 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $559.16"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $74,555 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": false,
+          "detail": "p25 -5.7172% over 180d (4320h), the MINIMUM of 30d 0.3139%, 90d -3.1144%, 180d -5.7172%, 365d -2.9554% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 43.6% of 4320h (max 25%), longest run 74h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for XRP; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit -4.3599% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding -5.7172% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": -0.05717214,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": -0.06467214,
+        "netApyOnDepositApy": -0.04359919550561798,
+        "capacityUsd": 74555.06543333334,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.003138708,
+            "meanApr": 0.06964748473333315,
+            "fractionNegative": 0.2375,
+            "longestNegativeStreakHours": 21
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": -0.031143551999999998,
+            "meanApr": 0.03254284154999986,
+            "fractionNegative": 0.3365740740740741,
+            "longestNegativeStreakHours": 70
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": -0.05717214,
+            "meanApr": 0.007118288197221949,
+            "fractionNegative": 0.4363425925925926,
+            "longestNegativeStreakHours": 74
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": -0.029553612,
+            "meanApr": 0.02947901490000223,
+            "fractionNegative": 0.3188356164383562,
+            "longestNegativeStreakHours": 101
+          }
+        ],
+        "fundingAsOfMs": 1787451343920,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 180d won at -5.7172%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:jitosol:SOL",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "jitoSOL",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "SOL",
+      "underlying": "SOL",
+      "marketKey": "SOL",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL SOL idx=5 maxLev=20 mark 95.731"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $3,219,472 (OI $482,920,875), depth bound $16,614 (top-10 $49,841 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $124.60"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $16,614 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": false,
+          "detail": "p25 -6.3280% over 180d (4320h), the MINIMUM of 30d 2.4890%, 90d -1.0089%, 180d -6.3280%, 365d -5.5789% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 40.8% of 4320h (max 25%), longest run 60h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "spot leg jitoSOL is on Solana, which this product has no rail to — yield NOT credited"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit -4.7717% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding -6.3280% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": -0.063280488,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": -0.070780488,
+        "netApyOnDepositApy": -0.047717182921348314,
+        "capacityUsd": 16613.660103333335,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": 0.024889788,
+            "meanApr": 0.06092899131666651,
+            "fractionNegative": 0.17777777777777778,
+            "longestNegativeStreakHours": 26
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": -0.010088891999999999,
+            "meanApr": 0.03456396456666643,
+            "fractionNegative": 0.2759259259259259,
+            "longestNegativeStreakHours": 34
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": -0.063280488,
+            "meanApr": 0.0026388058249997228,
+            "fractionNegative": 0.4081018518518518,
+            "longestNegativeStreakHours": 60
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": -0.055788936000000004,
+            "meanApr": 0.002423485100000275,
+            "fractionNegative": 0.3613013698630137,
+            "longestNegativeStreakHours": 125
+          }
+        ],
+        "fundingAsOfMs": 1787451321411,
+        "fundingSpanDays": 364.96,
+        "spotLeg": {
+          "symbol": "jitoSOL",
+          "protocol": "Jito",
+          "chain": "Solana",
+          "chainId": null,
+          "apy": 0.051,
+          "source": "defillama Jito apyBase 5.1000% at 2026-08-23T01:02:11.631Z",
+          "reachable": false,
+          "tvlUsd": 966200998
+        }
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 180d won at -6.3280%",
+        "spot leg jitoSOL named but not credited: Solana is not a rail"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:ada:ADA",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "ADA",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "ADA",
+      "underlying": "ADA",
+      "marketKey": "ADA",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL ADA idx=65 maxLev=10 mark 0.22445"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $244,040 (OI $36,605,946), depth bound $7,463 (top-10 $22,390 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $55.98"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $7,463 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": false,
+          "detail": "p25 -15.5916% over 90d (2160h), the MINIMUM of 30d -9.0465%, 90d -15.5916%, 180d -11.2947%, 365d -8.8381% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 47.8% of 2160h (max 25%), longest run 60h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for ADA; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit -11.0168% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding -15.5916% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": -0.155915736,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": -0.163415736,
+        "netApyOnDepositApy": -0.11016791191011235,
+        "capacityUsd": 7463.436406666668,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 90,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": -0.09046451999999999,
+            "meanApr": 0.008270668833333487,
+            "fractionNegative": 0.4125,
+            "longestNegativeStreakHours": 22
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": -0.155915736,
+            "meanApr": -0.046648889888887116,
+            "fractionNegative": 0.47824074074074074,
+            "longestNegativeStreakHours": 60
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": -0.11294706,
+            "meanApr": -0.024085574577777057,
+            "fractionNegative": 0.43819444444444444,
+            "longestNegativeStreakHours": 60
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": -0.088381392,
+            "meanApr": -0.0067451641999998,
+            "fractionNegative": 0.4221461187214612,
+            "longestNegativeStreakHours": 60
+          }
+        ],
+        "fundingAsOfMs": 1787451710472,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 90d won at -15.5916%"
+      ]
+    },
+    {
+      "id": "hyperliquid-funding:999:trump:TRUMP",
+      "venue": "hyperliquid-funding",
+      "chainId": 999,
+      "cls": "A",
+      "collateral": {
+        "symbol": "TRUMP",
+        "token": ""
+      },
+      "debt": {
+        "symbol": "",
+        "token": ""
+      },
+      "hlCoin": "TRUMP",
+      "underlying": "TRUMP",
+      "marketKey": "TRUMP",
+      "gates": [
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL TRUMP idx=174 maxLev=10 mark 2.3273"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "8760 hourly prints over 365.0d (floor 1944h); windows 30d/90d/180d/365d"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": false,
+          "detail": "OI bound $187,829 (OI $28,174,329), depth bound $5,811 (top-10 $17,434 the thin side) — floor $100,000"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of the short at capacity $43.58"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": false,
+          "detail": "capacity $5,811 (binding: HL book depth); the SPOT leg's own capacity is NOT measured"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": false,
+          "detail": "p25 -52.6446% over 180d (4320h), the MINIMUM of 30d -20.6907%, 90d -44.0582%, 180d -52.6446%, 365d -42.2790% — floor 0.0000%"
+        },
+        {
+          "gate": "funding_negative_share",
+          "pass": false,
+          "detail": "short PAID 73.4% of 4320h (max 25%), longest run 271h (max 72h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": false,
+          "detail": "no spot leg registered for TRUMP; a book with no spot leg cannot clear the screen (funding-only ceiling 6.8764%)"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit -35.9964% (floor 8.0000%) = 67.4157% escrow x (spot 0.0000% + funding -52.6446% − drag 0.7500%)"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0,
+        "targetLtv": 0,
+        "loopLeverage": 1,
+        "collateralYieldApy": 0,
+        "borrowApySpot": 0,
+        "borrowApyMarginal": 0,
+        "fundingP25Apr": -0.5264462160000001,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": -0.533946216,
+        "netApyOnDepositApy": -0.3599637411235955,
+        "capacityUsd": 5811.3148,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null,
+        "fundingWindowDays": 180,
+        "fundingWindows": [
+          {
+            "days": 30,
+            "hours": 720,
+            "p25Apr": -0.20690682,
+            "meanApr": -0.04799270146666729,
+            "fractionNegative": 0.5013888888888889,
+            "longestNegativeStreakHours": 56
+          },
+          {
+            "days": 90,
+            "hours": 2160,
+            "p25Apr": -0.440581572,
+            "meanApr": -0.2489576751111163,
+            "fractionNegative": 0.6773148148148148,
+            "longestNegativeStreakHours": 247
+          },
+          {
+            "days": 180,
+            "hours": 4320,
+            "p25Apr": -0.5264462160000001,
+            "meanApr": -0.35798034149443564,
+            "fractionNegative": 0.7335648148148148,
+            "longestNegativeStreakHours": 271
+          },
+          {
+            "days": 365,
+            "hours": 8760,
+            "p25Apr": -0.42279001199999994,
+            "meanApr": -0.26268330119998895,
+            "fractionNegative": 0.6559360730593607,
+            "longestNegativeStreakHours": 271
+          }
+        ],
+        "fundingAsOfMs": 1787451388961,
+        "fundingSpanDays": 364.96,
+        "spotLeg": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "priced on the MINIMUM p25 across 4 qualifying window(s); 180d won at -52.6446%"
+      ]
+    }
+  ],
+  "ineligible": [
+    {
+      "id": "hyperliquid-funding:999:ATOM",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "ATOM open interest $1,838,745 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MATIC",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "MATIC is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:DYDX",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "DYDX 24h volume $480,813 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:APE",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "APE 24h volume $834,740 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:STX",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "STX open interest $817,024 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:RNDR",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "RNDR is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:CFX",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "CFX 24h volume $318,978 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:FTM",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "FTM is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:GMX",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "GMX 24h volume $417,934 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SNX",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "SNX 24h volume $200,150 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:COMP",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "COMP 24h volume $303,009 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MKR",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "MKR is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:FXS",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "FXS is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:HPOS",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "HPOS is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:RLB",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "RLB is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:UNIBOT",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "UNIBOT is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:YGG",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "YGG 24h volume $368,312 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SEI",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "SEI open interest $1,376,876 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:RUNE",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "RUNE 24h volume $440,927 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:OX",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "OX is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:FRIEND",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "FRIEND is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:SHIA",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "SHIA is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:CYBER",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "CYBER is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:BLZ",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "BLZ is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:BANANA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "BANANA 24h volume $229,377 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:TRB",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "TRB open interest $477,271 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:FTT",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "FTT is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:LOOM",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "LOOM is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:OGN",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "OGN is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:RDNT",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "RDNT is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:ARK",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "ARK is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:BNT",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "BNT is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:CANTO",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "CANTO is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:REQ",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "REQ is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:BIGTIME",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "BIGTIME 24h volume $418,922 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:KAS",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "KAS 24h volume $299,716 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ORBS",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "ORBS is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:BLUR",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "BLUR 24h volume $594,870 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:TIA",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "TIA open interest $1,583,724 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:BSV",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "BSV 24h volume $300,709 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:TON",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "TON is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:MINA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MINA 24h volume $551,639 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:POLYX",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "POLYX 24h volume $174,532 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:GAS",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "GAS 24h volume $232,539 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:STG",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "STG is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:STRAX",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "STRAX is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:MEME",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MEME 24h volume $408,022 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ORDI",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ORDI 24h volume $653,825 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:BADGER",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "BADGER is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:NEO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "NEO 24h volume $186,799 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ZEN",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "ZEN open interest $595,086 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:FIL",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "FIL open interest $1,836,066 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:PYTH",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "PYTH open interest $1,880,682 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SUSHI",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "SUSHI 24h volume $663,525 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ILV",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "ILV is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:IMX",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "IMX open interest $1,967,179 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:GMT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "GMT 24h volume $205,745 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SUPER",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "SUPER 24h volume $165,809 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:USTC",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "USTC is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:NFTI",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "NFTI is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:kLUNC",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "kLUNC open interest $310,056 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:RSR",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "RSR 24h volume $108,894 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:GALA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "GALA 24h volume $503,222 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:NTRN",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "NTRN is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:ACE",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "ACE open interest $1,630,007 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MAV",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "MAV is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:CAKE",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "CAKE 24h volume $798,846 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ETC",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ETC 24h volume $709,158 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:XAI",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "XAI 24h volume $103,020 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MANTA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MANTA 24h volume $163,553 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:UMA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "UMA 24h volume $150,569 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ALT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ALT 24h volume $199,253 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ZETA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ZETA 24h volume $223,634 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:DYM",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "DYM 24h volume $297,087 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MAVIA",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "MAVIA is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:W",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "W 24h volume $557,015 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:PANDORA",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "PANDORA is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:PIXEL",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "PIXEL is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:AI",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "AI is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:AR",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "AR open interest $1,369,689 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MYRO",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "MYRO is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:kFLOKI",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "kFLOKI open interest $442,456 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:TNSR",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "TNSR 24h volume $44,906 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SAGA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "SAGA 24h volume $242,314 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MERL",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MERL 24h volume $182,093 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:POPCAT",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "POPCAT open interest $1,666,427 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:OMNI",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "OMNI is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:REZ",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "REZ 24h volume $217,460 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:NOT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "NOT 24h volume $288,778 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:TURBO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "TURBO 24h volume $223,958 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:BRETT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "BRETT 24h volume $422,483 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:IO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "IO 24h volume $216,607 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ZK",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ZK 24h volume $590,977 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:BLAST",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "BLAST is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:LISTA",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "LISTA is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:MEW",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "MEW is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:RENDER",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "RENDER open interest $1,125,232 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:kDOGS",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "kDOGS is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:CATI",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "CATI is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:CELO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "CELO 24h volume $164,138 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:HMSTR",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "HMSTR open interest $858,211 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SCR",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "SCR is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:NEIROETH",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "NEIROETH is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:kNEIRO",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "kNEIRO open interest $221,484 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:GOAT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "GOAT 24h volume $388,985 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MOODENG",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MOODENG 24h volume $689,735 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:PNUT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "PNUT 24h volume $647,023 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:CHILLGUY",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "CHILLGUY is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:SAND",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "SAND open interest $330,005 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:IOTA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "IOTA 24h volume $443,531 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ME",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ME 24h volume $347,980 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MOVE",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "MOVE open interest $392,327 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:USUAL",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "USUAL 24h volume $463,769 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:AI16Z",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "AI16Z is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:AIXBT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "AIXBT 24h volume $360,013 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ZEREBRO",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "ZEREBRO is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:BIO",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "BIO open interest $1,658,532 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:GRIFFAIN",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "GRIFFAIN 24h volume $270,509 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:S",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "S 24h volume $408,663 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:MELANIA",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "MELANIA open interest $1,588,935 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ANIME",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ANIME 24h volume $153,420 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:VINE",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "VINE 24h volume $222,475 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:JELLY",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "JELLY is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:BERA",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "BERA open interest $1,351,682 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:TST",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "TST is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:LAYER",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "LAYER 24h volume $139,820 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:IP",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "IP is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:OM",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "OM is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:NIL",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "NIL 24h volume $835,256 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:PROMPT",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "PROMPT is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:BABY",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "BABY 24h volume $368,912 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:WCT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "WCT 24h volume $127,540 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:HYPER",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "HYPER 24h volume $227,613 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:INIT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "INIT 24h volume $159,351 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:DOOD",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "DOOD is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:LAUNCHCOIN",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "LAUNCHCOIN is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:NXPC",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "NXPC 24h volume $220,974 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SOPH",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "SOPH 24h volume $119,082 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:RESOLV",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "RESOLV 24h volume $222,930 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SYRUP",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "SYRUP 24h volume $800,238 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:PROVE",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "PROVE 24h volume $200,379 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:YZY",
+      "cls": "A",
+      "firstFailedGate": "native_perp",
+      "reason": "YZY is delisted"
+    },
+    {
+      "id": "hyperliquid-funding:999:LINEA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "LINEA 24h volume $322,763 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SKY",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "SKY 24h volume $620,405 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:AVNT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "AVNT 24h volume $760,949 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:STBL",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "STBL 24h volume $443,920 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:0G",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "0G 24h volume $329,249 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:HEMI",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "HEMI open interest $1,227,800 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:APEX",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "APEX 24h volume $344,308 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:2Z",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "2Z 24h volume $254,544 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:STABLE",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "STABLE 24h volume $433,282 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:FOGO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "FOGO 24h volume $160,644 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:AXS",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "AXS open interest $423,132 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:DASH",
+      "cls": "A",
+      "firstFailedGate": "hl_oi_depth",
+      "reason": "DASH open interest $817,320 below $2,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:SKR",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "SKR 24h volume $172,416 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:AZTEC",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "AZTEC 24h volume $301,193 below $1,000,000"
+    },
+    {
+      "id": "hyperliquid-funding:999:ONDO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ONDO outside the top 24 books by 24h volume this scan ($27,444,090)"
+    },
+    {
+      "id": "hyperliquid-funding:999:CASHCAT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "CASHCAT outside the top 24 books by 24h volume this scan ($26,692,097)"
+    },
+    {
+      "id": "hyperliquid-funding:999:XPL",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "XPL outside the top 24 books by 24h volume this scan ($25,398,044)"
+    },
+    {
+      "id": "hyperliquid-funding:999:BNB",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "BNB outside the top 24 books by 24h volume this scan ($24,938,685)"
+    },
+    {
+      "id": "hyperliquid-funding:999:MON",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MON outside the top 24 books by 24h volume this scan ($21,527,097)"
+    },
+    {
+      "id": "hyperliquid-funding:999:VVV",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "VVV outside the top 24 books by 24h volume this scan ($19,465,486)"
+    },
+    {
+      "id": "hyperliquid-funding:999:ZRO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ZRO outside the top 24 books by 24h volume this scan ($14,802,319)"
+    },
+    {
+      "id": "hyperliquid-funding:999:WLFI",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "WLFI outside the top 24 books by 24h volume this scan ($14,790,721)"
+    },
+    {
+      "id": "hyperliquid-funding:999:ETHFI",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ETHFI outside the top 24 books by 24h volume this scan ($14,506,849)"
+    },
+    {
+      "id": "hyperliquid-funding:999:XLM",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "XLM outside the top 24 books by 24h volume this scan ($14,266,783)"
+    },
+    {
+      "id": "hyperliquid-funding:999:kBONK",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "kBONK outside the top 24 books by 24h volume this scan ($13,750,607)"
+    },
+    {
+      "id": "hyperliquid-funding:999:AVAX",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "AVAX outside the top 24 books by 24h volume this scan ($11,118,805)"
+    },
+    {
+      "id": "hyperliquid-funding:999:PENGU",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "PENGU outside the top 24 books by 24h volume this scan ($10,554,541)"
+    },
+    {
+      "id": "hyperliquid-funding:999:TRX",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "TRX outside the top 24 books by 24h volume this scan ($9,939,000)"
+    },
+    {
+      "id": "hyperliquid-funding:999:BCH",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "BCH outside the top 24 books by 24h volume this scan ($8,377,747)"
+    },
+    {
+      "id": "hyperliquid-funding:999:LTC",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "LTC outside the top 24 books by 24h volume this scan ($8,363,108)"
+    },
+    {
+      "id": "hyperliquid-funding:999:GRAM",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "GRAM outside the top 24 books by 24h volume this scan ($7,741,957)"
+    },
+    {
+      "id": "hyperliquid-funding:999:FET",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "FET outside the top 24 books by 24h volume this scan ($7,121,372)"
+    },
+    {
+      "id": "hyperliquid-funding:999:ARB",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ARB outside the top 24 books by 24h volume this scan ($7,098,657)"
+    },
+    {
+      "id": "hyperliquid-funding:999:WIF",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "WIF outside the top 24 books by 24h volume this scan ($6,237,299)"
+    },
+    {
+      "id": "hyperliquid-funding:999:ICP",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ICP outside the top 24 books by 24h volume this scan ($6,134,380)"
+    },
+    {
+      "id": "hyperliquid-funding:999:JUP",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "JUP outside the top 24 books by 24h volume this scan ($5,972,977)"
+    },
+    {
+      "id": "hyperliquid-funding:999:PURR",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "PURR outside the top 24 books by 24h volume this scan ($5,904,366)"
+    },
+    {
+      "id": "hyperliquid-funding:999:INJ",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "INJ outside the top 24 books by 24h volume this scan ($5,703,447)"
+    },
+    {
+      "id": "hyperliquid-funding:999:APT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "APT outside the top 24 books by 24h volume this scan ($5,519,931)"
+    },
+    {
+      "id": "hyperliquid-funding:999:VIRTUAL",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "VIRTUAL outside the top 24 books by 24h volume this scan ($5,475,159)"
+    },
+    {
+      "id": "hyperliquid-funding:999:KAITO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "KAITO outside the top 24 books by 24h volume this scan ($4,984,875)"
+    },
+    {
+      "id": "hyperliquid-funding:999:CHIP",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "CHIP outside the top 24 books by 24h volume this scan ($4,779,677)"
+    },
+    {
+      "id": "hyperliquid-funding:999:POL",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "POL outside the top 24 books by 24h volume this scan ($4,632,825)"
+    },
+    {
+      "id": "hyperliquid-funding:999:AERO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "AERO outside the top 24 books by 24h volume this scan ($4,622,775)"
+    },
+    {
+      "id": "hyperliquid-funding:999:kSHIB",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "kSHIB outside the top 24 books by 24h volume this scan ($4,614,415)"
+    },
+    {
+      "id": "hyperliquid-funding:999:LDO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "LDO outside the top 24 books by 24h volume this scan ($4,604,041)"
+    },
+    {
+      "id": "hyperliquid-funding:999:HBAR",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "HBAR outside the top 24 books by 24h volume this scan ($4,353,964)"
+    },
+    {
+      "id": "hyperliquid-funding:999:MET",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MET outside the top 24 books by 24h volume this scan ($3,846,940)"
+    },
+    {
+      "id": "hyperliquid-funding:999:JTO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "JTO outside the top 24 books by 24h volume this scan ($3,378,424)"
+    },
+    {
+      "id": "hyperliquid-funding:999:SPX",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "SPX outside the top 24 books by 24h volume this scan ($3,371,570)"
+    },
+    {
+      "id": "hyperliquid-funding:999:DOT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "DOT outside the top 24 books by 24h volume this scan ($3,369,197)"
+    },
+    {
+      "id": "hyperliquid-funding:999:MORPHO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MORPHO outside the top 24 books by 24h volume this scan ($3,149,162)"
+    },
+    {
+      "id": "hyperliquid-funding:999:GRASS",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "GRASS outside the top 24 books by 24h volume this scan ($2,911,265)"
+    },
+    {
+      "id": "hyperliquid-funding:999:CC",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "CC outside the top 24 books by 24h volume this scan ($2,766,576)"
+    },
+    {
+      "id": "hyperliquid-funding:999:EIGEN",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "EIGEN outside the top 24 books by 24h volume this scan ($2,724,548)"
+    },
+    {
+      "id": "hyperliquid-funding:999:PENDLE",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "PENDLE outside the top 24 books by 24h volume this scan ($2,693,372)"
+    },
+    {
+      "id": "hyperliquid-funding:999:BOME",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "BOME outside the top 24 books by 24h volume this scan ($2,614,506)"
+    },
+    {
+      "id": "hyperliquid-funding:999:PAXG",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "PAXG outside the top 24 books by 24h volume this scan ($2,312,341)"
+    },
+    {
+      "id": "hyperliquid-funding:999:OP",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "OP outside the top 24 books by 24h volume this scan ($1,894,624)"
+    },
+    {
+      "id": "hyperliquid-funding:999:ALGO",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ALGO outside the top 24 books by 24h volume this scan ($1,766,898)"
+    },
+    {
+      "id": "hyperliquid-funding:999:ENS",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ENS outside the top 24 books by 24h volume this scan ($1,497,631)"
+    },
+    {
+      "id": "hyperliquid-funding:999:STRK",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "STRK outside the top 24 books by 24h volume this scan ($1,457,775)"
+    },
+    {
+      "id": "hyperliquid-funding:999:MEGA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MEGA outside the top 24 books by 24h volume this scan ($1,136,507)"
+    },
+    {
+      "id": "hyperliquid-funding:999:ZORA",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "ZORA outside the top 24 books by 24h volume this scan ($1,132,818)"
+    },
+    {
+      "id": "hyperliquid-funding:999:MNT",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "MNT outside the top 24 books by 24h volume this scan ($1,098,043)"
+    },
+    {
+      "id": "hyperliquid-funding:999:PEOPLE",
+      "cls": "A",
+      "firstFailedGate": "market_sanity",
+      "reason": "PEOPLE outside the top 24 books by 24h volume this scan ($1,009,307)"
+    }
+  ],
+  "generatedAtMs": 1787451731764,
+  "contentHash": "96b02ae0ce336d934246f178a3aeed5dc02f067149d4694d536c183a7603d96c",
+  "scanStats": {
+    "pairsSeen": 232,
+    "tookMs": 551094,
+    "rpcHost": "api.hyperliquid.xyz",
+    "notes": [
+      "232 perp books seen; 55 delisted; 24 shortlisted by 24h volume, 208 in the dust bucket with their number",
+      "4 of 24 shortlisted books have a registered spot leg",
+      "windows: 24 re-measured this scan, 0 served from the archive (archive was empty), 0 still unpriced; archive write SKIPPED (no blob token)",
+      "hyperliquid /info calls spent: 441"
+    ]
+  }
+}

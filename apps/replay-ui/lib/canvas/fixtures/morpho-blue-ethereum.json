@@ -1,0 +1,1912 @@
+{
+  "version": 2,
+  "venue": "morpho-blue-ethereum",
+  "chainId": 1,
+  "blockNumber": 25814027,
+  "blockHash": "0x6ec599bf117477dd2fbccd99830ddb0ec1278e133df76fbb92d0083ad8b9532f",
+  "hlSnapshotHash": "ab6c52e6955059b002ba4701eb4caeace0df779ec6d3fc438b3a7c571f784af5",
+  "marketIdSetHash": "0fb2e04ddfa61d30440652cd35e6e19b47a3a98d85ce60ed9526b24646396279",
+  "merklCampaignSetHash": null,
+  "candidates": [
+    {
+      "id": "morpho-blue-ethereum:1:weeth-weth:0x37e7484d642d90f14451f1910ba4b7b8e4c3ccdd0ec28f8b2bdb35479e472ba7",
+      "venue": "morpho-blue-ethereum",
+      "chainId": 1,
+      "cls": "A",
+      "collateral": {
+        "symbol": "weETH",
+        "token": "0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"
+      },
+      "debt": {
+        "symbol": "WETH",
+        "token": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+      },
+      "hlCoin": "ETH",
+      "underlying": "ETH",
+      "marketKey": "0x37e7484d642d90f14451f1910ba4b7b8e4c3ccdd0ec28f8b2bdb35479e472ba7",
+      "gates": [
+        {
+          "gate": "peg_class",
+          "pass": true,
+          "detail": "weETH/WETH → ETH (same underlying, address-keyed)"
+        },
+        {
+          "gate": "oracle_provenance",
+          "pass": true,
+          "detail": "factory-built ✓; all 1 constituent feed(s) on allow-list"
+        },
+        {
+          "gate": "oracle_staleness",
+          "pass": true,
+          "detail": "0x4270e181… on-demand rate LIVE (1097988436303426428 → 1102044771451250828 over 8 weeks)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "collateral yield 2.35% vs floor 0.50% (intrinsic 2.35% via exchange-rate feed 0x4270E1817576bbA4b640466bE79A408Ef128F828 14d drift; supply 0.00%) — carry engine PRESENT on the collateral half; funding half: HL ETH funding p25 4.33% over 2160h"
+        },
+        {
+          "gate": "caps",
+          "pass": true,
+          "detail": "weETH: no protocol caps on Blue — concentration bound 20% of $15,513,342 loan-market supply · WETH: no protocol caps on Blue"
+        },
+        {
+          "gate": "lt_geometry",
+          "pass": true,
+          "detail": "market LLTV 94.5% (liquidation exactly at LLTV, no grace)"
+        },
+        {
+          "gate": "risk_feature",
+          "pass": true,
+          "detail": "weETH: [clean] · WETH: [clean]"
+        },
+        {
+          "gate": "debt_market_open",
+          "pass": true,
+          "detail": "debt leg accepts new borrows"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "borrow APY 1.93% (ceiling 300.00%), util 89.32% (ceiling 99.50%)"
+        },
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL ETH idx=1 maxLev=25"
+        },
+        {
+          "gate": "wrapper_basis",
+          "pass": true,
+          "detail": "max 90d dev 0.01% vs 1.00% (lrt), cur 0.01%, 13 pins via aave-oracle-ratio+morpho-irm (mainnet). Note: venue prices by exchange rate; residual market discount is unhedged."
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 5.38% (floor 8.00%); carry on equity 7.18% at marginal borrow 1.94%"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": true,
+          "detail": "OI bound $12,675,306, depth bound $424,968"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of hedge $3187.26"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 4.33% (floor -30.00%), 2160h history"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $424,968 (binding: HL book depth)"
+        },
+        {
+          "gate": "borrow_liquidity",
+          "pass": true,
+          "detail": "debt-leg bound $712,661"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0.945,
+        "targetLtv": 0.756,
+        "loopLeverage": 4.098360655737705,
+        "collateralYieldApy": 0.02345361105266985,
+        "borrowApySpot": 0.01929138807770915,
+        "borrowApyMarginal": 0.019401802554228458,
+        "fundingP25Apr": 0.04327177200000001,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.07177934708882433,
+        "netApyOnDepositApy": 0.05383451031661825,
+        "capacityUsd": 424968.4673466666,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": 0.00011768275188833287,
+        "curBasisDev": 0.00009781992555495545,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": []
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wsteth-weth:0xd0e50cdac92fe2172043f5e0c36532c6369d24947e40968f34a5e8819ca9ec5d",
+      "venue": "morpho-blue-ethereum",
+      "chainId": 1,
+      "cls": "A",
+      "collateral": {
+        "symbol": "wstETH",
+        "token": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+      },
+      "debt": {
+        "symbol": "WETH",
+        "token": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+      },
+      "hlCoin": "ETH",
+      "underlying": "ETH",
+      "marketKey": "0xd0e50cdac92fe2172043f5e0c36532c6369d24947e40968f34a5e8819ca9ec5d",
+      "gates": [
+        {
+          "gate": "peg_class",
+          "pass": true,
+          "detail": "wstETH/WETH → ETH (same underlying, address-keyed)"
+        },
+        {
+          "gate": "oracle_provenance",
+          "pass": true,
+          "detail": "factory-built ✓; all 1 constituent feed(s) on allow-list"
+        },
+        {
+          "gate": "oracle_staleness",
+          "pass": true,
+          "detail": "0x905b7dab… on-demand rate LIVE (1238061237492207552 → 1242271090726486053 over 8 weeks)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "collateral yield 2.21% vs floor 0.50% (intrinsic 2.21% via exchange-rate feed 0x905b7dAbCD3Ce6B792D874e303D336424Cdb1421 14d drift; supply 0.00%) — carry engine PRESENT on the collateral half; funding half: HL ETH funding p25 4.33% over 2160h"
+        },
+        {
+          "gate": "caps",
+          "pass": true,
+          "detail": "wstETH: no protocol caps on Blue — concentration bound 20% of $28,775,553 loan-market supply · WETH: no protocol caps on Blue"
+        },
+        {
+          "gate": "lt_geometry",
+          "pass": true,
+          "detail": "market LLTV 94.5% (liquidation exactly at LLTV, no grace)"
+        },
+        {
+          "gate": "risk_feature",
+          "pass": true,
+          "detail": "wstETH: [clean] · WETH: [clean]"
+        },
+        {
+          "gate": "debt_market_open",
+          "pass": true,
+          "detail": "debt leg accepts new borrows"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "borrow APY 1.93% (ceiling 300.00%), util 89.05% (ceiling 99.50%)"
+        },
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL ETH idx=1 maxLev=25"
+        },
+        {
+          "gate": "wrapper_basis",
+          "pass": true,
+          "detail": "max 90d dev 0.02% vs 1.50% (lst), cur 0.01%, 13 pins via aave-oracle-ratio+morpho-irm (mainnet). Note: venue prices by exchange rate; residual market discount is unhedged."
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 4.97% (floor 8.00%); carry on equity 6.62% at marginal borrow 1.94%"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": true,
+          "detail": "OI bound $12,675,306, depth bound $424,968"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of hedge $3187.26"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 4.33% (floor -30.00%), 2160h history"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $424,968 (binding: HL book depth)"
+        },
+        {
+          "gate": "borrow_liquidity",
+          "pass": true,
+          "detail": "debt-leg bound $1,356,213"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0.945,
+        "targetLtv": 0.756,
+        "loopLeverage": 4.098360655737705,
+        "collateralYieldApy": 0.02211758199463682,
+        "borrowApySpot": 0.01927160813314171,
+        "borrowApyMarginal": 0.019428849643051627,
+        "fundingP25Apr": 0.04327177200000001,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.06622001652659751,
+        "netApyOnDepositApy": 0.04966501239494813,
+        "capacityUsd": 424968.4673466666,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": 0.0001610963042500105,
+        "curBasisDev": 0.00011835535134022829,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": []
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wsteth-weth:0xb8fc70e82bc5bb53e773626fcc6a23f7eefa036918d7ef216ecfb1950a94a85e",
+      "venue": "morpho-blue-ethereum",
+      "chainId": 1,
+      "cls": "A",
+      "collateral": {
+        "symbol": "wstETH",
+        "token": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+      },
+      "debt": {
+        "symbol": "WETH",
+        "token": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+      },
+      "hlCoin": "ETH",
+      "underlying": "ETH",
+      "marketKey": "0xb8fc70e82bc5bb53e773626fcc6a23f7eefa036918d7ef216ecfb1950a94a85e",
+      "gates": [
+        {
+          "gate": "peg_class",
+          "pass": true,
+          "detail": "wstETH/WETH → ETH (same underlying, address-keyed)"
+        },
+        {
+          "gate": "oracle_provenance",
+          "pass": true,
+          "detail": "factory-built ✓; all 1 constituent feed(s) on allow-list"
+        },
+        {
+          "gate": "oracle_staleness",
+          "pass": true,
+          "detail": "0x905b7dab… on-demand rate LIVE (1238061237492207552 → 1242271090726486053 over 8 weeks)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "collateral yield 2.21% vs floor 0.50% (intrinsic 2.21% via exchange-rate feed 0x905b7dAbCD3Ce6B792D874e303D336424Cdb1421 14d drift; supply 0.00%) — carry engine PRESENT on the collateral half; funding half: HL ETH funding p25 4.33% over 2160h"
+        },
+        {
+          "gate": "caps",
+          "pass": true,
+          "detail": "wstETH: no protocol caps on Blue — concentration bound 20% of $90,193,923 loan-market supply · WETH: no protocol caps on Blue"
+        },
+        {
+          "gate": "lt_geometry",
+          "pass": true,
+          "detail": "market LLTV 96.5% (liquidation exactly at LLTV, no grace)"
+        },
+        {
+          "gate": "risk_feature",
+          "pass": true,
+          "detail": "wstETH: [clean] · WETH: [clean]"
+        },
+        {
+          "gate": "debt_market_open",
+          "pass": true,
+          "detail": "debt leg accepts new borrows"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "borrow APY 1.97% (ceiling 300.00%), util 89.07% (ceiling 99.50%)"
+        },
+        {
+          "gate": "native_perp",
+          "pass": true,
+          "detail": "HL ETH idx=1 maxLev=25"
+        },
+        {
+          "gate": "wrapper_basis",
+          "pass": true,
+          "detail": "max 90d dev 0.02% vs 1.50% (lst), cur 0.01%, 13 pins via aave-oracle-ratio+morpho-irm (mainnet). Note: venue prices by exchange rate; residual market discount is unhedged."
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 4.92% (floor 8.00%); carry on equity 6.57% at marginal borrow 1.98%"
+        },
+        {
+          "gate": "hl_oi_depth",
+          "pass": true,
+          "detail": "OI bound $12,675,306, depth bound $424,968"
+        },
+        {
+          "gate": "hl_min_size",
+          "pass": true,
+          "detail": "min order $10.00 vs 1% of hedge $3187.26"
+        },
+        {
+          "gate": "funding_p25_floor",
+          "pass": true,
+          "detail": "p25 4.33% (floor -30.00%), 2160h history"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $424,968 (binding: HL book depth)"
+        },
+        {
+          "gate": "borrow_liquidity",
+          "pass": true,
+          "detail": "debt-leg bound $3,883,002"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0.965,
+        "targetLtv": 0.772,
+        "loopLeverage": 4.385964912280702,
+        "collateralYieldApy": 0.02211758199463682,
+        "borrowApySpot": 0.019666171346768287,
+        "borrowApyMarginal": 0.019822084943390213,
+        "fundingP25Apr": 0.04327177200000001,
+        "executionDragApr": 0.0075,
+        "netCarryOnEquityApy": 0.06566182646640165,
+        "netApyOnDepositApy": 0.049246369849801234,
+        "capacityUsd": 424968.4673466666,
+        "capacityBinding": "HL book depth",
+        "maxBasisDev90d": 0.0001610963042500105,
+        "curBasisDev": 0.00011835535134022829,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": null,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": []
+    },
+    {
+      "id": "morpho-blue-ethereum:1:syrupusdc-pyusd:0xc9629945524f3fde56c7e8854a6c3d48e76b9d97236abbe73c750fcc7aeb8501",
+      "venue": "morpho-blue-ethereum",
+      "chainId": 1,
+      "cls": "N1",
+      "collateral": {
+        "symbol": "syrupUSDC",
+        "token": "0x80ac24aA929eaF5013f6436cdA2a7ba190f5Cc0b"
+      },
+      "debt": {
+        "symbol": "PYUSD",
+        "token": "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
+      },
+      "hlCoin": null,
+      "underlying": "USD",
+      "marketKey": "0xc9629945524f3fde56c7e8854a6c3d48e76b9d97236abbe73c750fcc7aeb8501",
+      "gates": [
+        {
+          "gate": "peg_class",
+          "pass": true,
+          "detail": "syrupUSDC/PYUSD → USD/USD stable pair (address-keyed)"
+        },
+        {
+          "gate": "oracle_provenance",
+          "pass": true,
+          "detail": "factory-built ✓; all 2 constituent feed(s) on allow-list"
+        },
+        {
+          "gate": "oracle_staleness",
+          "pass": true,
+          "detail": "0x8fffffd4… fresh (16h); 0x8f1df6d7… fresh (4h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "collateral yield 4.73% vs floor 0.50% (intrinsic 4.73% via native ERC-4626 convertToAssets 14d NAV drift; supply 0.00%) — carry engine PRESENT on the collateral half; funding half: no perp book names a funding leg on this row"
+        },
+        {
+          "gate": "caps",
+          "pass": true,
+          "detail": "syrupUSDC: no protocol caps on Blue — concentration bound 20% of $75,385,514 loan-market supply · PYUSD: no protocol caps on Blue"
+        },
+        {
+          "gate": "lt_geometry",
+          "pass": true,
+          "detail": "market LLTV 91.5% (liquidation exactly at LLTV, no grace)"
+        },
+        {
+          "gate": "risk_feature",
+          "pass": true,
+          "detail": "syrupUSDC: [clean] · PYUSD: [clean]"
+        },
+        {
+          "gate": "debt_market_open",
+          "pass": true,
+          "detail": "debt leg accepts new borrows"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "borrow APY 4.54% (ceiling 300.00%), util 89.78% (ceiling 99.50%)"
+        },
+        {
+          "gate": "depeg_basis",
+          "pass": false,
+          "detail": "no independent price history — fail closed"
+        },
+        {
+          "gate": "independent_price_feed",
+          "pass": false,
+          "detail": "no independent (non-venue) price feed for both legs — fail closed"
+        },
+        {
+          "gate": "rate_inversion_p25",
+          "pass": false,
+          "detail": "no carry history — fail closed"
+        },
+        {
+          "gate": "redemption_liquidity",
+          "pass": false,
+          "detail": "no Uniswap V3 pool quote for syrupUSDC→PYUSD at $250,000 — DEX exit unverified, fail closed"
+        },
+        {
+          "gate": "no_perp_confirmed",
+          "pass": true,
+          "detail": "USD-stable underlying has no HL perp — cannot double-list with class A"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 4.70% (floor 8.00%, f_b=1) at L=3.00 (HF 1.37); marginal borrow 4.54%; time-to-liq ?d < 90d"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $3,853,734 (binding: debt borrow liquidity)"
+        },
+        {
+          "gate": "borrow_liquidity",
+          "pass": true,
+          "detail": "debt-leg bound $3,853,734"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0.915,
+        "targetLtv": 0.6666666666666667,
+        "loopLeverage": 3,
+        "collateralYieldApy": 0.047300662864056854,
+        "borrowApySpot": 0.04536093316219361,
+        "borrowApyMarginal": 0.04544949825757052,
+        "fundingP25Apr": null,
+        "executionDragApr": 0.004,
+        "netCarryOnEquityApy": 0.04700299207702953,
+        "netApyOnDepositApy": 0.04700299207702953,
+        "capacityUsd": 3853733.507538803,
+        "capacityBinding": "debt borrow liquidity",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": 0.6666666666666667,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "rate-decay time-to-liquidation ≈ ?d at stressed rates",
+        "time-to-liquidation below 90d floor — reflected in rate_inversion detail"
+      ]
+    },
+    {
+      "id": "morpho-blue-ethereum:1:susds-usdt:0x26b178d49895f80ca3c39b2745efc4cd9adcddfcc73dae93e531e86977ec4d96",
+      "venue": "morpho-blue-ethereum",
+      "chainId": 1,
+      "cls": "N1",
+      "collateral": {
+        "symbol": "sUSDS",
+        "token": "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD"
+      },
+      "debt": {
+        "symbol": "USDT",
+        "token": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+      },
+      "hlCoin": null,
+      "underlying": "USD",
+      "marketKey": "0x26b178d49895f80ca3c39b2745efc4cd9adcddfcc73dae93e531e86977ec4d96",
+      "gates": [
+        {
+          "gate": "peg_class",
+          "pass": true,
+          "detail": "sUSDS/USDT → USD/USD stable pair (address-keyed)"
+        },
+        {
+          "gate": "oracle_provenance",
+          "pass": false,
+          "detail": "factory-built ✓; UNREVIEWED feed(s): 0x533244d8b685a9CA031f06130B38d718c489E4c6 — fail closed, review to allow-list"
+        },
+        {
+          "gate": "oracle_staleness",
+          "pass": true,
+          "detail": "0xff30586c… fresh (8h); 0x533244d8… fresh (4h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "collateral yield 3.47% vs floor 0.50% (intrinsic 3.47% via native ERC-4626 convertToAssets 14d NAV drift; supply 0.00%) — carry engine PRESENT on the collateral half; funding half: no perp book names a funding leg on this row"
+        },
+        {
+          "gate": "caps",
+          "pass": true,
+          "detail": "sUSDS: no protocol caps on Blue — concentration bound 20% of $62,881,889 loan-market supply · USDT: no protocol caps on Blue"
+        },
+        {
+          "gate": "lt_geometry",
+          "pass": true,
+          "detail": "market LLTV 96.5% (liquidation exactly at LLTV, no grace)"
+        },
+        {
+          "gate": "risk_feature",
+          "pass": true,
+          "detail": "sUSDS: [clean] · USDT: [clean]"
+        },
+        {
+          "gate": "debt_market_open",
+          "pass": true,
+          "detail": "debt leg accepts new borrows"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "borrow APY 4.63% (ceiling 300.00%), util 93.76% (ceiling 99.50%)"
+        },
+        {
+          "gate": "depeg_basis",
+          "pass": false,
+          "detail": "no independent price history — fail closed"
+        },
+        {
+          "gate": "independent_price_feed",
+          "pass": false,
+          "detail": "no independent (non-venue) price feed for both legs — fail closed"
+        },
+        {
+          "gate": "rate_inversion_p25",
+          "pass": false,
+          "detail": "no carry history — fail closed"
+        },
+        {
+          "gate": "redemption_liquidity",
+          "pass": false,
+          "detail": "no Uniswap V3 pool quote for sUSDS→USDT at $250,000 — DEX exit unverified, fail closed"
+        },
+        {
+          "gate": "no_perp_confirmed",
+          "pass": true,
+          "detail": "USD-stable underlying has no HL perp — cannot double-list with class A"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 0.77% (floor 8.00%, f_b=1) at L=3.00 (HF 1.45); marginal borrow 4.63%; time-to-liq ?d < 90d"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $1,961,593 (binding: debt borrow liquidity)"
+        },
+        {
+          "gate": "borrow_liquidity",
+          "pass": true,
+          "detail": "debt-leg bound $1,961,593"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0.965,
+        "targetLtv": 0.6666666666666667,
+        "loopLeverage": 3,
+        "collateralYieldApy": 0.03474269832727401,
+        "borrowApySpot": 0.04625900233600405,
+        "borrowApyMarginal": 0.04625900233600405,
+        "fundingP25Apr": null,
+        "executionDragApr": 0.004,
+        "netCarryOnEquityApy": 0.007710090309813931,
+        "netApyOnDepositApy": 0.007710090309813931,
+        "capacityUsd": 1961592.792321965,
+        "capacityBinding": "debt borrow liquidity",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": 0.6666666666666667,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "rate-decay time-to-liquidation ≈ ?d at stressed rates",
+        "time-to-liquidation below 90d floor — reflected in rate_inversion detail"
+      ]
+    },
+    {
+      "id": "morpho-blue-ethereum:1:susde-pyusd:0x90ef0c5a0dc7c4de4ad4585002d44e9d411d212d2f6258e94948beecf8b4c0d5",
+      "venue": "morpho-blue-ethereum",
+      "chainId": 1,
+      "cls": "N1",
+      "collateral": {
+        "symbol": "sUSDe",
+        "token": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497"
+      },
+      "debt": {
+        "symbol": "PYUSD",
+        "token": "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
+      },
+      "hlCoin": null,
+      "underlying": "USD",
+      "marketKey": "0x90ef0c5a0dc7c4de4ad4585002d44e9d411d212d2f6258e94948beecf8b4c0d5",
+      "gates": [
+        {
+          "gate": "peg_class",
+          "pass": true,
+          "detail": "sUSDe/PYUSD → USD/USD stable pair (address-keyed)"
+        },
+        {
+          "gate": "oracle_provenance",
+          "pass": true,
+          "detail": "factory-built ✓; all 2 constituent feed(s) on allow-list"
+        },
+        {
+          "gate": "oracle_staleness",
+          "pass": true,
+          "detail": "0xa569d910… fresh (17h); 0x8f1df6d7… fresh (4h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "collateral yield 4.22% vs floor 0.50% (intrinsic 4.22% via native ERC-4626 convertToAssets 14d NAV drift; supply 0.00%) — carry engine PRESENT on the collateral half; funding half: no perp book names a funding leg on this row"
+        },
+        {
+          "gate": "caps",
+          "pass": true,
+          "detail": "sUSDe: no protocol caps on Blue — concentration bound 20% of $52,842,107 loan-market supply · PYUSD: no protocol caps on Blue"
+        },
+        {
+          "gate": "lt_geometry",
+          "pass": true,
+          "detail": "market LLTV 91.5% (liquidation exactly at LLTV, no grace)"
+        },
+        {
+          "gate": "risk_feature",
+          "pass": true,
+          "detail": "sUSDe: [clean] · PYUSD: [clean]"
+        },
+        {
+          "gate": "debt_market_open",
+          "pass": true,
+          "detail": "debt leg accepts new borrows"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "borrow APY 3.22% (ceiling 300.00%), util 87.19% (ceiling 99.50%)"
+        },
+        {
+          "gate": "depeg_basis",
+          "pass": true,
+          "detail": "max 90d dev 0.09% (≤1.00%), cur 0.06% (≤0.50%), 13/13 pins, one-sided detrend drift 4.26%/yr via aave-oracle-ratio+morpho-irm (mainnet)"
+        },
+        {
+          "gate": "independent_price_feed",
+          "pass": true,
+          "detail": "independent AaveOracle feeds available for both legs"
+        },
+        {
+          "gate": "rate_inversion_p25",
+          "pass": true,
+          "detail": "carry p25 4.78% (≥2.00%), min pin 1.76% (≥-5.00%), 0 consecutive negative (≤1), 13/13 pins, entry impact +0.08% applied"
+        },
+        {
+          "gate": "redemption_liquidity",
+          "pass": false,
+          "detail": "no Uniswap V3 pool quote for sUSDe→PYUSD at $250,000 — DEX exit unverified, fail closed"
+        },
+        {
+          "gate": "no_perp_confirmed",
+          "pass": true,
+          "detail": "USD-stable underlying has no HL perp — cannot double-list with class A"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 5.64% (floor 8.00%, f_b=1) at L=3.00 (HF 1.37); marginal borrow 3.30%"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $3,385,422 (binding: debt borrow liquidity)"
+        },
+        {
+          "gate": "borrow_liquidity",
+          "pass": true,
+          "detail": "debt-leg bound $3,385,422"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0.915,
+        "targetLtv": 0.6666666666666667,
+        "loopLeverage": 3,
+        "collateralYieldApy": 0.04216424540589422,
+        "borrowApySpot": 0.032237551774787,
+        "borrowApyMarginal": 0.033040525850861945,
+        "fundingP25Apr": null,
+        "executionDragApr": 0.004,
+        "netCarryOnEquityApy": 0.05641168451595875,
+        "netApyOnDepositApy": 0.05641168451595875,
+        "capacityUsd": 3385422.2751943357,
+        "capacityBinding": "debt borrow liquidity",
+        "maxBasisDev90d": 0.000865084158310336,
+        "curBasisDev": 0.0005758308890587097,
+        "carryP25": 0.047759588204376494,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": 0.6666666666666667,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "carry-positive at p75 borrow / p25 yield — no rate-decay path to liquidation"
+      ]
+    },
+    {
+      "id": "morpho-blue-ethereum:1:susds-usdt:0x3274643db77a064abd3bc851de77556a4ad2e2f502f4f0c80845fa8f909ecf0b",
+      "venue": "morpho-blue-ethereum",
+      "chainId": 1,
+      "cls": "N1",
+      "collateral": {
+        "symbol": "sUSDS",
+        "token": "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD"
+      },
+      "debt": {
+        "symbol": "USDT",
+        "token": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+      },
+      "hlCoin": null,
+      "underlying": "USD",
+      "marketKey": "0x3274643db77a064abd3bc851de77556a4ad2e2f502f4f0c80845fa8f909ecf0b",
+      "gates": [
+        {
+          "gate": "peg_class",
+          "pass": true,
+          "detail": "sUSDS/USDT → USD/USD stable pair (address-keyed)"
+        },
+        {
+          "gate": "oracle_provenance",
+          "pass": false,
+          "detail": "factory-built ✓; UNREVIEWED feed(s): 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9 — fail closed, review to allow-list"
+        },
+        {
+          "gate": "oracle_staleness",
+          "pass": true,
+          "detail": "0xaed0c384… fresh (0h); 0x3e7d1eab… fresh (4h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "collateral yield 3.47% vs floor 0.50% (intrinsic 3.47% via native ERC-4626 convertToAssets 14d NAV drift; supply 0.00%) — carry engine PRESENT on the collateral half; funding half: no perp book names a funding leg on this row"
+        },
+        {
+          "gate": "caps",
+          "pass": true,
+          "detail": "sUSDS: no protocol caps on Blue — concentration bound 20% of $34,544,448 loan-market supply · USDT: no protocol caps on Blue"
+        },
+        {
+          "gate": "lt_geometry",
+          "pass": true,
+          "detail": "market LLTV 96.5% (liquidation exactly at LLTV, no grace)"
+        },
+        {
+          "gate": "risk_feature",
+          "pass": true,
+          "detail": "sUSDS: [clean] · USDT: [clean]"
+        },
+        {
+          "gate": "debt_market_open",
+          "pass": true,
+          "detail": "debt leg accepts new borrows"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "borrow APY 4.04% (ceiling 300.00%), util 90.76% (ceiling 99.50%)"
+        },
+        {
+          "gate": "depeg_basis",
+          "pass": false,
+          "detail": "no independent price history — fail closed"
+        },
+        {
+          "gate": "independent_price_feed",
+          "pass": false,
+          "detail": "no independent (non-venue) price feed for both legs — fail closed"
+        },
+        {
+          "gate": "rate_inversion_p25",
+          "pass": false,
+          "detail": "no carry history — fail closed"
+        },
+        {
+          "gate": "redemption_liquidity",
+          "pass": false,
+          "detail": "no Uniswap V3 pool quote for sUSDS→USDT at $250,000 — DEX exit unverified, fail closed"
+        },
+        {
+          "gate": "no_perp_confirmed",
+          "pass": true,
+          "detail": "USD-stable underlying has no HL perp — cannot double-list with class A"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 1.94% (floor 8.00%, f_b=1) at L=3.00 (HF 1.45); marginal borrow 4.04%; time-to-liq ?d < 90d"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $1,595,691 (binding: debt borrow liquidity)"
+        },
+        {
+          "gate": "borrow_liquidity",
+          "pass": true,
+          "detail": "debt-leg bound $1,595,691"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0.965,
+        "targetLtv": 0.6666666666666667,
+        "loopLeverage": 3,
+        "collateralYieldApy": 0.03474269832727401,
+        "borrowApySpot": 0.040436279477837844,
+        "borrowApyMarginal": 0.040436279477837844,
+        "fundingP25Apr": null,
+        "executionDragApr": 0.004,
+        "netCarryOnEquityApy": 0.019355536026146345,
+        "netApyOnDepositApy": 0.019355536026146345,
+        "capacityUsd": 1595690.6511646006,
+        "capacityBinding": "debt borrow liquidity",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": 0.6666666666666667,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "rate-decay time-to-liquidation ≈ ?d at stressed rates",
+        "time-to-liquidation below 90d floor — reflected in rate_inversion detail"
+      ]
+    },
+    {
+      "id": "morpho-blue-ethereum:1:syrupusdc-rlusd:0xc0ae375fd761ff19b3f04de5534c0f1ec110f80e1c2ede27c42c1c43c3040394",
+      "venue": "morpho-blue-ethereum",
+      "chainId": 1,
+      "cls": "N1",
+      "collateral": {
+        "symbol": "syrupUSDC",
+        "token": "0x80ac24aA929eaF5013f6436cdA2a7ba190f5Cc0b"
+      },
+      "debt": {
+        "symbol": "RLUSD",
+        "token": "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD"
+      },
+      "hlCoin": null,
+      "underlying": "USD",
+      "marketKey": "0xc0ae375fd761ff19b3f04de5534c0f1ec110f80e1c2ede27c42c1c43c3040394",
+      "gates": [
+        {
+          "gate": "peg_class",
+          "pass": true,
+          "detail": "syrupUSDC/RLUSD → USD/USD stable pair (address-keyed)"
+        },
+        {
+          "gate": "oracle_provenance",
+          "pass": false,
+          "detail": "factory-built ✓; UNREVIEWED feed(s): 0x26C46B7aD0012cA71F2298ada567dC9Af14E7f2A — fail closed, review to allow-list"
+        },
+        {
+          "gate": "oracle_staleness",
+          "pass": true,
+          "detail": "0x8fffffd4… fresh (16h); 0x26c46b7a… fresh (19h)"
+        },
+        {
+          "gate": "yield_source_integrity",
+          "pass": true,
+          "detail": "collateral yield 4.73% vs floor 0.50% (intrinsic 4.73% via native ERC-4626 convertToAssets 14d NAV drift; supply 0.00%) — carry engine PRESENT on the collateral half; funding half: no perp book names a funding leg on this row"
+        },
+        {
+          "gate": "caps",
+          "pass": true,
+          "detail": "syrupUSDC: no protocol caps on Blue — concentration bound 20% of $14,878,882 loan-market supply · RLUSD: no protocol caps on Blue"
+        },
+        {
+          "gate": "lt_geometry",
+          "pass": true,
+          "detail": "market LLTV 91.5% (liquidation exactly at LLTV, no grace)"
+        },
+        {
+          "gate": "risk_feature",
+          "pass": true,
+          "detail": "syrupUSDC: [clean] · RLUSD: [clean]"
+        },
+        {
+          "gate": "debt_market_open",
+          "pass": true,
+          "detail": "debt leg accepts new borrows"
+        },
+        {
+          "gate": "market_sanity",
+          "pass": true,
+          "detail": "borrow APY 4.47% (ceiling 300.00%), util 87.19% (ceiling 99.50%)"
+        },
+        {
+          "gate": "depeg_basis",
+          "pass": false,
+          "detail": "no independent price history — fail closed"
+        },
+        {
+          "gate": "independent_price_feed",
+          "pass": false,
+          "detail": "no independent (non-venue) price feed for both legs — fail closed"
+        },
+        {
+          "gate": "rate_inversion_p25",
+          "pass": false,
+          "detail": "no carry history — fail closed"
+        },
+        {
+          "gate": "redemption_liquidity",
+          "pass": false,
+          "detail": "no Uniswap V3 pool quote for syrupUSDC→RLUSD at $250,000 — DEX exit unverified, fail closed"
+        },
+        {
+          "gate": "no_perp_confirmed",
+          "pass": true,
+          "detail": "USD-stable underlying has no HL perp — cannot double-list with class A"
+        },
+        {
+          "gate": "marginal_rates_carry",
+          "pass": false,
+          "detail": "net APY on deposit 4.63% (floor 8.00%, f_b=1) at L=3.00 (HF 1.37); marginal borrow 4.58%; time-to-liq ?d < 90d"
+        },
+        {
+          "gate": "capacity_floor",
+          "pass": true,
+          "detail": "capacity $952,966 (binding: debt borrow liquidity)"
+        },
+        {
+          "gate": "borrow_liquidity",
+          "pass": true,
+          "detail": "debt-leg bound $952,966"
+        }
+      ],
+      "eligible": false,
+      "eligibleWithRewards": null,
+      "economics": {
+        "ltUsed": 0.915,
+        "targetLtv": 0.6666666666666667,
+        "loopLeverage": 3,
+        "collateralYieldApy": 0.047300662864056854,
+        "borrowApySpot": 0.04469264860289851,
+        "borrowApyMarginal": 0.045821578081361815,
+        "fundingP25Apr": null,
+        "executionDragApr": 0.004,
+        "netCarryOnEquityApy": 0.046258832429446936,
+        "netApyOnDepositApy": 0.046258832429446936,
+        "capacityUsd": 952965.7130557159,
+        "capacityBinding": "debt borrow liquidity",
+        "maxBasisDev90d": null,
+        "curBasisDev": null,
+        "carryP25": null,
+        "timeToLiqDays": null,
+        "depegSizedMaxLtv": 0.6666666666666667,
+        "rewardApyDiluted": null,
+        "netApyWithRewards": null,
+        "rewardRunwayDays": null
+      },
+      "score": null,
+      "scoreN1": null,
+      "apyRiskAdj": null,
+      "notes": [
+        "rate-decay time-to-liquidation ≈ ?d at stressed rates",
+        "time-to-liquidation below 90d floor — reflected in rate_inversion detail"
+      ]
+    }
+  ],
+  "ineligible": [
+    {
+      "id": "morpho-blue-ethereum:1:PAXG-USDC:0x8eaf7b29",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PAXG 0x45804880De22913dAFE09f4980848ECE6EcbAf78) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:cbBTC-USDC:0x64d65c9a",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PRIME-PYUSD:0x41c41d0c",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PRIME 0x19ebb35279A16207Ec4ba82799CC64715065F7F6) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:USDT-USDT:0xb74aae3b",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (USDT 0x3D4762b4bB4B4C922377Fe5b887E900D7fB64cDf) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:kBTC-RLUSD:0x15bb2a6a",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (kBTC 0x73E0C0d45E048D25Fc26Fa3159b0aA04BfA4Db98) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:kBTC-PYUSD:0xe51f9aaa",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (kBTC 0x73E0C0d45E048D25Fc26Fa3159b0aA04BfA4Db98) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:WBTC-USDC:0x3a85e619",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wstETH-USDT:0xe7e9694b",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (ETH/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wstUSR-USDC:0xd9e34b1e",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (wstUSR 0x1202F5C7b4B9E47a1A484E8B270be34dbbC75055) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:weETH-RLUSD:0xea4bfb18",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (ETH/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-reUSD-10DEC2026-USDC:0x1e9d6146",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-reUSD-10DEC2026 0xeCfaFdC7741323a945A163ed068B5a3C43483957) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:WBTC-USDT:0xa921ef34",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:weETH-PYUSD:0x85d59152",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (ETH/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:AA_FalconXUSDC-USDC:0xe83d72fa",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (AA_FalconXUSDC 0xC26A6Fa2C37b38E549a4a1807543801Db684f99C) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:RLP-USDC:0xe1b65304",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (RLP 0x4956b52aE2fF65D74CA2d61207523288e4528f96) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:USDT-USDT:0xa23d5a03",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (USDT 0x3D4762b4bB4B4C922377Fe5b887E900D7fB64cDf) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:mF-ONE-USDC:0xef2c308b",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (mF-ONE 0x238a700eD6165261Cf8b2e544ba797BC11e466Ba) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wstETH-USDC:0xb323495f",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (ETH/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:mWIN-PYUSD:0xeecbfa4b",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (mWIN 0x4E72025984424E52838cf8953E2863eFf036B67A) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:cbBTC-RLUSD:0xffd01061",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wFalconX-USDC:0x2a0b8934",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (wFalconX 0x4614F7A56A3Eb83b2Ff9fA4B4b9575B28Fb68644) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:AZND-USDC:0xfd0d72a4",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (AZND 0x52c66B5E7f8Fde20843De900C5C8B4b0F23708A0) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PST-USDC:0x002278ea",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PST 0x22aE3D9a738471f405169Af055d31c687087d4c7) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:cbBTC-USDT:0x4fe72543",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:USD3-USDC:0xe3df58f9",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (USD3 0x056B269Eb1f75477a8666ae8C7fE01b64dD55eCc) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-USD3-17DEC2026-USDC:0xf8c5aa31",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-USD3-17DEC2026 0x7f47c3e6b2c00fC4eB4d5Ae50d0Ab0Ab6888Eb4D) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:apyUSD-USDC:0x9c28c8fa",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (apyUSD 0x38EEb52F0771140d10c4E9A9a72349A329Fe8a6A) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:stUSDS-USDC:0xd570c19c",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (stUSDS 0x99CD4Ec3f88A45940936F469E4bB72A2A701EEB9) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:dCOMP-USDC:0x24852d8d",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (dCOMP 0x91d14789071e5E195FFC9F745348736677De3292) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wsrUSD-USDC:0x1590cb22",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (wsrUSD 0xd3fD63209FA2D55B07A0f6db36C2f43900be3094) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-sUSDS-26NOV2026-USDC:0x22fe4c68",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-sUSDS-26NOV2026 0xdC169AbE56461A2E0c034Da431Ac2a3ebf596094) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:reUSD-USDC:0x4565ac05",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (reUSD 0x5086bf358635B81D8C47C66d1C8b9E567Db70c72) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-sUSDS-26NOV2026-USDT:0x0367161b",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-sUSDS-26NOV2026 0xdC169AbE56461A2E0c034Da431Ac2a3ebf596094) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:steakEURCV-USDC:0xc498f4bf",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (steakEURCV 0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wstETH-USDC:0x7e585a93",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (ETH/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:strUSD-USDC:0x975c6e8b",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (strUSD 0x280839980a7eD0D7717F64125fE241012E5F5815) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:OETH-USDC:0xb8fef900",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (OETH 0x856c4Efb76C1D1AE02e20CEB03A2A6a08b0b8dC3) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:mM1-USD-USDC:0x4abde059",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (mM1-USD 0xCc5C22C7A6BCC25e66726AeF011dDE74289ED203) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:savUSD-USDC:0xe07d4163",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (savUSD 0xb8D89678E75a973E74698c976716308abB8a46A4) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:siUSD-USDC:0xbbf7ce1b",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (siUSD 0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:weETH-USDC:0x34377fc4",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (ETH/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-reUSD-10DEC2026-USDT:0x6acd1885",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-reUSD-10DEC2026 0xeCfaFdC7741323a945A163ed068B5a3C43483957) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:v-wmtUSDC-USDC:0x1d09bf97",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (v-wmtUSDC 0xF65460B84c13eeb911303336Ab0f9D63CC79839f) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:FXRP-RLUSD:0x4fa31e3f",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (FXRP 0xCE6170EA245dC8D1f275A710a062b70f125F0110) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:USR-USDC:0x8e7cc042",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (USR 0x66a1E37c9b0eAddca17d3662D6c05F4DECf3e110) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:WETH-USDC:0x94b823e6",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (ETH/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-USDG-24SEP2026-USDC:0x2412afc9",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-USDG-24SEP2026 0xc1906aeCf868749a2DeE203F59b904c0cf212140) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:savETH-WETH:0xd98cd88a",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (savETH 0xDA06eE2dACF9245Aa80072a4407deBDea0D7e341) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wJAAA-USDC:0xb55c0ebe",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (wJAAA 0x86b495e4Cb00AB18Ad94BFD7920479cC79E8eBFE) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:sUSDe-USDtb:0x88a18b2f",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (USDtb 0xC139190F447e929f090Edeb554D95AbB8b18aC1C) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:cbBTC-USDS:0x2f4ea313",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-apyUSD-5NOV2026-USDC:0xb37c30f3",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-apyUSD-5NOV2026 0xb5Be35D8fF83D431899b95851CB17a2B4bcEF150) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-apxUSD-5NOV2026-USDC:0x908b0370",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-apxUSD-5NOV2026 0xAF687B5EcB525Ccea96115088999B4eD80C388b6) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-apyUSD-18JUN2026-USDC:0xa75bb490",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-apyUSD-18JUN2026 0x3365554a61CeFF74A76528f9e86C1E87946d16a5) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:cbBTC-USDC:0xba3ba077",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wstETH-PYUSD:0xf5c5df23",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (ETH/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:LBTC-PYUSD:0x6a7e36eb",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:reUSD-USDT:0x9105a544",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (reUSD 0x5086bf358635B81D8C47C66d1C8b9E567Db70c72) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:wstLINK-LINK:0x987134eb",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (wstLINK 0x911D86C72155c33993d594B0Ec7E6206B4C803da) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:WBTC-RLUSD:0xa128dddc",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:mHyperBTC-USDC:0x51c6fa2e",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (mHyperBTC 0xC8495EAFf71D3A563b906295fCF2f685b1783085) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:rETH-USDC:0x0a15460a",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (ETH/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:USP-USDC:0x5d41b8d2",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (USP 0x098697bA3Fee4eA76294C5d6A466a4e3b3E95FE6) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-trUSD-26NOV2026-USDC:0xd21bbc23",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-trUSD-26NOV2026 0x7191878f1fe834b28F4d0CEAd0E4375B814C4aBb) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:XAUt-USDT:0xb7843fe7",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (XAUt 0x68749665FF8D2d112Fa859AA293F07A622782F38) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:PT-sUSDS-26NOV2026-USDS:0x9a8dab6d",
+      "cls": "unmapped",
+      "firstFailedGate": "peg_class",
+      "reason": "unmapped token (PT-sUSDS-26NOV2026 0xdC169AbE56461A2E0c034Da431Ac2a3ebf596094) — human review to add to registry-ethereum"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:WBTC-USDT:0x3c5a244b",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:cbBTC-PYUSD:0xd8a8e666",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:LBTC-USDC:0xbf02d6c6",
+      "cls": "D",
+      "firstFailedGate": "peg_class",
+      "reason": "directional pair (BTC/USD) — excluded: hedgeable in principle, but no lane can be forced to seat the hedge (FAMILY_REQUIRED_GROUPS.loop takes safety-buffer OR hedge)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xa36e440f",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "non-allow-listed IRM 0x0000000000000000000000000000000000000000"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xe2ef7a07",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "non-allow-listed IRM 0x0000000000000000000000000000000000000000"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x58e21206",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "non-allow-listed IRM 0x0000000000000000000000000000000000000000"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x54efdee0",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "non-allow-listed IRM 0x0000000000000000000000000000000000000000"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xfacc1f06",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "non-allow-listed IRM 0x0000000000000000000000000000000000000000"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x6d2fba32",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "shape-duplicate: rank 3 of 3 markets sharing (collateral, loan, LLTV 86.0%) — same offer, different oracle; keeping the 2 deepest. This one holds 2.9% of 0xb323495f…"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x1dca6989",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset USR has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x82053fe2",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset EURCV has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x6988c7a5",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset msETH has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x582fdc41",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset AUSD has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x1cfdc015",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,891,702 below floor (PT-RLP-9APR2026/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xebd23a87",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset apxUSD has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xac0ab812",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset msUSD has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xe2338049",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset apxUSD has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x9607eadd",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset msETH has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x64d2f82e",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset msUSD has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xab319644",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset AUSD has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xb7a75cab",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset EURCV has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x4b864425",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset AUSD has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xaa7231d6",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset EURCV has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x11db9f2c",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $51,135 below floor (amphrETH/WETH)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xb5f8d555",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset EURCV has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x78e99fb9",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $584,487 below floor (rRLP/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x0b352b75",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset EURCV has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xa5f6b409",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,967,133 below floor (CarryTradeUSDTRYLeverage/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xd2630c0e",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset msETH has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x7a25fb17",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset EURCV has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x62878115",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,775,716 below floor (PT-apyUSD-27AUG2026/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xf02d2e8f",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,770,779 below floor (PT-sUSDD-27AUG2026/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x69ef7fd1",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,748,486 below floor (PT-USDat-27AUG2026/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xff527fe9",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,682,854 below floor (WBTC/EURC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xae60b71b",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,661,854 below floor (sNUSD/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x8924445a",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,656,954 below floor (sUSN/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x88abdf86",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,656,347 below floor (wstETH/RLUSD)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xacc49fbf",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,641,151 below floor (srRoyUSDC/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xb374528d",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,611,023 below floor (wstETH/USDS)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xf062a110",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,596,236 below floor (PT-strUSD-26NOV2026/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x39d11026",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,527,285 below floor (sUSDe/DAI)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x80c97dd2",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset EURCV has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x9464b3d4",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset AUSD has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x61765602",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,473,764 below floor (weETH/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x4bb22a5f",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,334,494 below floor (PT-sUSDat-27AUG2026/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xce68c7aa",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,278,751 below floor (SolvBTC/WBTC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xc2c53d2b",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,272,622 below floor (weETH/USDT)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xf135feb2",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset EURCV has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x77e624dd",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,174,573 below floor (stUSDS/USDS)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x9972be1f",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $1,037,858 below floor (sDOLA/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xbe50eed7",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $999,980 below floor (WBTC/PYUSD)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x45671fb8",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $933,299 below floor (cbBTC/USDT)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x251b7cbc",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $898,639 below floor (rETH/WETH)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xc2ab3fb4",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $808,121 below floor (sBTCD/WBTC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x6a57d77b",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $796,245 below floor (wstETH/USDT)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x09dc9e7e",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $783,432 below floor (WBTC/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x0d55c325",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset msETH has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xe4cfbee9",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $706,334 below floor (tBTC/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x7421c274",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $704,705 below floor (wstETH/EURC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xf6a05662",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $688,909 below floor (LBTC/WBTC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x9bd88295",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $681,594 below floor (ILLIQUID_PERPDEX_COLL/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x58b332ca",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset msETH has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x1247f1c2",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $624,421 below floor (sUSDe/DAI)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xd86df29b",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "loan asset apxUSD has no independent USD reference (not Aave-listed) — fail closed"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x710f02ca",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $573,609 below floor (stUSDS/USDT)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xbd1ad3b9",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $348,245 below floor (deUSD/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x41b12bac",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "on-chain supply $507,338 below floor (ROY-ST-apyUSD/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x0f956344",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "oracle.price() reverted (sdeUSD/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0x23a7d0ff",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "oracle.price() reverted (msY/USDC)"
+    },
+    {
+      "id": "morpho-blue-ethereum:1:0xb317d11c",
+      "cls": "unmapped",
+      "firstFailedGate": "market_sanity",
+      "reason": "oracle.price() reverted (msY/USDC)"
+    }
+  ],
+  "generatedAtMs": 1787442058565,
+  "contentHash": "48974f43d18455d5b4bcd7a20ac370666960806c1ea553d9178fc89267100ee8",
+  "scanStats": {
+    "pairsSeen": 144,
+    "tookMs": 42306,
+    "rpcHost": "eth-mainnet.public.blastapi.io",
+    "notes": [
+      "77 markets passed on-chain re-verification of 144 API ids",
+      "window not binding — supply-filtered returned 144 id(s), shallowest priced candidate $51,135 vs $2,000,000 floor; 1 shape-duplicate(s) folded (max 2 per collateral/loan/LLTV)",
+      "merkl: overlay NOT WIRED for this chain — matchRewardsToPair keys on the Base venue id; rewards stay null (eligibleWithRewards null, not false)"
+    ]
+  }
+}

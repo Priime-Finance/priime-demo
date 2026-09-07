@@ -1,17 +1,613 @@
-/**
- * Standalone-kit stub.
- *
- * app/globals.css opens with `@import "../lib/design/tokens.css";`. That
- * file (the source project's shared design-token sheet, presumably reused
- * across priime.finance's several apps) was not part of the UI kit handoff
- * — the file tree only lists 66 files, and this path isn't one of them.
- *
- * It's an empty stub rather than a guessed-at token set: every custom
- * property actually consumed by the extracted CSS (app/globals.css,
- * app/build/{build,hm,funding}.css) is self-defined within those same
- * files — verified by diffing every `var(--x)` read against every `--x:`
- * declaration across them. The only reads with no local declaration are
- * `--font-geist` / `--font-geist-mono`, which app/layout.tsx
- * supplies at runtime via next/font's `variable` option, not a stylesheet.
- * If a future page needs tokens genuinely owned by this file, add them here.
- */
+/* ============================================================================
+   autoloop design tokens — Linear-grade extract, 2026-05-14
+   ----------------------------------------------------------------------------
+   Source of truth: docs/design/linear-extract.md
+   Imported by app/globals.css. Update here first; propagate to code second.
+   ============================================================================ */
+
+/* ============================================================================
+   HELIOS — the --p-* role layer (theme-v1)
+   ----------------------------------------------------------------------------
+   THE RULING: the cream and the navy swap jobs. Priime already owns a dark
+   register in its navy hardware family, so dark mode promotes that register
+   from OBJECT to ENVIRONMENT. The page ground drops BELOW the hardware, the
+   hardware hexes NEVER change, and the warm cream #F5F2EB stops being the
+   ground and becomes the INK. Warm ink on cold plate.
+   Enforceable test: if a reviewer can call a dark surface "grey" or
+   "blue-grey", a neutral leaked into the ink column and the work is rejected.
+
+   WHY THE GROUND IS #04060F AND NOT #0A0E20: #0A0E20 measures 1.011:1 against
+   the hardware key #0A0E2A and 1.026:1 against the plate #070A1C. Every
+   hardware module, key, rail and bezel on the property would vanish into the
+   page. The ground must sit BELOW the whole hardware family.
+
+   SINGLE SOURCE OF TRUTH: priime/site/assets/_theme.py. Role names and dark
+   values are mirrored from it BYTE FOR BYTE. The theme cookie is scoped to
+   .priime.finance so priime.finance / build. / loop. share one preference —
+   the values must agree too, or a visitor crossing between them sees the
+   ground change.
+
+   ARCHITECTURE
+   · --p-* is the ONLY layer that flips. Nothing is renamed. Every existing
+     token name below survives as an ALIAS pointing into it.
+   · Light is declared on bare :root (and re-asserted for an explicit
+     data-theme="light", so the two can never disagree).
+   · Dark is declared under :root[data-theme="dark"] ONLY.
+     THERE IS NO @media(prefers-color-scheme:dark) TOKEN BLOCK, and that is
+     deliberate: _theme.py ships DARK_AUTO=False, so on the static site dark
+     is reachable only through an explicit data-theme. This app mirrors that
+     exactly. The pre-paint script in app/layout.tsx is the OTHER auto-flip
+     path and it DOES consult matchMedia (byte-identical to the static site's
+     pretheme-v5), so a dark-OS visitor still lands in dark with JS enabled,
+     on both surfaces, identically. Do not add a media token block here
+     without flipping DARK_AUTO on the static site in the same change.
+   · ALIAS MODE IS "dark": the alias declarations live ONLY in the dark block,
+     so the light column is provably byte-identical to what shipped before.
+   ============================================================================ */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* elevation */
+  --p-well:   #E7E1D2;
+  --p-ground: #F5F2EB;
+  --p-sunken: #EDE8DB;
+  --p-panel:  #FFFAF5;
+  --p-raised: #FFFAF5;
+  --p-bezel:  #E7E1D2;
+
+  /* ink */
+  --p-ink:        #141210;
+  --p-body:       #3A3833;
+  --p-muted:      #666460;
+  --p-muted-soft: #7B7975;
+  --p-faint:      #9A968C;
+
+  /* hairline */
+  --p-line-quiet:  #EDE8DB;
+  --p-line:        #E4DFD2;
+  --p-line-strong: #E7E1D2;
+  --p-line-bezel:  var(--p-line-strong);
+  --p-line-hand:   #D8D2C2;
+
+  /* accent */
+  --p-accent:      #2B5CFF;
+  --p-accent-lg:   #1B2FEE;
+  --p-accent-text: #1B2FEE;
+  --p-accent-deep: #1B2FEE;
+  --p-accent-wash: rgba(43, 92, 255, 0.07);
+  --p-on-accent:   #FFFAF5;
+
+  /* hardware — MODE-CONSTANT, zero dark variants. Load-bearing brand. */
+  --p-hw-plate: #070A1C;
+  --p-hw-key:   #0A0E2A;
+  --p-hw-rail:  #10173A;
+  --p-hw-bezel: #1B2350;
+  --p-hw-deep:  #050A2E;
+
+  /* semantic */
+  --p-ok:      #267E50;
+  --p-ok-mark: #267E50;
+  --p-warn:    #C2864E;
+  --p-danger:  #B3402A;
+  --p-info:    var(--p-accent-text);
+  --ok-dim:    #e2efe7;
+  --warn-dim:  #f4e9d9;
+  --no-dim:    #f6ddd9;
+
+  /* data-viz — the ordinal ramp. Hue identity and ORDER preserved exactly. */
+  --dv-1:     #2B5CFF;
+  --dv-2:     #4D8BFF;
+  --dv-3:     #7FB0FF;
+  --dv-4:     #B3D1FF;
+  --dv-5:     #9BA6C9;
+  --dv-6:     #7C6FE8;
+  --dv-7:     #9DB1F0;
+  --dv-8:     #6E7FD3;
+  --dv-other: #9AA0AD;
+  --dv-up:    #2B5CFF;
+  --dv-down:  #B3402A;
+
+  /* shadow — the WHOLE declaration is tokenized so dark can change SHAPE. */
+  --p-sh-card:   0 18px 44px -28px rgba(20, 18, 15, 0.22);
+  --p-sh-panel:  0 1px 0 rgba(255, 255, 255, 0.85) inset, 0 18px 44px rgba(0, 0, 0, 0.16);
+  --p-sh-key:    0 1px 0 #fff inset, 0 2px 5px rgba(0, 0, 0, 0.10);
+  --p-sh-inset:  0 2px 7px rgba(0, 0, 0, 0.55) inset, 0 1px 0 rgba(255, 255, 255, 0.5);
+  --p-sh-float:  0 10px 24px rgba(0, 0, 0, 0.16);
+  --p-glow-hand: none;
+
+  /* focus — two-part ring. The inner 2px is the SURFACE, so the outer band
+     always sits against a known value. */
+  --p-focus-gap:  #FFFAF5;
+  --p-focus-ring: #1B2FEE;
+
+  /* misc */
+  --p-select-bg: rgba(43, 92, 255, 0.22);
+  --p-select-fg: var(--p-ink);
+  --p-caret:     var(--p-accent-text);
+
+  /* zone — the landing scroll bands. Cobalt is MODE-CONSTANT and, on dark,
+     load-bearing: it becomes the only saturated colour in the document. */
+  --p-zone-hero:     #1B2FEE;
+  --p-zone-mission:  #04071F;
+  --p-zone-problem:  #EDEAE2;
+  --p-zone-solution: #05081F;
+  --p-zone-cat:      #F5F2EB;
+  --p-zone-vz:       #081247;
+  --p-zone-blog:     #04071F;
+
+  /* minted */
+  --p-ok-legacy: #4E7A3A;
+  --p-sand:      #E8DDBE;
+}
+
+:root {
+  /* ── 1.1 Neutrals (Priime warm off-white, light theme is the default) ──── */
+  --bg-page:        #f4f3f1;
+  --bg-surface-1:   #faf9f7;
+  --bg-surface-2:   #f0eee9;
+  --bg-surface-3:   #e7e4dd;
+
+  /* ── 1.2 Text scale (ink on light) ─────────────────────────────────────── */
+  --text-primary:    #1a1a1a;
+  --text-secondary:  rgba(26, 26, 26, 0.72);  /* 6.5:1 */
+  --text-tertiary:   rgba(26, 26, 26, 0.62);  /* AA: 3.3:1 -> 4.7:1 (was 0.50) */
+  --text-quaternary: rgba(26, 26, 26, 0.54);  /* 2.1:1 -> 3.8:1 (was 0.34) */
+  --text-on-accent:  #ffffff;
+
+  /* ── 1.3 Brand (Priime orange) ─────────────────────────────────────────── */
+  --brand-300: #e0ddd8;
+  --brand-400: #333333;
+  --brand-500: #000000;
+  --brand-600: #000000;
+  --brand-glow: rgba(0,0,0, 0.16);
+  --brand-gradient: linear-gradient(180deg, #333333 0%, #000000 100%);
+  --brand-gradient-soft: radial-gradient(60% 50% at 70% 30%, rgba(0,0,0, 0.16), transparent 70%);
+
+  /* ── 1.4 Phase palette (load-bearing — must match SVG animations) ──────── */
+  --phase-observe: #7E8EDB;
+  --phase-reason:  #C4A4E6;
+  --phase-sign:    #7CCFA8;
+  --phase-act:     #E5B96B;
+
+  /* ── 1.5 Semantic ──────────────────────────────────────────────────────── */
+  --status-healthy: #267e50;  /* AA on cream (was #2f9c63) */
+  --status-warning: #9c6127;  /* AA on cream (was #b8722e) */
+  --status-danger:  #c0392b;  /* 4.9:1 — already AA */
+  --status-info:    #6f6c66;  /* 4.7:1 — already AA */
+
+  /* ── 1.6 Hairlines (dark-on-light dividers) ────────────────────────────── */
+  --hairline:        rgba(0, 0, 0, 0.08);
+  --hairline-strong: rgba(0, 0, 0, 0.14);
+  --hairline-soft:   rgba(0, 0, 0, 0.04);
+
+  /* ── 2.1 Fonts — Linear-style: Inter Variable for everything, Geist Mono
+        for tabular/code. Linear pairs Inter (free, variable) with Berkeley
+        Mono (paid); we use Geist Mono as a free geometric-mono substitute.
+        --font-display reuses Inter at a heavier weight rather than a serif
+        — that's how Linear handles editorial titles. ───────────────────── */
+  --font-display: var(--font-geist), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body:    var(--font-geist), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:    var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Inter glyph features Linear uses: cv08 (alt single-storey 'a'),
+     calt (contextual alternates), ss03 (off by default, opt in if needed). */
+  --font-feature-body: "cv08", "calt", "ss03";
+  --font-feature-mono: "calt" 0, "tnum";
+
+  /* ── 2.2 Type scale — letter-spacing pattern mirrors Linear's:
+        body sits at 0, mid-range slides to -0.012em, display compresses
+        to -0.022em → -0.04em at the very top. ───────────────────────────── */
+  --text-2xs:  10px;   --lh-2xs:  14px;   --tracking-2xs:  0.18em;
+  --text-xs:   11px;   --lh-xs:   16px;   --tracking-xs:   0.10em;
+  --text-sm:   13px;   --lh-sm:   19px;   --tracking-sm:   0;
+  --text-base: 14px;   --lh-base: 21px;   --tracking-base: 0;
+  --text-md:   15px;   --lh-md:   22px;   --tracking-md:  -0.005em;
+  --text-lg:   17px;   --lh-lg:   25px;   --tracking-lg:  -0.012em;
+  --text-xl:   20px;   --lh-xl:   28px;   --tracking-xl:  -0.014em;
+  --text-2xl:  24px;   --lh-2xl:  32px;   --tracking-2xl: -0.018em;
+  --text-3xl:  30px;   --lh-3xl:  36px;   --tracking-3xl: -0.022em;
+  --text-4xl:  38px;   --lh-4xl:  44px;   --tracking-4xl: -0.025em;
+  --text-5xl:  48px;   --lh-5xl:  52px;   --tracking-5xl: -0.028em;
+  --text-6xl:  60px;   --lh-6xl:  62px;   --tracking-6xl: -0.032em;
+  --text-7xl:  76px;   --lh-7xl:  76px;   --tracking-7xl: -0.036em;
+  --text-8xl:  96px;   --lh-8xl:  92px;   --tracking-8xl: -0.04em;
+
+  /* Linear-style weight scale. Includes 550, an intermediate weight that
+     reads slightly tighter than 500 without committing to 600. Inter
+     Variable supports this between 500 and 600. */
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-mid:      550;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* ── 3.1 Spacing scale (4px base) ──────────────────────────────────────── */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-7:  32px;
+  --space-8:  40px;
+  --space-9:  48px;
+  --space-10: 64px;
+  --space-11: 80px;
+  --space-12: 96px;
+  --space-13: 128px;
+  --space-14: 160px;
+  --space-15: 200px;
+
+  /* ── 3.2 Section gaps ──────────────────────────────────────────────────── */
+  --gap-section:    96px;   /* mobile */
+  --gap-subsection: 64px;   /* mobile */
+  --gap-figure-row: 32px;   /* mobile */
+
+  /* ── 3.3 Container widths ──────────────────────────────────────────────── */
+  --container-editorial: 1200px;
+  --container-reading:    680px;
+  --container-wide:      1320px;
+
+  /* ── 3.5 Radii ─────────────────────────────────────────────────────────── */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-2xl: 24px;
+  --radius-full: 999px;
+
+  /* ── 3.6 Shadows / elevation ───────────────────────────────────────────── */
+  --shadow-1: 0 1px 2px rgba(20, 16, 12, 0.08);
+  --shadow-2: 0 4px 16px -8px rgba(20, 16, 12, 0.12);
+  --shadow-3: 0 12px 40px -12px rgba(20, 16, 12, 0.16);
+  --shadow-4: 0 18px 60px -16px rgba(20, 16, 12, 0.22);
+  --shadow-5: 0 32px 100px -24px rgba(20, 16, 12, 0.28);
+  --shadow-glow-brand: 0 0 0 4px rgba(0,0,0, 0.18);
+  --shadow-inner-edge:    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --shadow-inner-edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.90);
+
+  /* ── 4.1 Easings ───────────────────────────────────────────────────────── */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-glass:  cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── 4.2 Durations ─────────────────────────────────────────────────────── */
+  --dur-instant: 100ms;
+  --dur-fast:    180ms;
+  --dur-base:    240ms;
+  --dur-slow:    400ms;
+  --dur-slower:  600ms;
+  --dur-hero:    800ms;
+  --dur-cycle:  6500ms;
+
+  /* ── 5.1 Illustration tokens (wireframe iso) ───────────────────────────── */
+  --ill-edge-strong: rgba(26, 26, 26, 0.40);
+  --ill-edge-soft:   rgba(26, 26, 26, 0.20);
+  --ill-edge-ghost:  rgba(26, 26, 26, 0.10);
+  --ill-grid:        rgba(26, 26, 26, 0.05);
+  --ill-iso-angle:   30deg;
+
+  /* ── 8. Ambient ────────────────────────────────────────────────────────── */
+  --ambient-noise-opacity:    0.02;
+  --ambient-dotgrid-opacity:  0.04;
+  --ambient-orb-opacity:      0.18;
+  --ambient-vignette-opacity: 0.08;
+
+  /* ── Z-index layers ────────────────────────────────────────────────────── */
+  --z-base:     0;
+  --z-raised:   10;
+  --z-sticky:   100;
+  --z-dropdown: 1000;
+  --z-overlay:  2000;
+  --z-modal:    3000;
+  --z-toast:    4000;
+}
+
+/* ============================================================================
+   Section gap responsive overrides
+   ----------------------------------------------------------------------------
+   Linear's breathing room is non-negotiable on desktop. Mobile compresses.
+   ============================================================================ */
+@media (min-width: 768px) {
+  :root {
+    --gap-section:    160px;
+    --gap-subsection:  96px;
+    --gap-figure-row:  48px;
+  }
+}
+
+/* ============================================================================
+   DARK — the --p-* dark column + the alias layer (theme-v1)
+   ----------------------------------------------------------------------------
+   REPLACES the old `[data-theme="light"]` stub, which declared COLD greys
+   (#FAFAFA / #FFFFFF / #0A0A0A) under a stale comment reading "Phase 1 ships
+   dark only". The :root above it is now the WARM light theme, so setting
+   data-theme="light" produced a page that was neither theme. The warm light
+   column now lives on `:root, :root[data-theme="light"]` at the top of this
+   file, so the two can no longer disagree.
+
+   TWO BINDING ELEVATION RULES
+   · In dark, elevation only ever goes UP from the ground. A "darker card" is
+     the single most common way this system gets broken. The only exception is
+     a screen well, and a screen well sits inside a hardware frame.
+   · In light a surface is raised by a shadow; in dark by a lightness step plus
+     a warm hairline. Recession does not flip, elevation does.
+
+   Measured dark steps: ground→sunken 1.030, sunken→panel 1.037,
+   panel→raised 1.087, raised→bezel 1.164, ground→bezel 1.351. Small on
+   purpose: separation is the one-step lift, the warm hairline and emission
+   from screens and LEDs, stacked. Hairlines over glows.
+   ============================================================================ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* elevation — the hardware family IS the dark elevation scale */
+  --p-well:   #02040B;
+  --p-ground: #04060F;
+  --p-sunken: #070A1C;  /* = hw-plate */
+  --p-panel:  #0A0E2A;  /* = hw-key   */
+  --p-raised: #10173A;  /* = hw-rail  */
+  --p-bezel:  #1B2350;  /* = hw-bezel */
+
+  /* ink — ALL WARM. Five names, FOUR distinct dark values.
+     Contrast on ground/sunken/panel/raised/bezel:
+       ink   18.09 / 17.57 / 16.93 / 15.58 / 13.39
+       body  11.17 / 10.85 / 10.46 /  9.62 /  8.27
+       muted  8.05 /  7.82 /  7.53 /  6.93 /  5.96
+       faint  5.60 /  5.44 /  5.24 /  4.82 /  4.15  (NOT permitted on bezel)
+     On dark you cannot have five text-legal ink steps against a five-rung
+     plate ladder, so --p-muted-soft resolves to --p-muted. Five names survive,
+     four values ship, every one clears 4.5:1 on every plate carrying text.
+     THERE IS ONLY ONE WARM WHITE AND IT IS #F5F2EB — the literal light ground
+     hex, which is the strongest statement of the ruling. Minting a second
+     warm white 3-5 units away is a shade problem in slow motion. */
+  --p-ink:        #F5F2EB;
+  --p-body:       #C6C0B4;
+  --p-muted:      #A8A398;
+  --p-muted-soft: var(--p-muted);
+  --p-faint:      #8C867C;
+
+  /* hairline — warm ink AT ALPHA, never opaque. The alpha is what makes one
+     value sit correctly on all five plates. */
+  --p-line-quiet:  rgba(245, 242, 235, 0.07);
+  --p-line:        rgba(245, 242, 235, 0.12);
+  --p-line-strong: rgba(245, 242, 235, 0.20);
+  --p-line-bezel:  rgba(245, 242, 235, 0.22);  /* hardware TOP edges only */
+  --p-line-hand:   rgba(245, 242, 235, 0.30);  /* hover / active edges only */
+
+  /* accent — THREE ROLES, forced by measurement. #2B5CFF is 3.93:1 on the
+     dark ground and 2.91:1 on the bezel: it passes for fills and non-text UI
+     and FAILS for body copy, inline links AND the focus indicator on the one
+     plate where buttons live. One accent token cannot serve both.
+     `color:` and `stroke:` -> --p-accent-text (9.36/9.10/8.76/8.09/6.92)
+     `background`/`border-color`/`fill:` -> --p-accent.
+     THE PRIMARY CTA IS MODE-CONSTANT: #2B5CFF fill with #FFFAF5 label is
+     4.96:1 and passes in both modes, so it is byte-identical across the flip.
+     --p-accent-wash is permitted ON HOVER ONLY in dark. */
+  --p-accent:      #2B5CFF;               /* MODE-CONSTANT, fills only */
+  --p-accent-lg:   #56A8FF;               /* accent text >=24px, focus ring */
+  --p-accent-text: #7FB2FF;               /* body-size accent, links, kickers */
+  --p-accent-deep: #2B5CFF;
+  --p-accent-wash: rgba(127, 178, 255, 0.10);
+  --p-on-accent:   #FFFAF5;               /* MODE-CONSTANT */
+
+  /* hardware — unchanged. The ground drops below it; it does not move. */
+  --p-hw-plate: #070A1C;
+  --p-hw-key:   #0A0E2A;
+  --p-hw-rail:  #10173A;
+  --p-hw-bezel: #1B2350;
+  --p-hw-deep:  #050A2E;
+
+  /* semantic — THE GREEN SPLIT, stated so it cannot fail silently.
+     #267E50 measures 3.77 to 4.03:1 on the dark plates: it CLEARS the 3:1
+     non-text floor and FAILS the 4.5:1 text floor. The brand green survives
+     as a DOT and fails as the WORD beside the dot.
+       --p-ok       text-legal. 6.84/6.64/6.40/5.89/5.06. Anything READ.
+       --p-ok-mark  #267E50 in BOTH modes. Fills and dots ONLY, never type.
+     A "live" pill therefore stops being a pill on dark: panel ground,
+     line-strong border, a 6px --p-ok LED dot, --p-ink label. Green stops
+     being a background and becomes a light.
+     On dark a tint background is a low alpha of its OWN foreground hue over
+     the current surface, never a lightened version of it. */
+  --p-ok:      #3FA96C;
+  --p-ok-mark: #267E50;
+  --p-warn:    #D9A063;  /* 8.82 on ground */
+  --p-danger:  #E06A50;  /* 6.11 on ground; light #B3402A is 3.55 and fails */
+  --p-info:    var(--p-accent-text);
+  --ok-dim:    rgba(63, 169, 108, 0.14);
+  --warn-dim:  rgba(194, 134, 78, 0.14);
+  --no-dim:    rgba(179, 64, 42, 0.16);
+
+  /* data-viz — SURVIVES THE FLIP AS AN ORDINAL RAMP. Hue identity and order
+     preserved exactly, lightness re-lifted. Contrast on panel:
+     5.82 / 8.76 / 11.43 / 14.71 / 5.60 / 6.82 / 11.66 / 4.47.
+     --dv-other goes DOWN, not up (luminance 0.171, below dv-8's 0.198): the
+     light #9AA0AD measures 7.22 on the dark panel, brighter than four ramp
+     steps, and a category named Other must recede. */
+  --dv-1:     #4D8BFF;
+  --dv-2:     #7FB2FF;
+  --dv-3:     #A9CBFF;
+  --dv-4:     #D3E4FF;
+  --dv-5:     #7E8AB8;
+  --dv-6:     #9A8CFF;
+  --dv-7:     #BCC9FF;
+  --dv-8:     #5F74D6;
+  --dv-other: #6A7290;
+  --dv-up:    #4D8BFF;
+  --dv-down:  #E06A50;
+
+  /* shadow — TWO BINDING RULES.
+     (1) On dark, shadows that survive get DARKER, never lighter. Lightening a
+         drop shadow on a dark ground manufactures a grey halo around every
+         card and is the fastest route to generic dark UI.
+     (2) --p-glow-hand is the ONLY glow in the system, permitted on :hover and
+         :focus-visible ONLY. A glow on a resting element is a bug.
+     The white inset top-highlights simulate a light source on aluminium; on
+     navy a white inset does not read as a bevel, it reads as a glow. On light
+     the hardware is lit from above, on dark it is defined by its edges. */
+  --p-sh-card:   0 0 0 1px var(--p-line);
+  --p-sh-panel:  0 1px 0 rgba(245, 242, 235, 0.10) inset, 0 0 0 1px rgba(245, 242, 235, 0.12);
+  --p-sh-key:    0 1px 0 rgba(245, 242, 235, 0.10) inset, 0 1px 3px rgba(0, 0, 0, 0.5);
+  --p-sh-inset:  0 3px 9px rgba(0, 0, 0, 0.7) inset, 0 1px 0 rgba(245, 242, 235, 0.06);
+  --p-sh-float:  0 18px 40px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(245, 242, 235, 0.10);
+  --p-glow-hand: 0 0 0 4px rgba(127, 178, 255, 0.16);
+
+  /* focus — #56A8FF measures 6.02:1 on the worst plate (bezel), so one ring
+     value works everywhere with no per-surface exceptions. */
+  --p-focus-gap:  var(--p-panel);
+  --p-focus-ring: #56A8FF;
+
+  /* misc */
+  --p-select-bg: rgba(86, 168, 255, 0.28);
+  --p-select-fg: var(--p-ink);
+  --p-caret:     var(--p-accent-text);
+
+  /* zone — four registers collapse to two plus cobalt. Cobalt UNCHANGED. */
+  --p-zone-hero:     #1B2FEE;
+  --p-zone-mission:  #0C1330;
+  --p-zone-problem:  #04060F;
+  --p-zone-solution: #0C1330;
+  --p-zone-cat:      #04060F;
+  --p-zone-vz:       #081247;
+  --p-zone-blog:     #0C1330;
+
+  /* minted */
+  --p-ok-legacy: #3FA96C;
+  --p-sand:      var(--p-body);  /* sand is a PAPER tone, so it joins the INK
+                                    column rather than the surface column */
+
+  /* ── THE DARK-ONLY CARRIERS `--pd-*` ─────────────────────────────────────
+     Declared ONLY here. In light every one of these names is undefined, so
+     `var(--pd-x, <original>)` computes to <original> and any hex-substituted
+     declaration is a light no-op BY CONSTRUCTION rather than by inspection.
+     Carried across from _theme.py so CSS authored for the static site keeps
+     working verbatim if it is ported into this app. Every value is a
+     REFERENCE to a --p-* token, never a copy, so the carrier column cannot
+     drift from the table above. */
+  --pd-ground:      var(--p-ground);
+  --pd-sunken:      var(--p-sunken);
+  --pd-panel:       var(--p-panel);
+  --pd-raised:      var(--p-raised);
+  --pd-bezel:       var(--p-bezel);
+  --pd-well:        var(--p-well);
+  --pd-ink:         var(--p-ink);
+  --pd-body:        var(--p-body);
+  --pd-muted:       var(--p-muted);
+  --pd-faint:       var(--p-faint);
+  --pd-line-quiet:  var(--p-line-quiet);
+  --pd-line:        var(--p-line);
+  --pd-line-strong: var(--p-line-strong);
+  --pd-accent-text: var(--p-accent-text);
+  --pd-accent:      var(--p-accent);
+  --pd-on-dark:     var(--p-ink);
+  --pd-on-accent:   var(--p-on-accent);
+  --pd-cobalt:      #1B2FEE;
+
+  /* ── THE ALIAS LAYER — nothing is renamed ────────────────────────────────
+     Every token name this app already ships stays alive and simply points
+     into the --p-* column. Dark flips ~30 values, not 443. Declared in the
+     DARK block only (ALIAS_MODE="dark"), so the light column is provably
+     byte-identical to what shipped before this change.
+
+     1.1 Neutrals. The names are declared !important in app/globals.css's
+     ELECTRIC BLUE block, and an !important custom property cannot be beaten
+     by a plain one at any specificity — so these four must carry !important
+     too. Marked, not hidden: dropping !important from BOTH columns is a
+     separate reviewable ticket. */
+  --bg-page:      var(--p-ground) !important;
+  --bg-surface-1: var(--p-panel) !important;
+  --bg-surface-2: var(--p-sunken) !important;
+  --bg-surface-3: var(--p-bezel) !important;
+
+  /* 1.2 Text scale — warm ink, never a neutral grey ramp. */
+  --text-primary:    var(--p-ink);
+  --text-secondary:  var(--p-body);
+  --text-tertiary:   var(--p-muted);
+  --text-quaternary: var(--p-faint);
+  --text-on-accent:  var(--p-on-accent) !important;
+
+  /* 1.3 Brand. The fill rung (--brand-500/600) is MODE-CONSTANT #2B5CFF; only
+     the rungs that end up carrying text or a ring lift. */
+  --brand-300: var(--p-accent-text) !important;
+  --brand-400: var(--p-accent-lg) !important;
+  --brand-500: var(--p-accent) !important;
+  --brand-600: var(--p-accent-deep) !important;
+  --brand-glow: var(--p-accent-wash) !important;
+  --shadow-glow-brand: var(--p-glow-hand) !important;
+
+  /* 1.5 Semantic. --status-healthy is the TEXT-legal green; a dot or fill
+     must use --p-ok-mark, which stays #267E50 in both modes. */
+  --status-healthy: var(--p-ok);
+  --status-warning: var(--p-warn);
+  --status-danger:  var(--p-danger);
+  --status-info:    var(--p-muted);
+
+  /* 1.6 Hairlines — warm ink at alpha, replacing black at alpha. Black at
+     alpha over a near-black ground is nothing at all. */
+  --hairline:        var(--p-line);
+  --hairline-strong: var(--p-line-strong);
+  --hairline-soft:   var(--p-line-quiet);
+
+  /* 3.6 Shadows. The drop shadows DEEPEN (rule 1 above). The two inner-edge
+     tokens are white insets, which are the single largest source of the halo
+     effect on navy, so they become warm ink at the ruled alphas. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 4px 16px -8px rgba(0, 0, 0, 0.55);
+  --shadow-3: 0 12px 40px -12px rgba(0, 0, 0, 0.62);
+  --shadow-4: 0 18px 60px -16px rgba(0, 0, 0, 0.68);
+  --shadow-5: 0 32px 100px -24px rgba(0, 0, 0, 0.72);
+  --shadow-inner-edge:    inset 0 1px 0 rgba(245, 242, 235, 0.10);
+  --shadow-inner-edge-hi: inset 0 1px 0 rgba(245, 242, 235, 0.14);
+
+  /* 5.1 Illustration tokens. A pure REFLECTION: the same alphas, the warm
+     white instead of the near-black. The wireframe-iso scenes flip through
+     this family and nothing else — a dark redraw is a separate commission. */
+  --ill-edge-strong: rgba(245, 242, 235, 0.40);
+  --ill-edge-soft:   rgba(245, 242, 235, 0.20);
+  --ill-edge-ghost:  rgba(245, 242, 235, 0.10);
+  --ill-grid:        rgba(245, 242, 235, 0.05);
+
+  /* Cross-surface parity: the static site's alias names, so CSS lifted from
+     priime.finance resolves identically here. --forest / --moss / --lime /
+     --sand lie about their hues and stay unrenamed on purpose — renaming
+     would break the byte-equality gate that is the whole safety argument. */
+  --cream:       var(--p-ground);
+  --warm:        var(--p-panel);
+  --ink:         var(--p-ink);
+  --muted:       var(--p-muted);
+  --faint:       var(--p-faint);
+  --bd:          var(--p-line);
+  --forest:      var(--p-accent);
+  --forest-mid:  var(--p-accent-deep);
+  --forest-deep: var(--p-accent-deep);
+  --moss:        var(--p-accent);
+  --lime:        var(--dv-2);
+  --warn:        var(--p-warn);
+  --danger:      var(--p-danger);
+  --ok:          var(--p-ok-legacy);
+  --sand:        var(--p-sand);
+
+  /* 8. Ambient. A dark-adapted eye reads the same texture roughly twice as
+     loud, so every ambient layer steps down rather than staying put. */
+  --ambient-noise-opacity:    0.015;
+  --ambient-dotgrid-opacity:  0.03;
+  --ambient-orb-opacity:      0.12;
+  --ambient-vignette-opacity: 0.05;
+}
+
+/* ============================================================================
+   Reduced-motion fallback
+   ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-fast:    0ms;
+    --dur-base:    0ms;
+    --dur-slow:    0ms;
+    --dur-slower:  0ms;
+    --dur-hero:    0ms;
+  }
+}
