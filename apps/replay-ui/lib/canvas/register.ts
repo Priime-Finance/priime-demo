@@ -1503,7 +1503,7 @@ export interface ReclaimRow {
 
 export interface Reclaim {
   control: string;
-  /** The four rows, in order: verdict, setting, next best, first defeat. */
+  /** The rows: the verdict first, then one fact per cell, the first defeat last. */
   rows: ReclaimRow[];
   /** The axis the product optimised. Null is not renderable — L10 requires it. */
   objective: AxisId;
@@ -1602,12 +1602,10 @@ export function reclaim(
      shipped vault does not run. */
   const lines = liquidationLinesOfLane(winnerLane);
   rows.push({ label: "Liquidation lines", value: VERDICT_ROW[verdictKey(lines)] });
-  rows.push({
-    label: settingLabel(control),
-    value: [renderSetting(control, verdict.winner), corner ? "corner" : null, objectiveLine(objective)]
-      .filter((s): s is string => typeof s === "string" && s.length > 0)
-      .join(" · "),
-  });
+  /* CELLS, NOT CLAUSES (founder, 2026-09-07). One fact per row; the label
+     carries the sense the clause used to spell out. */
+  rows.push({ label: "Best", value: renderSetting(control, verdict.winner) });
+  rows.push({ label: "Best for", value: objectiveWord(objective) });
   /* THE RUNNER-UP CARRIES WHAT IT BUYS AS WELL AS WHAT IT COSTS. Without the
      second half the row is a punishment rather than a comparison, and a
      builder cannot see why anyone would have pressed the other cell.
@@ -1630,16 +1628,10 @@ export function reclaim(
     objective === "netApy"
       ? verdict.compared.find((a) => a !== "netApy")
       : objective;
-  rows.push({
-    label: "Next best",
-    value: [
-      renderSetting(control, runner.value),
-      Math.abs(delta) >= EVEN_FLOOR ? costLine(delta) : "",
-      altReading(alt, runnerLane),
-    ]
-      .filter((s) => s.length > 0)
-      .join(" · "),
-  });
+  rows.push({ label: "Next best", value: renderSetting(control, runner.value) });
+  if (Math.abs(delta) >= EVEN_FLOOR) rows.push({ label: "Cost", value: costLine(delta) });
+  const altRow = altCell(alt, runnerLane);
+  if (altRow) rows.push(altRow);
   const first = registerFor({ ...input, lane: winnerLane }).find((e) => e.defeats === "reaction");
   if (first) {
     rows.push({ label: "Defeats the reaction", value: `${first.mechanism} · ${entryValue(first)}` });
@@ -1730,34 +1722,21 @@ export function reclaimHeld(
   /* The verdict row stays first and the defeat row stays last; only the two
      middle rows are re-pointed. Destructured by position rather than indexed,
      so this file keeps its no-numerals discipline. */
-  const [lines, , , ...tail] = base.rows;
+  const lines = base.rows[0];
+  const tail = base.rows.filter((r) => r.label === "Defeats the reaction");
   const cornerWord = readAxis("cushion", winnerLane)?.text ?? renderSetting(control, winner);
-  const corner: ReclaimRow = {
-    label: "Corner",
-    value: [cornerWord, objectiveLine(base.objective)].join(" · "),
-  };
-  const holding: ReclaimRow = {
-    label: "You hold",
-    value: [
-      renderSetting(control, held),
-      atCorner ? "at the corner" : Math.abs(delta) >= EVEN_FLOOR ? costLine(delta) : "",
-      atCorner ? "" : altReading(alt, heldLane),
-    ]
-      .filter((s) => s.length > 0)
-      .join(" · "),
-  };
-  return { ...base, rows: [lines, corner, holding, ...tail] };
+  const middle: ReclaimRow[] = [
+    { label: "Best", value: cornerWord },
+    { label: "Held", value: renderSetting(control, held) },
+  ];
+  if (!atCorner && Math.abs(delta) >= EVEN_FLOOR) middle.push({ label: "Cost", value: costLine(delta) });
+  if (!atCorner) {
+    const a = altCell(alt, heldLane);
+    if (a) middle.push(a);
+  }
+  return { ...base, rows: [lines, ...middle, ...tail] };
 }
 
-/** The runner-up's reading on the other compared axis, with the axis's own
- *  noun attached. A bare `$656K` beside a leverage is a number with no
- *  referent, which is the shape a caveat has. */
-function altReading(axis: AxisId | undefined, lane: AxisLane): string {
-  if (!axis) return "";
-  const r = readAxis(axis, lane);
-  if (!r) return "";
-  return `${r.text} ${AXIS_RENDERERS[axis].label.toLowerCase()}`;
-}
 
 function numAxis(id: AxisId, lane: AxisLane): number | null {
   const r = readAxis(id, lane);
@@ -1819,11 +1798,6 @@ const VERDICT_ROW: Record<ReturnType<typeof verdictKey>, string> = {
   "borrow-and-short": "two, the lending leg and the perp short",
 };
 
-function settingLabel(control: Control): string {
-  if (control.kind === "install") return MODULE_DEFS[control.module].name;
-  const d = MODULE_DEFS[control.module].params.find((p) => p.field === control.field);
-  return d?.friendlyLabel ?? control.field;
-}
 
 /**
  * A setting, in the unit its descriptor declares.
@@ -1833,6 +1807,32 @@ function settingLabel(control: Control): string {
  * Everything else prints its stored value: the reclaim block states what was
  * WRITTEN, and a re-rendered value is a second owner.
  */
+/** The axis as a WORD for a cell: `net APY`, `cushion`. The row's label
+ *  ("Best for") carries the sense the old clause spelled out. */
+function objectiveWord(axis: AxisId): string {
+  return OBJECTIVE_WORD[axis] ?? axis;
+}
+
+const OBJECTIVE_WORD: Partial<Record<AxisId, string>> = {
+  netApy: "net APY",
+  capacity: "deposit room",
+  cushion: "cushion",
+  actionCount: "fewest actions",
+  shortMargin: "short margin",
+  refillsFunded: "funded refills",
+  downsideFloor: "floor",
+  upsideCap: "cap",
+};
+
+/** The other compared axis as its own cell: label from the axis renderer,
+ *  value its reading. Null when nothing was measured. */
+function altCell(axis: AxisId | undefined, lane: AxisLane): ReclaimRow | null {
+  if (!axis) return null;
+  const r = readAxis(axis, lane);
+  if (!r) return null;
+  return { label: AXIS_RENDERERS[axis].label, value: r.text };
+}
+
 function renderSetting(control: Control, v: ParamValue): string {
   if (typeof v === "boolean") return v ? "installed" : "not installed";
   if (control.kind === "param") {
@@ -1842,29 +1842,8 @@ function renderSetting(control: Control, v: ParamValue): string {
   return String(v);
 }
 
-/** "the highest modeled net APY here". No first person plural: `Set to` is
- *  agentless and true; `We set` invites `why did you` and makes an objective
- *  sound like a preference. */
-function objectiveLine(axis: AxisId): string {
-  return OBJECTIVE_LINE[axis] ?? readAxisLabel(axis);
-}
 
-const OBJECTIVE_LINE: Partial<Record<AxisId, string>> = {
-  netApy: "the highest modeled net APY here",
-  capacity: "the most deposit room here",
-  cushion: "the largest cushion here",
-  actionCount: "the fewest actions a year here",
-  shortMargin: "the most short margin here",
-  refillsFunded: "the most funded refills here",
-  downsideFloor: "the highest floor here",
-  upsideCap: "the highest cap here",
-  reactionWindow: "the widest reaction window here",
-  driftBeforeTrim: "the earliest trim here",
-};
 
-function readAxisLabel(axis: AxisId): string {
-  return `the best ${axis} here`;
-}
 
 /**
  * The cost of the next best, in points of modeled net APY.

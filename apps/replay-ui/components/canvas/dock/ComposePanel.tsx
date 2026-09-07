@@ -85,7 +85,6 @@ import { venueLabel } from "@/lib/canvas/labels";
 import { ARROW, deltaTriple, lev, MINUS, pct, pp, ppMag } from "@/lib/canvas/format";
 import { hedgeEconomics, hedgeHero, type HedgeEconomics } from "@/lib/canvas/hedge-econ";
 import {
-  adverseMoveLine,
   adverseMoveShort,
   adverseMoveValue,
   driftBeforeTrim,
@@ -306,7 +305,7 @@ export function bridgeLadder(
       : hedgeEjected
         ? null
         : "hedged";
-  const classClause = classWord ? `, ${classWord},` : "";
+  const classTail = classWord ? `, ${classWord}` : "";
   const atLane = candidateApy(cand);
   const laneLev = cand?.economics?.loopLeverage ?? null;
   const scanApr = scan?.apr ?? null;
@@ -366,17 +365,17 @@ export function bridgeLadder(
     {
       term: levTerm,
       at: pct(atLane),
-      rung: `this market${classClause} at your leverage`,
+      rung: `at your leverage${classTail}`,
     },
     {
       term: hedgeTerm,
       at: pct(terms.core),
-      rung: `this market at your leverage, unhedged`,
+      rung: "at your leverage, unhedged",
     },
     {
       term: feeTerm,
       at: pct(terms.afterFee),
-      rung: "your lane, after the compute fee",
+      rung: "after the compute fee",
     },
     { term: compoundTerm, at: pct(composed), rung: "" },
   ];
@@ -386,8 +385,8 @@ export function bridgeLadder(
      fact with it, so the attribution joins the leverage step's label instead. */
   const levLabel =
     hedgeEjected && hedgeTerm === null && levTerm !== null
-      ? `your leverage: ${lev(laneLev)} · no hedge installed`
-      : `your leverage: ${lev(laneLev)}`;
+      ? `leverage ${lev(laneLev)}, no hedge`
+      : `leverage ${lev(laneLev)}`;
   const labels = [levLabel, "no hedge installed", "compute fee", "auto-compound"];
   const anyTerm = steps.some((x) => x.term !== null);
 
@@ -398,9 +397,7 @@ export function bridgeLadder(
       /* D-MTX-2: `at its 1.00x` only where a leverage dial exists to be at.
          On the unlevered families the frame word is Discover's — `modeled` —
          in the same slot, welded to the same number. */
-      label: levered
-        ? `this market${classClause} at its ${lev(scanLev)}`
-        : "this market, modeled",
+      label: levered ? `market at ${lev(scanLev)}${classTail}` : "market, modeled",
       kind: "end",
     });
   }
@@ -413,7 +410,7 @@ export function bridgeLadder(
       rows.push({ n: step.at, label: step.rung, kind: "rung" });
     }
   });
-  rows.push({ n: pct(composed), label: "your lane as composed", kind: "end" });
+  rows.push({ n: pct(composed), label: "as composed", kind: "end" });
   return rows;
 }
 
@@ -598,7 +595,7 @@ function Bridge({
  * 22 characters, inside the `.mt-sec-h` budget. This string is the aria-label
  * too, so the accessibility tree and the visible head cannot drift.
  */
-const ROOM_HEAD = "Room the trim works in";
+const ROOM_HEAD = "Leverage";
 
 function RiskStops({
   stops,
@@ -664,13 +661,15 @@ function RiskStops({
      0.04pp to 5.12pp — at 0 dp the smallest of them prints `0%`, which is not
      a rounding, it is the claim that we trim on no move at all. */
   const drift = driftBeforeTrim(preset, shown, lt);
-  const caption = [
-    typeof drift === "number" ? `trims ${ppMag(drift, 2)} before it` : null,
-    adverseMoveLine(on ? on.distance : liquidationDistance(lt, shown)),
-    `${lev(shown)} applied`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  /* FACTS AS ROWS, NOT A SENTENCE (founder, 2026-09-07: "AI slop UI ... more
+     in tables, less floating, less wordy"). The same three quantities the
+     caption used to join with middots, each in its own labelled cell. */
+  const line = adverseMoveValue(on ? on.distance : liquidationDistance(lt, shown));
+  const facts: { label: string; value: string }[] = [
+    { label: "Applied", value: lev(shown) },
+    ...(line !== null ? [{ label: "Adverse move to liquidation", value: line }] : []),
+    ...(typeof drift === "number" ? [{ label: "Trim before it", value: ppMag(drift, 2) }] : []),
+  ];
 
   if (stops.length === 1) {
     const only = stops[0];
@@ -679,14 +678,17 @@ function RiskStops({
     return (
       <>
         <div className="mt-sec-h">{ROOM_HEAD}</div>
-        <div className="dock-ro-rows">
+        <div className="dock-ro-rows" aria-live="polite">
           <div className="dock-ro-row">
-            <span>{`adverse pair move · one leverage priced (${lev(only.leverage)})`}</span>
-            <b>{v}</b>
+            <span>One leverage priced</span>
+            <b>{lev(only.leverage)}</b>
           </div>
-        </div>
-        <div className="dock-ro-register" style={{ marginTop: 4 }}>
-          {caption}
+          {facts.map((f) => (
+            <div key={f.label} className="dock-ro-row">
+              <span>{f.label}</span>
+              <b>{f.value}</b>
+            </div>
+          ))}
         </div>
       </>
     );
@@ -754,8 +756,13 @@ function RiskStops({
           </span>
         ) : null}
       </div>
-      <div className="dock-ro-register" style={{ marginTop: 4 }} aria-live="polite">
-        {caption}
+      <div className="dock-ro-rows" style={{ marginTop: 8 }} aria-live="polite">
+        {facts.map((f) => (
+          <div key={f.label} className="dock-ro-row">
+            <span>{f.label}</span>
+            <b>{f.value}</b>
+          </div>
+        ))}
       </div>
     </>
   );
@@ -939,9 +946,9 @@ function AddBay({
        is byte-identical with and without it. Any "+x%" here would be
        fabricated and would re-open the exact trap the rest of this change
        closes. So the panel says so out loud. */
-    consequence = <span className="cpz-fact">compounding is not priced into the modeled APY</span>;
+    consequence = <span className="cpz-fact">not priced into the modeled APY</span>;
   } else if (key === "hedge" && cand) {
-    consequence = <span className="cpz-fact">funding does not move the modeled APY here</span>;
+    consequence = <span className="cpz-fact">funding not in the modeled APY</span>;
   } else if (key === "exogenous-risk" && cand) {
     /* NOT `.cpz-bay--neg`, and not a triple: `QUOTE_AFFECTING_PARAMS` for this
        module is empty, so the press prints no APY delta and takes the panel's
@@ -1724,7 +1731,7 @@ function ReclaimBlock({
  *  best settings for you", any risk adjective, any reassurance, any
  *  completeness claim, or any explanation that risk exists. Naming the
  *  arithmetic is the whole of the head's job. */
-const RECLAIM_HEAD = "What the model set, and what it cost";
+const RECLAIM_HEAD = "Best vs held";
 
 /**
  * The size the action-count axis is evaluated at.
@@ -2172,7 +2179,6 @@ export default function ComposePanel(props: ComposePanelProps) {
                     );
                   })}
                 </div>
-                <div className="mt-status cpz-hint">Tap a module to tune it.</div>
               </>
             ) : null}
 
@@ -2188,7 +2194,7 @@ export default function ComposePanel(props: ComposePanelProps) {
                 the liquidity source named as a source instead of being
                 counted as a module. `shelfHead(opts)` still owns the title. */}
             {bound ? (
-              <div className="mt-sec-h">Add to this lane</div>
+              <div className="mt-sec-h">Add</div>
             ) : (
               (() => {
                 const head = shelfHead(opts);
