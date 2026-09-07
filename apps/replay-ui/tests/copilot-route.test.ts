@@ -213,7 +213,12 @@ describe("copilot route", () => {
     const payload = JSON.parse(line.slice(6)) as {
       title: string;
       rationale: string;
-      loops: { candidateId: string; hedge: boolean; leverage: number | null; lane: { netApy: number | null } }[];
+      loops: {
+        candidateId: string;
+        hedge: boolean;
+        leverage: number | null;
+        lane: { vaultApy: number | null; seatedLeverage: number; seatBounds: { max: number } | null };
+      }[];
       notes: string[];
     };
     expect(payload.title).toBe("Portfolio blueprint");
@@ -221,9 +226,20 @@ describe("copilot route", () => {
     expect(payload.loops).toHaveLength(1);
     expect(payload.loops[0]!.candidateId).toBe(HERO_MARKET_ID);
     expect(payload.loops[0]!.hedge).toBe(false);
+    /* The seat: 5x lands at the dial's own ceiling (`seatBounds.max`, read
+       off the lane, never typed here), the lane is priced at that seat in the
+       PRODUCT frame (`vaultApy`, the fee inside), and the card carries the
+       correction as a note. `netApy` is not a field on the lane; an
+       assertion on it passed vacuously (`undefined` is not `null`). */
+    const lane = payload.loops[0]!.lane;
+    expect(lane.seatBounds).not.toBeNull();
+    expect(payload.loops[0]!.leverage).toBe(lane.seatBounds!.max);
     expect(payload.loops[0]!.leverage).toBeLessThan(5);
-    expect(payload.loops[0]!.lane.netApy).not.toBeNull();
+    expect(lane.seatedLeverage).toBe(payload.loops[0]!.leverage);
+    expect(typeof lane.vaultApy).toBe("number");
+    expect(lane.vaultApy!).toBeGreaterThan(0);
     expect(payload.notes.length).toBeGreaterThan(0);
+    expect(payload.notes.some((n) => n.includes("seated at"))).toBe(true);
   });
 
   it("S3. explain_market on the live id emits explain; on any other id, the coming-soon reason", async () => {
