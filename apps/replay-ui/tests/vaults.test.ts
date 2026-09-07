@@ -317,7 +317,17 @@ describe("the vault", () => {
   it("prices through the live owners at the seed leverage, with the fee inside", () => {
     const hero = heroRecord();
     expect(hero.appliedLeverage).toBe(HERO_SEED_LEVERAGE);
-    expect(Math.abs(hero.modeledApy - 0.043)).toBeLessThan(0.0005);
+    /* THE HERO PRICES THROUGH THE MEASURED ROW, and so does the router, so
+       this is asserted against the router's own owner rather than against a
+       literal, and by identity rather than inside a band:
+       `routerPublishedToday().loop` IS `publishedNetApy` on the demo row at
+       `HERO_SEED_LEVERAGE`, which is the same call `heroRecord` makes. The
+       retired pin was `|modeledApy - 0.043| < 0.0005`, the typed row's
+       number in a tolerance wide enough to hide a frame change; holding it
+       again after the substitution would pin the page to a frame the product
+       has left. `tests/mock-quote.test.ts` asserts the other end of the same
+       weld. */
+    expect(hero.modeledApy).toBe(routerPublishedToday()!.loop);
     expect(hero.stage).toBe("attested");
     expect(vaultStage(hero)).toBe("attested");
     expect(hero.register).toBe("sample");

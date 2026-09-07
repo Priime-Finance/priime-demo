@@ -26,6 +26,9 @@ import {
   routerPublishedToday,
 } from "@/lib/canvas/router-history";
 import { COPILOT_REJECT_COMING_SOON, HERO_MARKET_ID } from "@/lib/demo-scope";
+import { PRODUCT_MIN_LEVERAGE } from "@/lib/canvas/param-schema";
+import { demoMarketCandidate } from "@/lib/demo/market";
+import { leverageModuleInstalls } from "@/lib/canvas/leverage-module";
 
 vi.mock("@/lib/canvas/catalog-server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/canvas/catalog-server")>();
@@ -321,7 +324,12 @@ describe("copilot route", () => {
         candidateId: string;
         hedge: boolean;
         leverage: number | null;
-        lane: { vaultApy: number | null; seatedLeverage: number; seatBounds: { max: number } | null };
+        lane: {
+        vaultApy: number | null;
+        seatedLeverage: number;
+        seatBounds: { max: number } | null;
+        leverageSubtracts: boolean;
+      };
       }[];
       notes: string[];
     };
@@ -330,20 +338,34 @@ describe("copilot route", () => {
     expect(payload.loops).toHaveLength(1);
     expect(payload.loops[0]!.candidateId).toBe(HERO_MARKET_ID);
     expect(payload.loops[0]!.hedge).toBe(false);
-    /* The seat: 5x lands at the dial's own ceiling (`seatBounds.max`, read
-       off the lane, never typed here), the lane is priced at that seat in the
-       PRODUCT frame (`vaultApy`, the fee inside), and the card carries the
-       correction as a note. `netApy` is not a field on the lane; an
-       assertion on it passed vacuously (`undefined` is not `null`). */
+    /* THE SEAT FOLLOWS THE MODULE RULING, and on this market the ruling
+       WITHHOLDS the dial: the row's measured borrow (5.0869%) costs more at
+       the margin than its measured collateral yield (4.75%), so
+       `leverageModuleInstalls` is false, published APY descends in leverage,
+       and there is no ceiling to clamp a request to. The lane therefore
+       carries NO `seatBounds` and sits at the product minimum, priced in the
+       PRODUCT frame (`vaultApy`, the fee inside).
+
+       The 5x the model asked for is not silently dropped: the card carries
+       the correction AND its reason as a note, which is the postcondition
+       that matters here. Asserted through the ruling itself rather than
+       against a literal, so the day the two rates cross back this test
+       follows the product instead of pinning a frame it has left. */
     const lane = payload.loops[0]!.lane;
-    expect(lane.seatBounds).not.toBeNull();
-    expect(payload.loops[0]!.leverage).toBe(lane.seatBounds!.max);
+    expect(leverageModuleInstalls(demoMarketCandidate())).toBe(false);
+    expect(lane.seatBounds).toBeNull();
+    expect(lane.leverageSubtracts).toBe(true);
+    expect(payload.loops[0]!.leverage).toBe(PRODUCT_MIN_LEVERAGE);
     expect(payload.loops[0]!.leverage).toBeLessThan(5);
     expect(lane.seatedLeverage).toBe(payload.loops[0]!.leverage);
     expect(typeof lane.vaultApy).toBe("number");
     expect(lane.vaultApy!).toBeGreaterThan(0);
     expect(payload.notes.length).toBeGreaterThan(0);
-    expect(payload.notes.some((n) => n.includes("seated at"))).toBe(true);
+    expect(
+      payload.notes.some(
+        (n) => n.includes("set to 1.00x") && n.includes("borrowing costs more at the margin"),
+      ),
+    ).toBe(true);
   });
 
   it("S3. explain_market on the live id emits explain; on any other id, the coming-soon reason", async () => {

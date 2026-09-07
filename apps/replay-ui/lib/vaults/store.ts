@@ -1007,6 +1007,14 @@ export interface PublishInput
       | "exogenousParams"
       | "failedGates"
       | "gatesTotal"
+      /* THE ROUTED RECORD (plan R5, seam 1). Declared on `VaultRecord` above
+         and admitted here so the canvas writes the two fields through the
+         same door as every other record field, rather than widening the
+         input type at the publish site. Optional like the rest of this Pick:
+         a single-lane publish passes neither and the record it writes is
+         byte for byte the one it wrote before the router existed. */
+      | "lanes"
+      | "router"
     >
   > {
   name: string;

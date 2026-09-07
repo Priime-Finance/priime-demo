@@ -44,7 +44,6 @@ import { apyCaption, feeRows } from "@/lib/canvas/fees";
 import { SEED_SLUGS } from "@/lib/vaults/seeds";
 import { heroNavUsd } from "@/lib/vaults/rows";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
-import type { PublishedLane, PublishedRouter } from "@/lib/canvas/published-lanes";
 
 /** How long the done card holds before the router opens the vault page. */
 const DONE_BEAT_MS = 900;
@@ -81,13 +80,13 @@ export interface PublishDraft extends Omit<PublishInput, "name"> {
    * multi-lane publish; absent, the record written is byte for byte the one
    * this flow has always written.
    *
-   * ⚠ SEAM, NOT A LOCAL FIELD. `lib/vaults/store.ts` (WP-3) declares
-   * `VaultRecord.lanes` and `.router`; WP-1 writes them under these names and
-   * `lib/canvas/published-lanes.ts` holds the shapes until it does. They are
-   * NOT peeled below: they belong to the record.
+   * ⚠ SEAM, NOT A LOCAL FIELD. `lib/vaults/store.ts` declares
+   * `VaultRecord.lanes` and `.router` and admits both into `PublishInput`;
+   * the canvas composes them through `lib/canvas/published-lanes.ts`, which
+   * re-exports the store's own two shapes. They are NOT peeled below: they
+   * belong to the record, and `PublishDraft` inherits them from
+   * `PublishInput` rather than declaring a second spelling of either.
    */
-  lanes?: readonly PublishedLane[];
-  router?: PublishedRouter | null;
   /**
    * The catalog ids of the lanes this vault publishes (copilot loop B-1).
    * Carried by the publish-success beacon so the funnel's strict tier can
@@ -253,17 +252,13 @@ export default function PublishFlow({
           publishedMarketIds: _publishedMarketIds, // beacon payload, never a record field
           ...record
         } = draft;
-        /* THE RECORD, PLUS THE TWO FIELDS WP-3 DECLARES. Typed as a widening
-           of `PublishInput` so this worktree compiles before
-           `lib/vaults/store.ts` carries `lanes` and `router`; assigned through
-           a variable rather than written inline so the extra members are a
-           structural widening and not an excess-property claim about a shape
-           this package does not own. When WP-3's declaration lands, the
-           annotation collapses to `PublishInput`. */
-        const input: PublishInput & {
-          lanes?: readonly PublishedLane[];
-          router?: PublishedRouter | null;
-        } = {
+        /* THE RECORD. `lanes` and `router` ride inside `...record` under the
+           names `PublishInput` itself declares (store.ts), so this site
+           states no shape of its own: a field added to the record's router
+           block is written here the moment the store admits it, and a field
+           the store drops stops compiling here rather than being written
+           into a record nothing reads. */
+        const input: PublishInput = {
           ...record,
           name: name.trim() || draft.defaultName,
           automations: deriveAutomations(draft),

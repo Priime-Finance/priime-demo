@@ -2378,26 +2378,30 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
          single-lane publish carries neither field and the record it writes is
          byte for byte the one it wrote before.
 
-         Shapes declared in `lib/canvas/published-lanes.ts` (WP-1) until
-         WP-3's `VaultRecord` declares them; nothing here computes a figure.
+         Shapes declared in `lib/vaults/store.ts` and re-exported through
+         `lib/canvas/published-lanes.ts`; nothing here computes a figure.
          `l.netApy` is the lane's own published number, `allocationsBps` is the
-         orchestrator's, and `publishedRouter` decodes the rules from the same
-         dials and slots the plate draws. */
+         orchestrator's, `venueLabel` is the one owner every other surface
+         prints the venue through (the dock chip and the review row above call
+         the same function), and `publishedRouter` reads the four rule
+         constants from `demo-rules.ts` and composes the sentence through the
+         store's own `routerRuleSentence`. */
       ...(orchOn
-        ? {
-            lanes: lanes.map((l): PublishedLane => ({
+        ? (() => {
+            const publishedLanes = lanes.map((l): PublishedLane => ({
               label: l.loop.label,
               venue: l.p.venue,
+              venueLabel: venueLabel(l.p.venue),
               market: l.p.pairLabel || "…",
               family: l.family,
               publishedApy: l.netApy,
               allocationBps: portfolio.orchestrator.allocationsBps[l.loop.id] ?? 0,
-            })),
-            router: publishedRouter(orchDials, orchSlots),
-          }
+            }));
+            return { lanes: publishedLanes, router: publishedRouter(orchDials, publishedLanes) };
+          })()
         : {}),
     };
-  }, [laneComputed, orchDials, orchOn, orchSlots, portfolio, portfolioApy, vaultCap]);
+  }, [laneComputed, orchDials, orchOn, portfolio, portfolioApy, vaultCap]);
 
   // ── IT4 focus/discover wiring (trigger table §2.3) ──
 

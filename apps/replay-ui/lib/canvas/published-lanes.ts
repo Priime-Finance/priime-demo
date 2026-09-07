@@ -1,94 +1,80 @@
 /**
- * WHAT A TWO-LANE PUBLISH WRITES ONTO THE RECORD, and the shapes it writes it in.
+ * WHAT A TWO-LANE PUBLISH WRITES ONTO THE RECORD.
  *
  * ── THE SEAM THIS FILE HOLDS (router lane plan R5, seam 1) ────────────────
- * The record's `lanes` and `router` fields are DECLARED by WP-3 in
- * `lib/vaults/store.ts` (`VaultRecord` + the `PublishInput` pick) and READ by
- * WP-3's Capital router instrument. WP-1 writes them. Neither package may edit
- * the other's file, so the two shapes below are WP-1's local declaration of
- * what it writes, under the field names the plan gives, and integration
- * reconciles them with WP-3's declaration. When WP-3's `VaultRecord` carries
- * the same two names, `PublishFlow` passes them straight through and these
- * interfaces can be deleted in favour of the store's.
+ * The record's `lanes` and `router` fields are DECLARED by `lib/vaults/store.ts`
+ * (`VaultRecord`, admitted into `PublishInput`) and READ by the Capital router
+ * instrument on the vault page. The canvas writes them, and this file is the
+ * one place that composes the router half.
+ *
+ * INTEGRATION (WP-5) COLLAPSED THE TWO SHAPES INTO ONE. While the packages
+ * were building in parallel this file carried its own `PublishedLane` and
+ * `PublishedRouter` interfaces, because neither package could edit the other's
+ * file; they disagreed with the store's in three members and in the router's
+ * rule field (an array of decoded per-slot sentences against the store's one
+ * depositor sentence). Both are now imported from the store, so the shape the
+ * canvas writes is by construction the shape the page reads, and a member
+ * added on one side cannot go unwritten on the other.
  *
  * ── EVERY FIGURE HERE HAS ONE OWNER AND NONE OF THEM IS THIS FILE ─────────
  * The published APY is the lane's own display number (`laneComputed[].netApy`,
  * `publishedNetApy` with the compute fee inside). The allocation is the
  * orchestrator's `allocationsBps`. The three dials are `dialsFromParams` on the
- * portfolio's own orchestrator params. The rule sentence is
- * `decodeOrchRule` over `demoRouterRules`, which is the founder's 48-hour
- * sustain and the quant's derived threshold from
- * `lib/canvas/orchestrator/demo-rules.ts`. Nothing below computes a number.
+ * portfolio's own orchestrator params. The bar, the hysteresis, the founder's
+ * window and the move weight are the four named constants in
+ * `lib/canvas/orchestrator/demo-rules.ts`. The sentence is
+ * `routerRuleSentence` in the store, which is also the backfill a record
+ * published without the field gets, so there is exactly one spelling of the
+ * rule in the product. Nothing below computes a number.
  *
- * ── WHY THE HOURLY PIN COUNT AND NOT THE DAILY ONE ───────────────────────
- * `demoRouterRules` defaults to `DEMO_SUSTAIN_PINS_DAILY` (2), the modeled
- * replay's cadence. A PUBLISHED record describes the machine the vault runs,
- * and that handler lands hourly (`lib/vaults/onchain-executions.ts`), so the
- * record states the same 48 hours as `DEMO_SUSTAIN_PINS_HOURLY` (48). One
- * window, two clocks, and the caller says which clock it is on.
+ * ── WHY THE RECORD STATES HOURS AND NOT PINS ─────────────────────────────
+ * `demoRouterRules` counts PINS, and the pin count depends on the cadence:
+ * two daily pins in the modeled replay, 48 hourly pins on the handler this
+ * record's vault actually runs (`lib/vaults/onchain-executions.ts`). The
+ * record carries the founder's window itself, `DEMO_SUSTAIN_HOURS`, which is
+ * the one quantity both cadences agree on and the only one a depositor reads.
  */
 
-import { decodeOrchRule } from "@/lib/canvas/orchestrator/rule-schema";
 import {
-  DEMO_SUSTAIN_PINS_HOURLY,
-  demoDeriveAllRouterRules,
+  DEMO_ROUTER_MOVE_WEIGHT,
+  DEMO_SUSTAIN_HOURS,
+  DEMO_UPGRADE_REARM,
+  DEMO_UPGRADE_THRESHOLD,
 } from "@/lib/canvas/orchestrator/demo-rules";
-import type { LoopSlot, OrchestratorDials } from "@/lib/canvas/orchestrator/types";
-import type { LaneFamily } from "@/lib/canvas/graph-ops";
+import type { OrchestratorDials } from "@/lib/canvas/orchestrator/types";
+import { routerRuleSentence, type PublishedLane, type PublishedRouter } from "@/lib/vaults/store";
 
-/** One lane of a published multi-lane vault, as the record carries it. */
-export interface PublishedLane {
-  /** The canvas's own name for the lane (`Lane 1`). */
-  label: string;
-  /** The scanner venue key (`morpho-blue-base`, `treasury-ausdc-base`). */
-  venue: string;
-  /** The market the lane's source plate pins, as the plate prints it. */
-  market: string;
-  /** Which product this lane is. Decides what the reader may state about it. */
-  family: LaneFamily;
-  /** The lane's published net APY AT PUBLISH, the compute fee already inside.
-   *  Null when the lane did not price, which the reader renders as nothing. */
-  publishedApy: number | null;
-  /** The router's steady-state weight for this lane. The set sums to 10000. */
-  allocationBps: number;
-}
-
-/** The capital router as the record carries it: three dials and its rules. */
-export interface PublishedRouter {
-  /** The three dials, verbatim from `OrchestratorDials`. */
-  reactivity: OrchestratorDials["reactivity"];
-  maxConcentrationPct: number;
-  turnoverBudgetPctWeek: number;
-  /**
-   * The upgrade rule, decoded, one sentence per lane. `decodeOrchRule` names
-   * the slot it belongs to, so the two directions of the founder's one
-   * mechanism read as two sentences about one machine rather than two rules.
-   */
-  ruleSentences: string[];
-  /** The sustain the sentences are stated on: 48 hourly pins. */
-  sustainPins: number;
-}
+export type { PublishedLane, PublishedRouter };
 
 /**
  * The router block for a published record, or null when no router is on.
  *
- * `slots` and `dials` are the SAME objects the plate and the validator read
- * (`slotsFromPortfolio`, `dialsFromParams`), so the record cannot describe a
- * router the canvas did not show.
+ * `dials` is the SAME object the plate and the validator read
+ * (`dialsFromParams`), and `lanes` is the array the record itself carries, so
+ * the record cannot describe a router over lanes the canvas did not show, and
+ * the sentence cannot name a size the `Max move` row disagrees with:
+ * `routerRuleSentence` derives the size from these same lanes and this same
+ * concentration cap through `routerMaxMoveFrac`.
  */
 export function publishedRouter(
   dials: OrchestratorDials,
-  slots: readonly LoopSlot[],
+  lanes: readonly PublishedLane[],
 ): PublishedRouter | null {
-  if (slots.length < 2) return null;
-  const rules = demoDeriveAllRouterRules(dials, slots, DEMO_SUSTAIN_PINS_HOURLY).filter(
-    (r) => r.metric === "better_elsewhere",
-  );
+  if (lanes.length < 2) return null;
   return {
     reactivity: dials.reactivity,
     maxConcentrationPct: dials.maxConcentrationPct,
     turnoverBudgetPctWeek: dials.turnoverBudgetPctWeek,
-    ruleSentences: rules.map(decodeOrchRule),
-    sustainPins: DEMO_SUSTAIN_PINS_HOURLY,
+    ruleSentence: routerRuleSentence({
+      lanes,
+      thresholdApy: DEMO_UPGRADE_THRESHOLD,
+      sustainHours: DEMO_SUSTAIN_HOURS,
+      moveWeight: DEMO_ROUTER_MOVE_WEIGHT,
+      maxConcentrationPct: dials.maxConcentrationPct,
+    }),
+    thresholdApy: DEMO_UPGRADE_THRESHOLD,
+    rearmApy: DEMO_UPGRADE_REARM,
+    sustainHours: DEMO_SUSTAIN_HOURS,
+    moveWeight: DEMO_ROUTER_MOVE_WEIGHT,
   };
 }
