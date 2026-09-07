@@ -349,6 +349,18 @@ export interface RouterReadout {
   readingLine: string;
   /** The bar, the hysteresis and the CLAMPED move, as the foot prints them. */
   barText: string;
+  /**
+   * THE RE-ARM STOP, ON THE GAP AXIS THIS CARD DRAWS, and therefore SIGNED.
+   *
+   * The card's axis is `loop - floor`, and the rule re-arms when the
+   * improvement (`floor - loop`) is at or under `rearmApy`, so the stop sits
+   * at MINUS `rearmApy`. It used to print as an unsigned magnitude with a
+   * hard-coded minus in front of it, which was true only while `rearmApy` was
+   * positive. At the shipped 1.508% bar R28's 2pp gap puts it at -0.492%, so
+   * the stop is at +0.49pp: the loop has to LEAD by that much before the rule
+   * that left it re-arms. One string, printed by the band stop and the foot,
+   * so the two cannot disagree about which side of zero it is on.
+   */
   rearmText: string;
   moveText: string;
   maxMove: number;
@@ -420,7 +432,7 @@ export function routerReadout(r: RouterAutomation): RouterReadout {
     loopLabel: loopLane?.label ?? "loop",
     asOfText: routerDayLabel(replay.asOfDate),
     barText: ppMagnitude(r.thresholdApy),
-    rearmText: ppMagnitude(r.rearmApy),
+    rearmText: ppSigned(-r.rearmApy),
     moveText: ppMagnitude(maxMove, 1),
     maxMove,
     /* THE MEASURED PAIR, AS THE READING LINE STATES IT (G3). The loop's rate
@@ -435,9 +447,15 @@ export function routerReadout(r: RouterAutomation): RouterReadout {
     clockLabel: `${filled} of ${cells} hours behind`,
     lit,
     clockFull: replay.clockFull,
-    lastMoveText: replay.lastMove
-      ? routerDayLabel(replay.lastMove.date)
-      : `none in the last ${replay.days} days`,
+    /* THE RECORD'S OWN MOVE HISTORY, AND IT IS EMPTY (fix wave 2, ruling 2).
+       This used to print the REPLAY's June move, which is a decision the
+       modeled 89-day fold took over captured history and not something this
+       vault did: the record carries no ledger, the vault has taken no move
+       since it was published, and a foot row reading `Jun 12, 2026` claimed
+       one. The replay's moves stay where they belong, in the dock's run panel
+       and in the backtest. When the record starts carrying a move history this
+       line reads it; until then the honest answer is the absence. */
+    lastMoveText: "none since publish",
     allocationText:
       loopLane && floorLane
         ? `${loopLane.label} ${(loopLane.allocationBps / 100).toFixed(0)}%, ${floorLane.label} ${(
@@ -533,10 +551,7 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
           </div>
           <div className="vxe-lab vxe-lab--up">
             <i>Re-arm</i>
-            <b>
-              {MINUS}
-              {ppMagnitude(r.rearmApy)}
-            </b>
+            <b>{read.rearmText}</b>
           </div>
           <div className="vxe-lab vxe-lab--tgt">
             <i>{capLoop} {gap >= 0 ? "leads" : "trails"}</i>

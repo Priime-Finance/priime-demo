@@ -161,6 +161,7 @@ import { composedRoute, type DockLaneView } from "./dock/LanePanel";
    (`dialsFromParams`) and the honest per-lane plate signals
    (`deriveLaneSignals`, whose two most useful fields were hard-coded here). */
 import { deriveLaneSignals, dialsFromParams, ORCHESTRATOR_DEF, slotsFromPortfolio } from "@/lib/canvas/orchestrator";
+import { seatedPortfolioAllocationsBps, withSeatedAllocations } from "@/lib/canvas/floor-pair-seat";
 /* ⚠ IMPORT ORDER IS LOad-BEARING, and it is not this file's fault.
    `rule-schema.ts` and `capacity.ts → templates.ts → graph-ops.ts →
    orchestrator/index.ts` form a pre-existing evaluation cycle, and the working
@@ -1644,7 +1645,15 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
   // ── Hero portfolio APY (UX_ITERATION_3 §4): allocation-weighted blend;
   //    a single loop IS the portfolio. Any missing lane quote nulls the
   //    blend — a partial blend would lie. ──
-  const allocBps = portfolio.orchestrator.allocationsBps;
+  /* THE SEAT, NOT THE DIAL, ON THE FLOOR PAIR (fix wave 2, ruling 2). A switch
+     holds ONE lane, so between firings the book is entirely in the lane the
+     rule holds and there is nothing to split. `seatedPortfolioAllocationsBps`
+     is the one owner of which lane that is, and it hands back the stored map
+     unchanged on every composition that is not this pair, so the allocation
+     dial keeps working everywhere it is still a dial. Every surface below
+     reads THIS: the hero blend, the capacity, the review rows, the plate's
+     bars, the lane chips, the bus labels and the published record. */
+  const allocBps = useMemo(() => seatedPortfolioAllocationsBps(portfolio), [portfolio]);
   const portfolioApy = useMemo(() => {
     if (laneComputed.length === 0) return null;
     if (laneComputed.length === 1) return laneComputed[0].netApy;
@@ -1821,7 +1830,9 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
   /* THE SLOTS THE VALIDATOR SEES. The plate draws `minWeight` and `maxWeight`
      off these, so the tick on an allocation bar is the bound
      `validateOrchestrator` enforces rather than a second opinion about it. */
-  const orchSlots = useMemo(() => slotsFromPortfolio(portfolio), [portfolio]);
+  /* SEATED, for the same reason the bars are: a slot's `targetWeight` is the
+     allocation, and the plate draws its bands off these slots. */
+  const orchSlots = useMemo(() => slotsFromPortfolio(withSeatedAllocations(portfolio)), [portfolio]);
 
   const orchSignals: LaneSignal[] = useMemo(
     () =>
@@ -1841,9 +1852,9 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
              neither demo lane was screened at all. */
           screenedAtApy: orchSlots.find((s) => s.slotId === l.loop.id)?.screenedAtApy ?? null,
         })),
-        portfolio.orchestrator.allocationsBps,
+        allocBps,
       ),
-    [laneComputed, portfolio.orchestrator.allocationsBps, repricing, orchSlots],
+    [laneComputed, allocBps, repricing, orchSlots],
   );
   const orchDials = useMemo(
     () => dialsFromParams(portfolio.orchestrator.params),
@@ -2278,7 +2289,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
           value: [
             head ?? (pairWord ? null : "…"),
             venueWord,
-            pct((portfolio.orchestrator.allocationsBps[l.loop.id] ?? 0) / 10000, 0),
+            pct((allocBps[l.loop.id] ?? 0) / 10000, 0),
             pct(l.netApy),
           ]
             .filter((p): p is string => typeof p === "string" && p.length > 0)
@@ -2416,7 +2427,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
               market: l.p.pairLabel || "…",
               family: l.family,
               publishedApy: l.netApy,
-              allocationBps: portfolio.orchestrator.allocationsBps[l.loop.id] ?? 0,
+              allocationBps: allocBps[l.loop.id] ?? 0,
             }));
             return { lanes: publishedLanes, router: publishedRouter(orchDials, publishedLanes) };
           })()
@@ -3707,7 +3718,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                     laneReviewable={l.laneReviewable}
                     railVerdict={l.railVerdict}
                     noCapacity={noCapLane?.loop.id === l.loop.id}
-                    allocationBps={orchOn ? (portfolio.orchestrator.allocationsBps[l.loop.id] ?? 0) : null}
+                    allocationBps={orchOn ? (allocBps[l.loop.id] ?? 0) : null}
                     snapKeys={snapKeys}
                     ejectingKeys={ejectingKeys}
                     pulseKey={pulseKeys[l.loop.id] ?? 0}
@@ -3967,13 +3978,17 @@ function OrchWires({ rackRef, portfolio, measureKey }: { rackRef: React.RefObjec
         k: root.offsetWidth > 0 && rootRect.width > 0 ? rootRect.width / root.offsetWidth : 1,
       });
       const targets: BusTarget[] = [];
+      /* THE SAME SEAT THE PLATE AND THE PUBLISH READ. The bus label is an
+         allocation, so a wire reading `50%` under a plate reading `100%` would
+         be two answers to one question on one screen. */
+      const wireAlloc = seatedPortfolioAllocationsBps(portfolio);
       for (const loop of portfolio.loops) {
         const jack = root.querySelector<HTMLElement>(`[data-jack="${loop.id}/liquidity-source:bus"]`);
         if (!jack) continue;
         targets.push({
           id: loop.id,
           rect: jack.getBoundingClientRect(),
-          label: pct((portfolio.orchestrator.allocationsBps[loop.id] ?? 0) / 10000, 0),
+          label: pct((wireAlloc[loop.id] ?? 0) / 10000, 0),
         });
       }
       setPaths(orchestratorBusWires(orchJack.getBoundingClientRect(), targets, inverse));

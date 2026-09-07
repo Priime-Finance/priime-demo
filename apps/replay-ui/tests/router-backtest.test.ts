@@ -47,16 +47,20 @@ import {
   DEMO_UPGRADE_THRESHOLD,
   demoDeriveAllRouterRules,
   demoExitProfile,
+  demoRouterPricing,
   demoRouterRules,
   isFloorPairSlot,
   validateDemoRouter,
 } from "@/lib/canvas/orchestrator/demo-rules";
+import { demoFloorPairSeat } from "@/lib/canvas/floor-pair-seat";
 import {
   FLOOR_PAIR_MAX_CONCENTRATION_PCT,
   FLOOR_PAIR_MAX_WEIGHT,
   FLOOR_PAIR_MIN_WEIGHT,
   FLOOR_PAIR_MOVE_WEIGHT,
   FLOOR_PAIR_TURNOVER_PCT_WEEK,
+  floorPairSeat,
+  floorPairSeatBps,
   isDemoFloorPair,
 } from "@/lib/canvas/floor-pair";
 import {
@@ -160,9 +164,15 @@ function run(
   const n = f.days.length;
   const w = f.result.earningWeightByTick;
   const dailyBook: number[] = [];
+  /* DAY ZERO IS THE SEAT, not a split. The fold opens on the lane the rule
+     holds (`floor-pair-seat.ts`), so the first day's yield accrues on that
+     seat; hardcoding 0.5 here would price day one on a position the run was
+     never in and the "no moves means the static held lane" identity below
+     would miss by the difference between the two lanes. */
+  const seatLoop = demoFloorPairSeat() === "loop" ? 1 : 0;
   for (let i = 0; i < n; i += 1) {
-    const wl = i === 0 ? 0.5 : (w[LOOP][i - 1] as number);
-    const wf = i === 0 ? 0.5 : (w[FLOOR][i - 1] as number);
+    const wl = i === 0 ? seatLoop : (w[LOOP][i - 1] as number);
+    const wf = i === 0 ? 1 - seatLoop : (w[FLOOR][i - 1] as number);
     dailyBook.push(wl * (f.loopPublishedApy[i] as number) + wf * (f.floorPublishedApy[i] as number));
   }
   const moved = f.result.decisions.filter((d) => d.moved.destSlotId !== "pause");
@@ -232,10 +242,17 @@ const RUNS_SINCE = REGIME_IDS.map((r) => run(r, SINCE_INCENTIVE));
 
 const pct = (x: number): string => `${(x * 100).toFixed(3)}%`;
 
-/** The improvement at which the evaluator's OWN payback gate stops refusing:
- *  `exitProfileFor` charges the same-chain rail on the whole book, and
- *  `paybackMs` refuses anything that runs past the 90-day horizon. */
-const PAYBACK_EFFECTIVE_BAR = (MOVE_FRICTION_FRAC_SAME_CHAIN * 365) / PAYBACK_HORIZON_DAYS;
+/**
+ * The improvement at which the evaluator's OWN payback gate stops refusing.
+ *
+ * IT IS THE MEASURED RAIL NOW, not `MOVE_FRICTION_FRAC_SAME_CHAIN`. The fold
+ * passes `demoRouterExitProfile` into `evaluateOrchestrator`'s `exitProfile`
+ * hook, so the cost record and `paybackMs` both charge this pair's own 18.6
+ * bps rather than the flat 70 bps analogy. That is what makes the two lower
+ * candidate bars reachable: the effective floor drops from 2.839pp to
+ * 0.754pp, which is the one-way break-even itself.
+ */
+const PAYBACK_EFFECTIVE_BAR = (DEMO_MOVE_FRICTION_FRAC_ONE_WAY * 365) / PAYBACK_HORIZON_DAYS;
 
 // ── The capture ───────────────────────────────────────────────────────────
 
@@ -405,20 +422,103 @@ describe("demo-rules: the friction, the bar and the 48 hours", () => {
     expect(DEMO_BAR_ONE_WAY_BREAKEVEN).toBeCloseTo(0.00754, 6);
     expect(DEMO_BAR_ROUND_TRIP_BREAKEVEN).toBeCloseTo(0.01508, 6);
     expect(DEMO_BAR_REGISTER_FLOOR).toBe(0.03);
-    expect(DEMO_UPGRADE_THRESHOLD).toBe(DEMO_BAR_REGISTER_FLOOR);
-    expect(DEMO_UPGRADE_REARM).toBe(0.01);
+    /* THE ROUND-TRIP BREAK-EVEN SHIPS (G2, fix wave 2). It sits UNDER the
+       register floor by name, which is the licence G2 gave a demo-scoped
+       owner; `UPGRADE_THRESHOLD_FLOOR` itself is untouched and
+       `DEMO_BAR_REGISTER_FLOOR` still computes it. */
+    expect(DEMO_UPGRADE_THRESHOLD).toBe(DEMO_BAR_ROUND_TRIP_BREAKEVEN);
+    expect(DEMO_UPGRADE_THRESHOLD).toBeLessThan(DEMO_BAR_REGISTER_FLOOR);
+    /* R28's 2pp gap, met exactly, and the re-arm is NEGATIVE at this bar. That
+       is legal and it is stricter, not weaker: the rule re-arms only once the
+       improvement is at or under -0.492%, which is the other lane leading by
+       0.492%. A lane that merely stops trailing does not re-arm the rule that
+       left it. */
+    expect(DEMO_UPGRADE_REARM).toBeCloseTo(-0.00492, 9);
+    expect(DEMO_UPGRADE_REARM).toBeLessThan(0);
     expect(DEMO_UPGRADE_THRESHOLD - DEMO_UPGRADE_REARM).toBeCloseTo(0.02, 12);
-    /* THE ARGUMENT THE TABLE BELOW MAKES, AS AN ASSERTION. Under the switch
-       the rail rides the whole book, so `exitProfileFor` charges 0.7% of it
-       and `paybackMs` refuses any move whose improvement runs past the 90-day
-       horizon. That is an EFFECTIVE bar of 2.84pp, whatever the rule
-       publishes: a bar under it admits moves the evaluator then refuses, and
-       the depositor sentence would name a margin the machine does not act on.
-       The shipped bar is the only one of the three above that floor. */
-    expect(PAYBACK_EFFECTIVE_BAR).toBeCloseTo(0.02839, 5);
-    expect(DEMO_BAR_ONE_WAY_BREAKEVEN).toBeLessThan(PAYBACK_EFFECTIVE_BAR);
-    expect(DEMO_BAR_ROUND_TRIP_BREAKEVEN).toBeLessThan(PAYBACK_EFFECTIVE_BAR);
+    /* THE ARGUMENT THE TABLE BELOW MAKES, AS AN ASSERTION, AND IT CHANGED
+       SIDES. The evaluator used to charge `exitProfileFor`'s flat 0.700% while
+       the rule published a bar derived from the measured 0.186%, so
+       `paybackMs` imposed an effective 2.84pp floor no rule had stated and
+       only the register bar cleared it. One friction prices one move now, so
+       the effective floor IS the one-way break-even, and both derived
+       candidates are reachable. */
+    expect(PAYBACK_EFFECTIVE_BAR).toBeCloseTo(DEMO_BAR_ONE_WAY_BREAKEVEN, 4);
+    expect(PAYBACK_EFFECTIVE_BAR).toBeCloseTo(0.00754, 4);
+    /* A QUARTER OF WHAT IT WAS: the old floor was the flat constant's own
+       365/90, which is 2.839pp, and it is what forced the register bar. */
+    expect((MOVE_FRICTION_FRAC_SAME_CHAIN * 365) / PAYBACK_HORIZON_DAYS).toBeCloseTo(0.02839, 5);
+    expect(PAYBACK_EFFECTIVE_BAR).toBeLessThan((MOVE_FRICTION_FRAC_SAME_CHAIN * 365) / PAYBACK_HORIZON_DAYS);
+    expect(DEMO_BAR_ROUND_TRIP_BREAKEVEN).toBeGreaterThan(PAYBACK_EFFECTIVE_BAR);
     expect(DEMO_UPGRADE_THRESHOLD).toBeGreaterThan(PAYBACK_EFFECTIVE_BAR);
+  });
+
+  it("charges ONE friction for one move: the measured rail, in every cost record", () => {
+    /* THE DEFECT THIS CLOSES. The bar is derived from
+       `DEMO_MOVE_FRICTION_FRAC_ONE_WAY`; the evaluator was charging
+       `MOVE_FRICTION_FRAC_SAME_CHAIN`, four times as much, in the cost record
+       the dock prints and the payback gate reads. Both ends are atomic, so the
+       measured profile carries no settlement window and no window cost. */
+    const priced = demoRouterPricing(
+      [DEMO_MARKET_ID, ROUTER_FLOOR_CANDIDATE_ID],
+      { venue: "morpho-blue-base", publishedNetApy: 0.03, settlementDays: 0, observationsPerDay: 1 },
+      { venue: "treasury-ausdc-base", publishedNetApy: 0.028, settlementDays: 0, observationsPerDay: 1 },
+    );
+    expect(priced.exit).toEqual(demoExitProfile());
+    expect(priced.exit.oneShotFrac).toBe(DEMO_MOVE_FRICTION_FRAC_ONE_WAY);
+    expect(priced.exit.settleSeqs).toBe(0);
+    expect(priced.exit.windowCost).toBe(0);
+    expect(priced.bar).toBe(DEMO_UPGRADE_THRESHOLD);
+    /* AND IT IS SCOPED. A portfolio that is not this pair gets the two shipped
+       functions, unchanged, on the same two endpoints. */
+    const stranger = demoRouterPricing(
+      [DEMO_MARKET_ID, "morpho-blue-base:8453:WETH-USDC:0xdeadbeef"],
+      { venue: "morpho-blue-base", publishedNetApy: 0.03, settlementDays: 0, observationsPerDay: 1 },
+      { venue: "morpho-blue-base", publishedNetApy: 0.028, settlementDays: 0, observationsPerDay: 1 },
+    );
+    expect(stranger.exit.oneShotFrac).toBe(MOVE_FRICTION_FRAC_SAME_CHAIN);
+    expect(stranger.bar).toBe(0.03);
+    /* THE FOLD ACTUALLY CHARGES IT: every decision's own cost record is the
+       measured rail against the dollars it moved, not the flat constant. */
+    for (const regime of REGIME_IDS) {
+      const f = foldRouterScenario({ regime });
+      for (const d of f.result.decisions) {
+        if (d.moved.destSlotId === "pause") continue;
+        expect(d.cost.oneShotFrac).toBe(DEMO_MOVE_FRICTION_FRAC_ONE_WAY);
+        expect(d.cost.oneShotUsd).toBeCloseTo(DEMO_MOVE_FRICTION_FRAC_ONE_WAY * d.moved.moveUsd, 2);
+      }
+    }
+  });
+
+  it("seats the whole book in one lane, and the lane is the one the rule holds", () => {
+    /* A SWITCH HOLDS ONE LANE (fix wave 2, ruling 2). The pair's published
+       rates today have the loop ahead, so the loop is seated and the floor
+       opens empty. The rule's own bar is what asks the question. */
+    const today = routerPublishedToday();
+    expect(today).not.toBeNull();
+    const t = today as { loop: number; floor: number };
+    expect(t.floor - t.loop).toBeLessThan(DEMO_UPGRADE_THRESHOLD);
+    expect(demoFloorPairSeat()).toBe("loop");
+    expect(
+      floorPairSeat({ loop: 0.03, floor: 0.03 + DEMO_UPGRADE_THRESHOLD + 1e-9 }, DEMO_UPGRADE_THRESHOLD),
+    ).toBe("floor");
+    expect(floorPairSeat(null, DEMO_UPGRADE_THRESHOLD)).toBe("loop");
+    const seat = floorPairSeatBps(
+      [
+        { loopId: "loop_1", candidateId: DEMO_MARKET_ID },
+        { loopId: "loop_2", candidateId: ROUTER_FLOOR_CANDIDATE_ID },
+      ],
+      "loop",
+    );
+    expect(seat).toEqual({ loop_1: 10000, loop_2: 0 });
+    /* Not this pair, no seat: the caller keeps its own allocation. */
+    expect(
+      floorPairSeatBps([{ loopId: "loop_1", candidateId: DEMO_MARKET_ID }], "loop"),
+    ).toBeNull();
+    /* And the fold opens on it, which is why every move now carries 100pp. */
+    const f = foldRouterScenario({ regime: "measured" });
+    expect(f.cfg.loops.find((l) => l.slotId === LOOP)?.targetWeight).toBe(1);
+    expect(f.cfg.loops.find((l) => l.slotId === FLOOR)?.targetWeight).toBe(0);
   });
 
   it("maps 48 hours onto both cadences, and the live cadence is measured", () => {
@@ -482,7 +582,7 @@ describe("the backtest: the switch over the measured window and three regimes", 
       "",
       `router backtest UNDER THE SWITCH, ${RUNS[0]?.days} aligned days, book $${TVL.toLocaleString("en-US")}, L ${HERO_SEED_LEVERAGE}x`,
       `bar ${pct(DEMO_UPGRADE_THRESHOLD)} / re-arm ${pct(DEMO_UPGRADE_REARM)} / sustain ${DEMO_SUSTAIN_PINS_DAILY} daily pins / one firing carries the whole lane / budget ${FLOOR_PAIR_TURNOVER_PCT_WEEK}% per week`,
-      `friction charged by the evaluator: ${pct(MOVE_FRICTION_FRAC_SAME_CHAIN)} of the capital moved (exitProfileFor, same chain), which on a whole-book move is ${pct(MOVE_FRICTION_FRAC_SAME_CHAIN)} of the book`,
+      `friction charged by the evaluator: ${pct(DEMO_MOVE_FRICTION_FRAC_ONE_WAY)} of the capital moved (the measured rail, through the fold's exitProfile hook), against the flat ${pct(MOVE_FRICTION_FRAC_SAME_CHAIN)} exitProfileFor would have charged`,
       HEAD,
     ];
     for (const r of RUNS) lines.push(tableRow(r));
@@ -608,11 +708,16 @@ describe("the backtest: the switch over the measured window and three regimes", 
     }
   });
 
-  it("a run with no moves is exactly the static 50/50 book, so friction is only ever charged on a move", () => {
+  it("a run with no moves is exactly the SEATED lane's own book, so friction is only ever charged on a move", () => {
+    /* It was the static 50/50 before the seat. A switch holds one lane, so a
+       run that never fires is the held lane and nothing else; comparing it to
+       a half-and-half book would compare it to a position the machine is
+       never in. */
+    const held = demoFloorPairSeat() === "loop" ? "staticLoopApy" : "staticFloorApy";
     for (const r of [...RUNS, ...RUNS_SINCE]) {
       if (r.moves > 0) continue;
       expect(r.frictionApy).toBe(0);
-      expect(r.routedApy).toBeCloseTo(r.staticHalfApy, 12);
+      expect(r.routedApy).toBeCloseTo(r[held], 12);
     }
   });
 
@@ -624,16 +729,21 @@ describe("the backtest: the switch over the measured window and three regimes", 
     }
   });
 
-  it("the switch beats the lane it left in three regimes and LOSES in whipsaw, and that is the cost of a whole-book move", () => {
-    /* THE FINDING THE OLD HAND FOLD HID. Under 10pp band shifts the routed
-       book beat the lane it left in every regime. Under the switch the rail
-       rides the WHOLE book, so a violent square wave pays the friction twice
-       on the whole book and ends BELOW the lane it left. Nothing is broken:
-       it is what a whole-book move costs in a market that keeps changing its
-       mind, and the demo must not claim otherwise. */
+  it("the switch beats the lane it left in every regime, whipsaw included, once one friction is charged", () => {
+    /* THIS FLIPPED, AND THE REASON IS THE FRICTION AND NOTHING ELSE. Charging
+       `exitProfileFor`'s flat 0.700% on a whole-book move, a violent square
+       wave paid 4.306% annualised and ended BELOW the lane it left. The rail
+       this pair was actually measured on is 0.186%, so the same four moves
+       cost 3.051% and whipsaw ends at -0.475% against a static loop of
+       -1.729%. The old loss was an artefact of the second friction, not a
+       property of the machine. What still holds is that whipsaw is by far the
+       most expensive regime and that its routed book is NEGATIVE. */
+    for (const r of RUNS) expect(r.routedApy).toBeGreaterThan(r.staticLoopApy);
+    const w = RUNS.find((r) => r.regime === "whipsaw")!;
+    expect(w.routedApy).toBeLessThan(0);
     for (const r of RUNS) {
-      if (r.regime === "whipsaw") expect(r.routedApy).toBeLessThan(r.staticLoopApy);
-      else expect(r.routedApy).toBeGreaterThan(r.staticLoopApy);
+      if (r.regime === "whipsaw") continue;
+      expect(w.frictionApy).toBeGreaterThan(r.frictionApy);
     }
   });
 });

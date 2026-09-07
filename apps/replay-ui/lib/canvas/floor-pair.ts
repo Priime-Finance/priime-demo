@@ -119,3 +119,64 @@ export const FLOOR_PAIR_MOVE_WEIGHT = 1;
  * evaluator refuses a firing it cannot fund and never sizes it down.
  */
 export const FLOOR_PAIR_TURNOVER_PCT_WEEK = 100;
+
+/**
+ * ══ A SWITCH HOLDS ONE LANE, AND THIS IS WHO HOLDS IT ════════════════════
+ *
+ * On this pair the allocation is NOT a dial and NOT an even split. The
+ * mechanism evacuates a lane and rebuilds it, so between firings the book is
+ * entirely in one lane; a 50/50 seat drawn on the plate, published onto the
+ * record and printed in the instrument's Allocation row described a portfolio
+ * this machine is never in. It also made every printed move size a half-move:
+ * the replay's own first decision reads `50.0pp` out of a 100% rule, because
+ * the lane it evacuated only held half the book to begin with.
+ *
+ * WHICH LANE, and it is a measurement rather than a preference. At publish the
+ * loop holds the book, unless the pair's own published rates TODAY already
+ * clear the bar for the floor, in which case seating the loop would publish a
+ * vault whose first act is to leave the lane it was seated in. That is the
+ * whole rule, and the bar it asks with is the shipped one.
+ *
+ * `todayPair` is the caller's, because this module is a leaf with one import
+ * and `router-history` reaches `templates` and back to `graph-ops`, which
+ * imports this file: resolving the capture here would close a cycle of exactly
+ * the shape F6 already cost this package once. `lib/canvas/floor-pair-seat.ts`
+ * is the one module that resolves it, and every surface reads that.
+ */
+export type FloorPairHolder = "loop" | "floor";
+
+/**
+ * The lane the rule holds, given the pair's published rates today.
+ *
+ * A missing or unpriced side seats the LOOP: the loop is the lane the vault is
+ * composed around, and an absent measurement is not evidence for leaving it.
+ */
+export function floorPairSeat(
+  todayPair: { readonly loop: number | null; readonly floor: number | null } | null,
+  bar: number,
+): FloorPairHolder {
+  const loop = todayPair?.loop ?? null;
+  const floor = todayPair?.floor ?? null;
+  if (loop === null || floor === null) return "loop";
+  return floor - loop >= bar ? "floor" : "loop";
+}
+
+/**
+ * The seat as an allocation vector in bps, or NULL when these lanes are not
+ * this pair.
+ *
+ * Null rather than a fallback, so a caller keeps whatever allocation its own
+ * portfolio already carries and the switch's seat cannot leak onto a rack it
+ * was not measured for. Σ is exactly 10000 by construction: one lane holds the
+ * whole book and the other holds none of it.
+ */
+export function floorPairSeatBps(
+  lanes: readonly { readonly loopId: string; readonly candidateId: string }[],
+  holder: FloorPairHolder,
+): Record<string, number> | null {
+  if (!isDemoFloorPair(lanes.map((l) => l.candidateId))) return null;
+  const held = holder === "loop" ? HERO_MARKET_ID : FLOOR_MARKET_ID;
+  const seat: Record<string, number> = {};
+  for (const l of lanes) seat[l.loopId] = l.candidateId === held ? 10000 : 0;
+  return seat;
+}

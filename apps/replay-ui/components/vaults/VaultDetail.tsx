@@ -589,12 +589,16 @@ export default function VaultDetail({ slug }: { slug: string }) {
       { label: "Move bar", value: `${(r.thresholdApy * 100).toFixed(2)}pp` },
       { label: "Sustain", value: `${r.sustainHours}h` },
       { label: "Re-arm", value: `${(r.rearmApy * 100).toFixed(2)}pp` },
-      /* THE WHOLE LANE (G1), stated as the size it is from the even split.
+      /* THE WHOLE LANE (G1), stated as the size it is AT THIS RECORD'S OWN
+         SEAT. It used to say `from an even split`, which stopped being true
+         when a switch started seating the whole book in the lane the rule
+         holds: `routerMaxMoveFrac` reads the record's own lane shares now, so
+         the number and the words describe the same book.
          `routerConcentrationBand` is still the owner of the band and the band
-         is now [0, 1], which is why the row that printed it is gone: a row
-         reading `0% to 100%` is a control with nothing in it. What replaces it
-         is the budget, which is the bound that still binds. */
-      { label: "Move size", value: `the whole lane, ${(maxMove * 100).toFixed(1)}pp from an even split` },
+         is [0, 1], which is why the row that printed it is gone: a row reading
+         `0% to 100%` is a control with nothing in it. What replaces it is the
+         budget, which is the bound that still binds. */
+      { label: "Move size", value: `the whole lane, ${(maxMove * 100).toFixed(1)}pp of the book as seated` },
       { label: "Moves", value: `${Math.round(r.turnoverBudgetPctWeek / 100)} per week` },
       {
         label: "Floor rate source",

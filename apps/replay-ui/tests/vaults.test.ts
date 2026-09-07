@@ -713,9 +713,11 @@ describe("the measured replay is the quant's, to the day and to the weight", () 
     expect(m.date).toBe("2026-06-12");
     expect(m.source).toBe("loop");
     expect(m.dest).toBe("floor");
-    /* THE SWITCH (G1): the source ends at zero and the floor holds the book.
-       50.0pp out of an even split, which is the whole lane, not a band shift. */
-    expect(m.weightFrac).toBeCloseTo(0.5, 9);
+    /* THE SWITCH (G1) ON THE SEAT (fix wave 2): the loop starts holding the
+       whole book and ends at zero, so the move is 100.0pp. It read 50.0pp
+       while the fold opened on an even split, which is a position this machine
+       is never in between firings. */
+    expect(m.weightFrac).toBeCloseTo(1, 9);
     expect(replay.endWeights).toEqual({ loop: 0, floor: 1 });
   });
 
@@ -724,7 +726,7 @@ describe("the measured replay is the quant's, to the day and to the weight", () 
     expect(today?.date).toBe(replay.asOfDate);
     expect(replay.gapApy).toBeCloseTo((today?.loop ?? 0) - (today?.floor ?? 0), 12);
     expect(replay.gapApy).toBeGreaterThan(0);
-    // Well under the bar: a 3.00pp ratchet over a 0.10pp spread.
+    // Well under the bar: the shipped ratchet over a 0.10pp spread.
     expect(replay.gapApy).toBeLessThan(DEMO_UPGRADE_THRESHOLD);
     expect(replay.behindLane).toBeNull();
     expect(replay.breachDays).toBe(0);

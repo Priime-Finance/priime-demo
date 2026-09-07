@@ -261,11 +261,14 @@ describe("GET /api/canvas/orchestrate", () => {
        calendar this replay has. */
     const tick = d?.scenarioRef.tick ?? -1;
     expect(ROUTER_HISTORY_ALIGNED[tick]?.date).toBe("2026-06-12");
-    /* 50.0pp: the whole lane. Between a lane and its floor the router
-       evacuates and rebuilds (G1), so the source ends at zero rather than at a
-       band floor. ONE number for a move, and this is it (item 8d). */
+    /* 100.0pp: the whole lane, and now the whole BOOK. Between a lane and its
+       floor the router evacuates and rebuilds (G1), so the source ends at zero;
+       under the seat (fix wave 2) it started at one, so the move it records is
+       the size the rule actually asks for rather than half of it. ONE number
+       for a move, and this is it (item 8d). */
     const shifted = (d?.moved.weightBefore ?? 0) - (d?.moved.weightAfter ?? 0);
-    expect(Number((shifted * 100).toFixed(1))).toBe(50.0);
+    expect(Number((shifted * 100).toFixed(1))).toBe(100.0);
+    expect(d?.moved.weightBefore).toBe(1);
     expect(d?.moved.weightAfter).toBe(0);
   });
 
@@ -287,7 +290,7 @@ describe("GET /api/canvas/orchestrate", () => {
     }
   });
 
-  it("the whipsaw takes two whole-lane moves and refuses four firings, each with its gate", () => {
+  it("the whipsaw takes four whole-lane moves and refuses two firings, each with its gate", () => {
     /* THE SEAM IS CLOSED: `tests/router-backtest.test.ts` no longer walks the
        days itself, it folds THIS function, so the two counts are one count by
        construction rather than by agreement. What is measured here is the
@@ -295,11 +298,20 @@ describe("GET /api/canvas/orchestrate", () => {
        lane has nothing to move and is refused as dust, and the way back is
        held by the reverse-edge lock until the last move has paid for itself. */
     const w = runs.get("whipsaw")!;
-    expect(w.moves).toBe(2);
+    /* FOUR, not two, and the reason is the friction and nothing else. The
+       evaluator used to charge `exitProfileFor`'s flat 0.700% on a whole-book
+       move, which put two of these crossings past the 90-day payback horizon;
+       the rail this pair was MEASURED on is 0.186%, so the same two crossings
+       now pay for themselves and the mechanism takes them. What still refuses
+       is a firing on an already-evacuated lane (dust) and the way back inside
+       the reverse-edge lock. */
+    expect(w.moves).toBe(4);
     expect(w.firings).toBe(6);
     expect(w.decisions.filter((d) => d.moved.destSlotId !== "pause").map((d) => ROUTER_HISTORY_ALIGNED[d.scenarioRef.tick]?.date)).toEqual([
       "2026-06-12",
       "2026-07-24",
+      "2026-08-16",
+      "2026-08-28",
     ]);
     const codes = new Set(w.refusals.map((r) => r.code));
     expect(codes.has("edge-lock")).toBe(true);

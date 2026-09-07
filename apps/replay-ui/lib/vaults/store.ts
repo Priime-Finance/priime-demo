@@ -1611,11 +1611,20 @@ export function routerRuleSentence(r: {
  * THE MOVE THIS BOOK CAN ACTUALLY MAKE, and the one owner of it.
  *
  * A lane can give at most the weight it holds and a peer can take at most the
- * room under its ceiling, so the move is `min(moveWeight, max - target,
- * target - min)`. Under the switch (G1) the band is [0, 1] and the rule asks
- * for the whole lane, so from an even split this is 50pp of the book and the
- * source ends at zero: the same 50.0pp the measured replay's one decision
- * records. Under the shipped band it was 10pp against a 12.5pp dial.
+ * room under its ceiling, so the move is
+ * `min(moveWeight, max - destWeight, sourceWeight - min)`.
+ *
+ * THE TWO WEIGHTS ARE THE RECORD'S OWN NOW, not `1 / laneCount`. The even
+ * split was true while the canvas seated every pair evenly and became false
+ * the moment a switch seated the whole book in one lane: it printed a 50pp
+ * move over a book that is 100% in the lane the rule would evacuate. Seated
+ * evenly it still answers exactly what it answered before (50pp at a [0, 1]
+ * band, 10pp at a 60% ceiling against a 12.5pp dial), so nothing that was
+ * right about it moved.
+ *
+ * A record whose lane shares do not sum to the book is a half-written publish
+ * and falls back to the even split rather than dividing by a total it cannot
+ * trust.
  *
  * IT LIVES HERE BECAUSE THE PARAMETERS ROW AND THE REPLAY BOTH STATE IT, and
  * an earlier pass computed it twice and typed the dial into the sentence, so
@@ -1630,8 +1639,14 @@ export function routerMaxMoveFrac(r: {
   const laneCount = Math.max(2, r.lanes.length);
   const maxW = r.maxConcentrationPct / 100;
   const minW = Math.max(0, 1 - (laneCount - 1) * maxW);
-  const targetW = 1 / laneCount;
-  return Math.max(0, Math.min(r.moveWeight, maxW - targetW, targetW - minW));
+  const even = 1 / laneCount;
+  const shares = r.lanes.map((l) => (finite(l.allocationBps) ?? 0) / 10_000);
+  const total = shares.reduce((s, x) => s + x, 0);
+  const seated = shares.length >= 2 && Math.abs(total - 1) < 1e-6;
+  const ordered = seated ? [...shares].sort((a, b) => b - a) : [even, even];
+  const sourceW = ordered[0] as number;
+  const destW = ordered[1] as number;
+  return Math.max(0, Math.min(r.moveWeight, maxW - destW, sourceW - minW));
 }
 
 /** The band a lane's weight may travel in, as fractions. */

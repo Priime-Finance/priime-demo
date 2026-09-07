@@ -253,11 +253,19 @@ describe("the router instrument prints the owners and nothing else", () => {
 
   it("the bar, the hysteresis and the whole-lane move come from their owners", () => {
     expect(read.barText).toBe(`${(DEMO_UPGRADE_THRESHOLD * 100).toFixed(2)}pp`);
-    expect(read.rearmText).toBe(`${(DEMO_UPGRADE_REARM * 100).toFixed(2)}pp`);
-    /* THE WHOLE LANE, from an even split: 50.0pp, the same number the measured
-       replay's one decision records. ONE number for a move (item 8d). */
-    expect(read.moveText).toBe("50.0pp");
-    expect(read.maxMove).toBe(0.5);
+    /* THE RE-ARM STOP IS SIGNED, ON THE GAP AXIS THE CARD DRAWS. The rule
+       re-arms when the improvement (floor minus loop) is at or under
+       `rearmApy`, so the stop is at MINUS that, and at the shipped 1.508% bar
+       R28's 2pp gap makes it POSITIVE: the loop has to lead by 0.49pp before
+       the rule that would leave it re-arms. An unsigned magnitude with a
+       hard-coded minus in front printed the wrong side of zero. */
+    expect(DEMO_UPGRADE_REARM).toBeLessThan(0);
+    expect(read.rearmText).toBe(`+${Math.abs(DEMO_UPGRADE_REARM * 100).toFixed(2)}pp`);
+    /* THE WHOLE LANE, AND UNDER THE SEAT THAT IS THE WHOLE BOOK: this record
+       holds 100% in the loop, so the move the rule asks for is 100.0pp and not
+       the 50.0pp an even split admitted. ONE number for a move (item 8d). */
+    expect(read.moveText).toBe("100.0pp");
+    expect(read.maxMove).toBe(1);
   });
 
   it("the clock counts observations: one cell per hour, none filled today", () => {
@@ -273,9 +281,15 @@ describe("the router instrument prints the owners and nothing else", () => {
     expect(read.clockFull).toBe(false);
   });
 
-  it("the last move prints absolute, because the page's own clock switches past 60 days", () => {
-    expect(read.lastMoveText).toBe("Jun 12, 2026");
+  it("the last move is the RECORD's own history, which is empty", () => {
+    /* It printed `Jun 12, 2026`, which is a decision the MODELED 89-day replay
+       took over captured history and not something this vault did. The record
+       carries no move ledger and the vault has moved nothing since it was
+       published, so the honest answer is the absence. The replay's own moves
+       stay in the dock's run panel and in the backtest. */
+    expect(read.lastMoveText).toBe("none since publish");
     expect(read.lastMoveText).not.toMatch(/ago/);
+    expect(read.lastMoveText).not.toMatch(/2026/);
   });
 
   it("the allocation is the record's, in the record's own lane labels", () => {
@@ -285,8 +299,12 @@ describe("the router instrument prints the owners and nothing else", () => {
   it("the needle sits between the two move stops", () => {
     expect(read.needlePct).toBeGreaterThan(2.5);
     expect(read.needlePct).toBeLessThan(97.5);
-    // Just past the middle: a +0.10pp lead on a ±4.50pp axis.
-    expect(read.needlePct).toBeCloseTo(51.16, 1);
+    /* Just past the middle: a +0.10pp lead on the bar's own axis, which is
+       ±1.5x the bar. Derived rather than typed, so the assertion follows the
+       shipped bar instead of pinning a number to one value of it. */
+    const axis = DEMO_UPGRADE_THRESHOLD * 1.5;
+    expect(read.needlePct).toBeCloseTo(((read.gap + axis) / (2 * axis)) * 100, 9);
+    expect(read.needlePct).toBeGreaterThan(50);
   });
 
   /* THE STOPS ARE SHARES AND MUST SUM TO ONE. `.vxe-bar` is a flex row and

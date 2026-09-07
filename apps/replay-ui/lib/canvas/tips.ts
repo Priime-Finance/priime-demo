@@ -74,6 +74,11 @@ import { LAUNCHABLE_VENUES, isTemplateVenue, type CanvasVenueId } from "./opport
    the header's own PRODUCT number, handed in by `RackCanvas` (A3b). */
 import { catalogRow } from "./mock-quote";
 import { FAMILY_REQUIRED, nodeFor, type LaneFamily } from "./graph-ops";
+/* THE SEAT, not the stored dial (fix wave 2, ruling 2). The tip layer computes
+   a capacity off the allocation and the rack computes one off the same
+   allocation; reading two different maps is how one screen comes to print two
+   capacities for one vault. */
+import { seatedPortfolioAllocationsBps } from "./floor-pair-seat";
 import { nodeId } from "./ids";
 import { bestStop, type LeverageStopView } from "./leverage-stops";
 // R3 (2026-08-22): the tip layer no longer reads a hedge quantity. B7 and B13
@@ -539,7 +544,7 @@ export function deriveTips(ctx: TipContext): Tip[] {
   if (!anyMarket) return out;
 
   const orchOn = ctx.portfolio.orchestrator.enabled && ctx.portfolio.loops.length >= 2;
-  const allocBps = ctx.portfolio.orchestrator.allocationsBps;
+  const allocBps = seatedPortfolioAllocationsBps(ctx.portfolio);
 
   ctx.lanes.forEach((lane, laneIndex) => {
     const loopId = lane.loop.id;
