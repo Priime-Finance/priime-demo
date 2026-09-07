@@ -1826,11 +1826,14 @@ const OBJECTIVE_WORD: Partial<Record<AxisId, string>> = {
 
 /** The other compared axis as its own cell: label from the axis renderer,
  *  value its reading. Null when nothing was measured. */
+/** Cell labels where the axis renderer's own label is a sentence. */
+const CELL_LABEL: Partial<Record<AxisId, string>> = { cushion: "Adverse move" };
+
 function altCell(axis: AxisId | undefined, lane: AxisLane): ReclaimRow | null {
   if (!axis) return null;
   const r = readAxis(axis, lane);
   if (!r) return null;
-  return { label: AXIS_RENDERERS[axis].label, value: r.text };
+  return { label: CELL_LABEL[axis] ?? AXIS_RENDERERS[axis].label, value: r.text };
 }
 
 function renderSetting(control: Control, v: ParamValue): string {

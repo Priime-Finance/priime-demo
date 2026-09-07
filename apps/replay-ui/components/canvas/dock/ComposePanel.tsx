@@ -667,7 +667,7 @@ function RiskStops({
   const line = adverseMoveValue(on ? on.distance : liquidationDistance(lt, shown));
   const facts: { label: string; value: string }[] = [
     { label: "Applied", value: lev(shown) },
-    ...(line !== null ? [{ label: "Adverse move to liquidation", value: line }] : []),
+    ...(line !== null ? [{ label: "Adverse move", value: line }] : []),
     ...(typeof drift === "number" ? [{ label: "Trim before it", value: ppMag(drift, 2) }] : []),
   ];
 
