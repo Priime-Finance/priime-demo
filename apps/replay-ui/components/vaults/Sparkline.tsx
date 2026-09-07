@@ -1,111 +1,171 @@
+"use client";
+
+/* Ported from build.priime.finance eb6d33a (docs/plans/LATEST_UI_PORT_SPEC.md WP4). */
 /**
- * Bespoke SVG share-value line. No chart library: the kit's craft law is
- * hairlines over glows, and a 40-line path builder gives exactly the hairline
- * plus tint the cards and the performance section want.
- *
- * The line is blue punctuation on cream, never green: a share value is a data
- * number, and green in this system means live status only.
+ * Deterministic share-value sparkline (SVG, no deps). Blue system.
+ * Instrument register: hairline grid rulings, mono min/max labels, terminal
+ * value by the dot. The line draws in on mount (vx-spark-line / vx-spark-fill
+ * / vx-spark-dot, vaults.css) with an explicit reduced-motion fallback.
+ * The SVG measures its own width so text never stretches (the viewBox
+ * matches the rendered box 1:1).
  */
 
-interface SparklineProps {
-  /** Oldest to newest. Fewer than two points renders nothing. */
-  values: readonly number[];
-  /** Draw the soft blue tint under the line. */
-  fill?: boolean;
-  /** Mark the newest point with a dot. */
-  endDot?: boolean;
-  /**
-   * Mark every captured data point with a small dot, so a flat line
-   * (e.g. two attested strikes at the same NAV) reads as two data points
-   * rather than a rendering bug. Uses the same round-dot technique as
-   * `endDot`. Where both would draw at the last point, `endDot` wins.
-   */
-  markPoints?: boolean;
-  /** Stroke width in viewBox units. */
-  stroke?: number;
-  /** Accessible description; the graphic is hidden when omitted. */
-  label?: string;
-  /**
-   * viewBox height for a fixed 300-unit width. Set it near the rendered
-   * aspect ratio: the graphic stretches to fill its box, so a viewBox shaped
-   * like the box keeps the end dot round.
-   */
-  viewHeight?: number;
-}
+import { useEffect, useId, useRef, useState } from "react";
 
-const W = 300;
-
-/** Map a series onto the viewBox, with 6% headroom top and bottom. */
-function points(values: readonly number[], H: number): { x: number; y: number }[] {
-  const n = values.length;
-  let min = Infinity;
-  let max = -Infinity;
-  for (const v of values) {
-    if (v < min) min = v;
-    if (v > max) max = v;
-  }
-  const span = max - min;
-  const pad = H * 0.06;
-  return values.map((v, i) => ({
-    x: n === 1 ? 0 : (i / (n - 1)) * W,
-    // A flat series (two attested strikes that settled at the same NAV, for
-    // instance) draws down the middle rather than collapsing onto an edge.
-    y: span === 0 ? H / 2 : H - pad - ((v - min) / span) * (H - pad * 2),
-  }));
-}
-
-export function Sparkline({
-  values,
+/**
+ * Two optional props for the attested flat series on the hero page
+ * (docs/plans/LATEST_UI_PORT_SPEC.md WP4.8): `fill={false}` draws no area
+ * tint (a filled curve under two flat attested points would imply growth the
+ * journal does not report) and `markPoints` marks every data point so a flat
+ * line reads as N captured strikes rather than a rendering bug. The defaults
+ * keep every live call site byte-identical in behaviour.
+ */
+export default function Sparkline({
+  series,
+  height = 120,
   fill = true,
-  endDot = true,
   markPoints = false,
-  stroke = 1.6,
-  label,
-  viewHeight: H = 100,
-}: SparklineProps) {
-  if (values.length < 2) return null;
-  const pts = points(values, H);
-  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
-  const last = pts[pts.length - 1];
-  const area = `${line} L${W} ${H} L0 ${H} Z`;
-  const id = `spk-${String(values.length)}-${values[0]!.toFixed(4).replace(".", "")}`;
+}: {
+  series: number[];
+  height?: number;
+  fill?: boolean;
+  markPoints?: boolean;
+}) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [w, setW] = useState(320);
+  const [seen, setSeen] = useState(false);
+  const gradId = useId();
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const measure = () => {
+      const cw = el.clientWidth;
+      if (cw > 0) setW(Math.max(200, cw));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Gate playback, not the animation: the authored draw stagger holds at
+  // its hidden first frames (animation-play-state paused, vaults.css) until
+  // the chart first scrolls into view, then plays intact. Once-only; the
+  // timeframe-switch remount replays because the svg is already in view.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setSeen(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          setSeen(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const h = height;
+  const pad = 6;
+  if (series.length < 2) return null;
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  // Pad the value domain so flat / near-flat series center vertically: a
+  // fresh vault shows a centered line with visible area fill instead of a
+  // line glued to the bottom edge.
+  const spanRaw = max - min;
+  const padV = Math.max(spanRaw * 0.15, 0.002);
+  const lo = min - padV;
+  const hi = max + padV;
+  const span = hi - lo || 1e-9;
+  const x = (i: number) => pad + (i / (series.length - 1)) * (w - pad * 2);
+  const y = (v: number) => h - pad - ((v - lo) / span) * (h - pad * 2);
+  const d = series.map((v, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+  const area = `${d} L ${x(series.length - 1).toFixed(1)} ${h - pad} L ${x(0).toFixed(1)} ${h - pad} Z`;
+  const last = series[series.length - 1];
+  const dotX = x(series.length - 1);
+  const dotY = y(last);
+  // Three hairline rulings at 25 / 50 / 75% of the plot height; the top and
+  // bottom rulings carry the max / min value labels.
+  const rulings = [0.25, 0.5, 0.75].map((f) => pad + f * (h - pad * 2));
+  const mono = "var(--font-mono, ui-monospace, monospace)";
   return (
     <svg
-      viewBox={`0 0 ${String(W)} ${String(H)}`}
+      ref={svgRef}
+      className={`vx-spark${seen ? " vx-spark--in" : ""}`}
+      viewBox={`0 0 ${w} ${h}`}
       preserveAspectRatio="none"
-      // dots sit on the viewBox edge at the first and last strike
-      style={{ overflow: "visible" }}
-      role={label === undefined ? "presentation" : "img"}
-      aria-hidden={label === undefined}
-      aria-label={label}
+      aria-hidden
     >
-      {fill && (
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#2B5CFF" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#2B5CFF" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {rulings.map((ry) => (
+        <line
+          key={ry}
+          x1={pad}
+          x2={w - pad}
+          y1={ry}
+          y2={ry}
+          stroke="#e7e4dd"
+          strokeWidth="1"
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
+      {/* A flat series has one value, and the terminal label already prints
+          it: the range labels earn ink only when they say something else. */}
+      {spanRaw > 0 ? (
         <>
-          <defs>
-            <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2B5CFF" stopOpacity="0.16" />
-              <stop offset="100%" stopColor="#2B5CFF" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path d={area} fill={`url(#${id})`} />
+          <text x={w - pad - 2} y={rulings[0] - 4} textAnchor="end" fontSize="9" fontFamily={mono} fill="#6f6b63">
+            {max.toFixed(4)}
+          </text>
+          <text x={w - pad - 2} y={rulings[2] + 11} textAnchor="end" fontSize="9" fontFamily={mono} fill="#6f6b63">
+            {min.toFixed(4)}
+          </text>
         </>
-      )}
+      ) : null}
+      {fill ? <path className="vx-spark-fill" d={area} fill={`url(#${gradId})`} /> : null}
       <path
-        d={line}
+        className="vx-spark-line"
+        pathLength={1}
+        d={d}
         fill="none"
         stroke="#2B5CFF"
-        strokeWidth={stroke}
+        strokeWidth="1.8"
         strokeLinejoin="round"
         strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
       />
-      {markPoints &&
-        pts.map((p, i) => {
-          const isLast = i === pts.length - 1;
-          if (isLast && endDot) return null; // endDot already marks this point
-          return <circle key={i} cx={p.x} cy={p.y} r={2.2} fill="#2B5CFF" />;
-        })}
-      {endDot && last && <circle cx={last.x} cy={last.y} r={2.6} fill="#1B2FEE" />}
+      {markPoints
+        ? series.slice(0, -1).map((v, i) => (
+            <circle key={i} className="vx-spark-dot" cx={x(i)} cy={y(v)} r="3" fill="#2B5CFF" />
+          ))
+        : null}
+      <circle className="vx-spark-dot" cx={dotX} cy={dotY} r="3" fill="#2B5CFF" />
+      <text
+        x={dotX - 7}
+        y={dotY - 7}
+        textAnchor="end"
+        fontSize="10"
+        fontFamily={mono}
+        fontWeight="600"
+        fill="#2B5CFF"
+        stroke="#fff"
+        strokeWidth="2"
+        paintOrder="stroke"
+      >
+        {last.toFixed(4)}
+      </text>
     </svg>
   );
 }
