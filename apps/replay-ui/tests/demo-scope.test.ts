@@ -93,9 +93,14 @@ describe("the register", () => {
       expect(s).not.toMatch(/5\.0x|1\.08x|0\.25%|\$50M|18%|14%|21\.5%/);
     }
     expect(REVIEW_REASON_COMING_SOON).toBe("a coming-soon module is on this lane");
+    /* IT NAMES BOTH LIVE MARKETS. It said `only the USDe/USDC loop is live`
+       while `liveMarketIds` carried two ids, so the one sentence a user meets
+       when the copilot reaches outside the register described the register
+       before the floor lane landed. */
     expect(COPILOT_REJECT_COMING_SOON).toBe(
-      "that market is coming soon; only the USDe/USDC loop is live in this build",
+      "that market is coming soon; only the USDe/USDC loop and the Aave USDC lending reserve are live in this build",
     );
+    expect(DEMO_SCOPE.liveMarketIds).toHaveLength(2);
   });
 });
 

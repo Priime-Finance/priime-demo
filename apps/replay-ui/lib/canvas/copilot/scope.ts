@@ -54,17 +54,16 @@ import { COPILOT_REJECT_COMING_SOON, HERO_MARKET_ID, isLiveMarket } from "@/lib/
 /**
  * THE TWO MARKET IDS THIS BUILD WILL VALIDATE A TOOL CALL AGAINST.
  *
- * ⚠ THE SECOND ID IS READ OFF THE FLOOR'S OWN OWNER, NOT TYPED, and the test
- * over `isLiveMarket` explains why it is `||`-ed in rather than folded into
- * `DEMO_SCOPE`: `lib/demo-scope.ts` carries `liveMarketId`, SINGULAR, and it
- * belongs to WP-1. Cross-package request filed to lift it to a list; until
- * then this predicate is the copilot's own view of the register and it stays
- * correct either way, because the loop half is still asked of `isLiveMarket`
- * and a WP-1 change that admits the floor makes the second clause a no-op
- * rather than a disagreement.
+ * ONE OWNER, and it is `DEMO_SCOPE`. This predicate carried a second clause
+ * (`|| id === ROUTER_FLOOR_CANDIDATE_ID`) while `demo-scope.ts` still held a
+ * singular `liveMarketId` in another work package; that package lifted it to
+ * `liveMarketIds`, the clause became the no-op it was written to become, and
+ * integration removed it. The register the copilot validates against is now
+ * the register every other surface reads, by construction rather than by
+ * agreement. `tests/copilot-scope.test.ts` pins the two ids it admits.
  */
 function isScopedMarket(id: string): boolean {
-  return isLiveMarket(id) || id === ROUTER_FLOOR_CANDIDATE_ID;
+  return isLiveMarket(id);
 }
 
 // ── D.1 · the system prompt, exact ───────────────────────────────────────

@@ -599,7 +599,21 @@ export function defaultSelFor(row: ProjectedCandidate): {
        through `cls`, so the answer does not change the day a row's class does.
        Everything else takes the market's own class. */
     hedge: strategy === "collar" || strategy === "treasury" ? false : row.cls === "A",
-    // The default install chain ends in auto-compound.
-    compound: true,
+    /* The default install chain ends in auto-compound ON THE FAMILIES THAT
+       HAVE ONE. A treasury lane does not: the module's own description is
+       "when earned yield loosens the health factor, the leverage module pulls
+       it back to target", and this family holds no debt, no health factor and
+       no leverage module. Its required groups are the source and the route
+       (`STRUCTURAL_MODULES.treasury`), and its yield accrues in the position
+       itself, so crediting a compounding lift on top of a supply APY counts
+       the same compounding twice.
+
+       IT IS ALSO THE FLOOR LANE'S TWO PUBLISHED NUMBERS (integration). With
+       compound seated the market list published the reserve at 2.996% while
+       the router published the same lane on the same day at 2.971%, and both
+       reached the copilot inside one context block. Refused structurally,
+       beside the hedge above, so the answer does not change the day a row's
+       class does. */
+    compound: strategy !== "treasury",
   };
 }

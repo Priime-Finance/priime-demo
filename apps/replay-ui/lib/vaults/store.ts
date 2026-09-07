@@ -1907,6 +1907,26 @@ export function dedupeParams(
  * parameters, plus one sentence naming the dominant risk. Never a subjective
  * adjective; every figure is recomputable from the envelope.
  */
+/**
+ * THE PAIR A LIQUIDATION SENTENCE MAY NAME.
+ *
+ * `record.market` is the whole vault's market, and on a routed record the
+ * canvas writes `2 markets` there because two lanes pin two of them. The
+ * liquidation line is a property of ONE of those lanes, the one that borrows,
+ * so the sentence read `Liquidation on the 2 markets pair needs 34% adverse
+ * pair move`: a count where a pair belongs, about a lane it did not name.
+ *
+ * The borrowing lane is found by its family rather than by its index, so a
+ * record that ever publishes the floor first still names the right pair.
+ * Single-lane records are untouched and read exactly as they always have.
+ */
+function riskPairLabel(v: VaultRecord): string {
+  const lanes = Array.isArray(v.lanes) ? v.lanes : [];
+  if (lanes.length < 2) return v.market;
+  const levered = lanes.find((l) => l.family === "loop") ?? lanes[0];
+  return levered?.market ?? v.market;
+}
+
 export function riskGrade(v: VaultRecord): { rows: { label: string; value: string }[]; sentence: string } {
   /* ══ D3 + D4 (2026-08-22, law L6 / law L8) ══════════════════════════════
      TWO EDITS, BOTH DELETIONS, AND NEITHER CHANGES A FACT.
@@ -2031,20 +2051,22 @@ export function riskGrade(v: VaultRecord): { rows: { label: string; value: strin
     // threshold or an unlevered record, which are exactly the two branches
     // that state no distance either.
     const drift = deleverageDriftLine(a.leverage);
+    // The pair the borrow leg is actually on. See `riskPairLabel`.
+    const pair = riskPairLabel(v);
     const sentence = a.leverage.liqLtvInferred
       ? `${cascadeLead} This vault predates the published liquidation ` +
-        `threshold, so the ${v.market} pair's distance to liquidation is not stated.`
+        `threshold, so the ${pair} pair's distance to liquidation is not stated.`
       : measured?.unlevered
         ? // No borrow leg. There is no liquidation line and no cascade to
           // describe, and inventing either would be the `?? 0` bug in prose.
-          `Nothing is borrowed here, so the ${v.market} pair has no liquidation ` +
+          `Nothing is borrowed here, so the ${pair} pair has no liquidation ` +
           `line to reach.`
         : measured && measured.d !== null
           ? `${cascadeLead}${drift ? ` The trim is ${drift} from here.` : ""} ` +
-            `Liquidation on the ${v.market} pair needs ${adverseMoveLine(measured)}.`
+            `Liquidation on the ${pair} pair needs ${adverseMoveLine(measured)}.`
           : // Threshold in hand but the distance is not derivable. Say so and
             // print no number, rather than round an absence down to zero.
-            `${cascadeLead} The ${v.market} pair's distance to liquidation is ` +
+            `${cascadeLead} The ${pair} pair's distance to liquidation is ` +
             `not stated.`;
     return { rows, sentence };
   }

@@ -64,12 +64,14 @@ import {
   venueParts,
   type AutomationSource,
   type PublishedLane,
+  type VaultRecord,
   deriveAutomations,
   guessLiqLtv,
   loadPositions,
   loadUserVaults,
   loadWithdrawals,
   publishVault,
+  riskGrade,
   VAULTS_EVENT,
   vaultStage,
   withdrawPosition,
@@ -547,6 +549,28 @@ function routedSource(over: Partial<AutomationSource> = {}): AutomationSource {
     ...over,
   };
 }
+
+describe("the risk sentence names the lane that borrows", () => {
+  /* A routed record's `market` field is `2 markets`, because two lanes pin
+     two of them, and the liquidation line belongs to one lane. The sentence
+     read `Liquidation on the 2 markets pair needs 34% adverse pair move`. */
+  const routedRecord = (): VaultRecord => ({
+    ...heroRecord(),
+    market: "2 markets",
+    lanes: ROUTED_LANES,
+  });
+
+  it("prints the loop lane's pair, never the lane count", () => {
+    const { sentence } = riskGrade(routedRecord());
+    expect(sentence).toContain("USDe/USDC");
+    expect(sentence).not.toContain("2 markets");
+  });
+
+  it("leaves a single-lane record's sentence exactly as it was", () => {
+    const hero = heroRecord();
+    expect(riskGrade(hero).sentence).toContain(hero.market);
+  });
+});
 
 describe("deriveAutomations seats the router on two lanes and a rule, never on one", () => {
   it("seats it when the record carries both", () => {

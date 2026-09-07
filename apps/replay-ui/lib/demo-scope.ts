@@ -96,7 +96,7 @@ export const REVIEW_REASON_COMING_SOON = "a coming-soon module is on this lane";
  * reads as the register.
  */
 export const COPILOT_REJECT_COMING_SOON =
-  "that market is coming soon; only the USDe/USDC loop is live in this build";
+  "that market is coming soon; only the USDe/USDC loop and the Aave USDC lending reserve are live in this build";
 
 function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
