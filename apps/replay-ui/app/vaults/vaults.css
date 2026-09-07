@@ -341,6 +341,25 @@
 .vxe-read span{font-size:12px;color:var(--vx-mut)}
 .vxe-live{margin-left:auto;font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-green);display:inline-flex;align-items:center;gap:5px}
 .vxe-live::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--vx-green);animation:vx-live 2.4s ease-in-out infinite}
+/* ── the router's register tail. It twins .vxe-live's box exactly and drops
+      the two things that make .vxe-live a heartbeat: the ::before dot and the
+      vx-live loop. The page has ONE beat and it is already spent; this
+      reading comes from a modeled replay rather than from a poll, so it is
+      labelled and still. ── */
+.vxe-modeled{margin-left:auto;font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-faint);
+  display:inline-flex;align-items:center;gap:5px}
+
+/* ── the sustain window, drawn as the observations it counts. One cell per
+      hour of the founder's window; filled cells are the hours the trailing
+      lane has actually been behind. Never a bar and never a countdown: a bar
+      claims a continuous quantity and a countdown claims a scheduled event,
+      and this is neither. ── */
+.vxk{margin:2px 0 12px}
+.vxk-cells{display:flex;gap:2px;align-items:flex-end}
+.vxk-cell{flex:1 1 0;min-width:0;height:10px;border-radius:1px;background:var(--vx-line)}
+.vxk-cell--on{background:var(--vx-blue)}
+.vxk-lab{margin-top:6px;font-size:10.5px;color:var(--vx-faint);letter-spacing:.02em}
+
 .vxe-wrap{position:relative;margin:6px 0 8px}
 .vxe-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;gap:2px}
 .vxe-z{display:block;height:100%}
@@ -616,10 +635,13 @@
 .vxi .vxc-row{opacity:0;transform:translateY(6px)}
 .vxi--in .vxc-row{opacity:1;transform:none;
   transition:opacity .32s ease-out,transform .32s ease-out,background .4s ease-out}
-.vxi--in .vxc-row:nth-child(1){transition-delay:.6s,.6s,0s}
-.vxi--in .vxc-row:nth-child(2){transition-delay:.645s,.645s,0s}
-.vxi--in .vxc-row:nth-child(3){transition-delay:.69s,.69s,0s}
-.vxi--in .vxc-row:nth-child(4){transition-delay:.735s,.735s,0s}
+/* THE STAGGER READS ITS INDEX, and the four nth-child rules it replaces are
+   why: spelled as nth-child(1..4) a fifth cascade row landed at t=0, 600ms
+   BEFORE row one, which is the same defect the sibling `.vxb-row` rule was
+   already fixed for. The router instrument ships four rows, so this was one
+   row from breaking. Parity is exact: rows 1 to 4 still land at
+   600 / 645 / 690 / 735ms. Capped at six, matching the directory's own cap. */
+.vxi--in .vxc-row{transition-delay:calc(.6s + min(var(--i,0),6)*45ms),calc(.6s + min(var(--i,0),6)*45ms),0s}
 .vxc-row--on{background:var(--vx-ice);transition:background .4s ease-out}
 .vxc-row--on .vxc-dot{box-shadow:0 0 0 3px rgba(43,92,255,.14)}
 
@@ -1349,6 +1371,20 @@ button.vx-cta:disabled{opacity:.6;cursor:default;transform:none}
 [data-theme="dark"] .vx-chip-n,
 [data-theme="dark"] .vx-pf-pnl{font-weight:550}
 [data-theme="dark"] .vxj-row--lead b{font-weight:600}
+/* …and the ACTIVITY table's two Hanken columns come back out of the step. The
+   rule above catches every `.vx-table td`, so `.vxa-action` went 600 to 550
+   and `.vxa-detail` sat at 550 too: two columns 200 weight units apart in
+   light converge on one weight in dark, and the Action column stops leading
+   its own row. The step exists so FIGURES do not out-shout the headings
+   around them, and neither of these cells is a figure. */
+/* The selectors carry `td` deliberately: the step above is
+   `[data-theme="dark"] .vx-table td`, which is one type selector MORE
+   specific than a bare class, so a re-assertion written as
+   `[data-theme="dark"] .vxa-action` loses and the columns stay converged.
+   Measured in a browser, not assumed. */
+[data-theme="dark"] .vx-table td.vxa-action{font-weight:600}
+[data-theme="dark"] .vx-table td.vxa-detail,
+[data-theme="dark"] .vx-table td.vxa-time{font-weight:400}
 /* …and the register's absence does NOT step with them. It is not a figure, it
    is the word `not measured`, and an absence carried at measurement weight
    reads as a measurement. The mono bloom step above is (0,2,0); `.vxb-abs` is
@@ -1357,6 +1393,15 @@ button.vx-cta:disabled{opacity:.6;cursor:default;transform:none}
    .vxc-val[data-blind="true"]`, is retired with the verdict rows it protected.
    The dark sweep in `liquidation-verdict-wiring` §7 is written against
    `.vxb-abs` now, in both plates. */
+
+/* ── the router's clock and its register tail need NO override, and that is
+      worth writing down rather than leaving as an absence. `.vxk-cell` is
+      --vx-line, `.vxk-cell--on` is --vx-blue (a FILL, which is exactly what
+      the mode-constant accent token above is for and never type), and
+      `.vxk-lab` / `.vxe-modeled` are --vx-faint, which this block already
+      re-points to --p-muted per the ruling three tokens up. All four flip
+      with the plate. `.vxe-modeled` also carries no ::before and no
+      animation, so nothing in the motion section below reaches it. ── */
 
 /* ══ motion: the rings re-hue, nothing new is added ══════════════════════
    A status LED is passive and the law applies: on dark it is a containment

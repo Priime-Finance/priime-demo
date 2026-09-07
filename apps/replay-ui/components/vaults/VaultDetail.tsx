@@ -53,6 +53,10 @@ import { VerificationCanvas } from "./VerificationCanvas";
 import { apyCaption, feeRows, type FeeRecordRef } from "@/lib/canvas/fees";
 import { isModeledBinding } from "@/lib/canvas/capacity";
 import { collarForfeitLine } from "@/lib/canvas/templates";
+/* The floor lane's rate provenance and the capture's own clock, from their
+   one owner each. Neither the pool id nor the date is retyped here. */
+import { ROUTER_HISTORY_SOURCES } from "@/lib/canvas/router-history";
+import { measuredRouterReplay, routerDayLabel } from "@/lib/canvas/router-replay";
 import { APPLIED_LEVERAGE_LABEL } from "@/lib/canvas/labels";
 import {
   HF_TARGET_CAP_BPS,
@@ -76,6 +80,8 @@ import {
   loadWithdrawals,
   recordModuleNames,
   riskGrade,
+  routerConcentrationBand,
+  routerMaxMoveFrac,
   shareValueAt,
   VAULT_STAGE_LABEL,
   vaultDescription,
@@ -466,8 +472,26 @@ export default function VaultDetail({ slug }: { slug: string }) {
     const push = (label: string, value: string) => {
       rows.push({ label, value });
     };
-    push("Market", vault.market);
-    push("Venue", vault.venue);
+    /* TWO LANES, TWO HEADS (design 2026-09-07, item 22). On a routed record
+       the flat `Market` / `Venue` pair reads as vault-wide while describing
+       one lane only, so each lane names itself. A single-lane record keeps
+       today's two rows exactly, which is what every record in the product is
+       and what the invariance test pins. */
+    const routedLanes = vault.automations?.router?.lanes ?? null;
+    if (routedLanes && routedLanes.length >= 2) {
+      /* The head is the lane's ROLE, not its label: the router's two sides
+         are the loop and the floor everywhere else on this page (the
+         instrument's band, its cascade, the ledger's detail line), and the
+         labels themselves are already the VALUES two rows down. */
+      routedLanes.forEach((lane, i) => {
+        const role = i === 0 ? "Loop" : i === 1 ? "Floor" : lane.label;
+        push(`${role} market`, lane.market);
+        push(`${role} venue`, lane.venueLabel);
+      });
+    } else {
+      push("Market", vault.market);
+      push("Venue", vault.venue);
+    }
     const a = vault.automations;
     const envelope = Boolean(a?.leverage) && !unleveredRecord(vault);
     for (const p of vault.params) {
@@ -529,6 +553,52 @@ export default function VaultDetail({ slug }: { slug: string }) {
     // in the same order the review sheet showed before publish.
     return withFeeRows(dedupeParamRows(rows), vault);
   }, [vault, ceiling, attested]);
+
+  /* ── the router's own parameter group ──────────────────────────────────
+     Five dials and a provenance line appended to a 17-row flat table with no
+     head leaves a reader no way to know whose parameters they are, so the
+     router gets the `Also installed` idiom: its own panel with its own head.
+     Every figure is the record's, and the record's figures are the quant's
+     owners written at publish. The rule sentence leads, in prose, because it
+     is the one thing here that is a sentence rather than a number. */
+  const routerPanel = useMemo(() => {
+    const r = vault?.automations?.router ?? null;
+    if (!r || r.lanes.length < 2) return null;
+    const band = routerConcentrationBand(r);
+    const maxMove = routerMaxMoveFrac(r);
+    const src = ROUTER_HISTORY_SOURCES.aaveUsdcSupply;
+    const rows: ParamRow[] = [
+      { label: "Move bar", value: `${(r.thresholdApy * 100).toFixed(2)}pp` },
+      { label: "Sustain", value: `${r.sustainHours}h` },
+      { label: "Re-arm", value: `${(r.rearmApy * 100).toFixed(2)}pp` },
+      { label: "Max move per decision", value: `${(maxMove * 100).toFixed(1)}pp` },
+      {
+        label: "Concentration band",
+        value: `${(band.min * 100).toFixed(0)}% to ${(band.max * 100).toFixed(0)}%`,
+      },
+      {
+        label: "Floor rate source",
+        value: `${src.label}, daily · ${src.provider} ${src.pool.slice(0, 8)} · read ${routerDayLabel(
+          measuredRouterReplay().asOfDate,
+        )}`,
+      },
+    ];
+    return (
+      <div className="vx-panel">
+        <div className="vx-panel-h">Router</div>
+        <div className="vx-kv vx-kv--prose">
+          <span>Rule</span>
+          <b>{r.ruleSentence}</b>
+        </div>
+        {rows.map((row) => (
+          <div key={row.label} className="vx-kv">
+            <span>{row.label}</span>
+            <b>{row.value}</b>
+          </div>
+        ))}
+      </div>
+    );
+  }, [vault]);
 
   if (vault === undefined) return <div className="vx-root" />;
   if (vault === null) {
@@ -794,6 +864,7 @@ export default function VaultDetail({ slug }: { slug: string }) {
                   </div>
                 ))}
               </div>
+              {routerPanel}
               <div className="vx-panel">
                 <div className="vx-panel-h">Composed modules</div>
                 {depositorModuleLines(vault).map((m) => (

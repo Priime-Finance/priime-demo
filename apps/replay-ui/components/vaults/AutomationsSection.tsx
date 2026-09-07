@@ -46,9 +46,11 @@ import {
   moduleDepositorLine,
   railsArmed,
   rand01,
+  routerMaxMoveFrac,
   recordModuleNames,
   venueParts,
   type LeverageAutomation,
+  type RouterAutomation,
   type VaultRecord,
 } from "@/lib/vaults/store";
 /* MINUS is U+2212, the ledger's one sign glyph for numeric runs; `pct` is the
@@ -56,12 +58,22 @@ import {
    tabular digits is the drift the glyph sweep (2026-08-24) removed. */
 import { MINUS, pct } from "@/lib/canvas/format";
 import { collarForfeit, type CollarForfeit } from "@/lib/canvas/templates";
+/* The router's two published rates and its measured decisions, each from its
+   one owner. The card retypes neither. */
+import { routerPublishedToday } from "@/lib/canvas/router-history";
+import { measuredRouterReplay, routerDayLabel } from "@/lib/canvas/router-replay";
+
+import type { CSSProperties } from "react";
 
 import { useCountUp } from "./useCountUp";
 import { useInView } from "./useInView";
 
 const HOUR_MS = 3600e3;
 const DAY_MS = 86400e3;
+
+/** The ONE spelling of the router module, so the instrument and the covered
+ *  set that keeps it out of `Also installed` can never disagree. */
+const ROUTER_MODULE = "Capital router";
 
 function relAgo(ms: number, nowMs: number): string {
   const d = Math.max(0, nowMs - ms);
@@ -267,6 +279,300 @@ export function collarRollTimes(
   return out;
 }
 
+/* ── 0. Capital router: the gap, the 48 hour clock and the rule ──────────
+ *
+ * PORTFOLIO LEVEL, so it mounts FIRST: every other instrument on this page
+ * describes one position, and this one decides how much of the book each
+ * position holds.
+ *
+ * NOT ONE FIGURE ON THIS CARD IS TYPED. The two published rates come from
+ * `routerPublishedToday` (lib/canvas/router-history.ts), which prices the
+ * demo's own row and the treasury issuer's row through the product's own
+ * quote owners on the last day all three captured series cover. The bar, the
+ * hysteresis, the founder's 48 hours and the move weight come from the
+ * record where it states them and from `lib/canvas/orchestrator/demo-rules.ts`
+ * where it does not. The clock's state and the last move come from
+ * `measuredRouterReplay()`, which folds that same history through the same
+ * rule state machine the dock's run panel folds. If a number appears in this
+ * file as a literal it is a defect.
+ *
+ * THE CHIP IS THE OWNER'S, NEVER A GREEN LITERAL. `In shadow` is what
+ * `railsArmed` says of every published record. The only override is `Armed`
+ * in the WATCH tone, and only while the sustain window is actually full and a
+ * move is pending, which is the same shape the Range instrument uses for
+ * `Recentering`. Green on this card would celebrate a move nobody asked for.
+ */
+
+/** `+0.10pp` / `−3.00pp`, two decimals, U+2212 on the minus. Two decimals is
+ *  the instrument's own subject: at one decimal today's gap rounds to 0.1pp
+ *  and the reading stops distinguishing the two lanes at all. */
+function ppSigned(frac: number, dp = 2): string {
+  const v = frac * 100;
+  const rounded = Number(v.toFixed(dp));
+  const body = Math.abs(rounded === 0 ? 0 : v).toFixed(dp);
+  return `${rounded < 0 ? MINUS : "+"}${body}pp`;
+}
+
+/** The capture date the section note names, from the replay's own clock. */
+function routerNoteDay(): string {
+  return routerDayLabel(measuredRouterReplay().asOfDate);
+}
+
+/** `3.00pp`, unsigned, for a threshold that is a magnitude and not a delta. */
+function ppMagnitude(frac: number, dp = 2): string {
+  return `${Math.abs(frac * 100).toFixed(dp)}pp`;
+}
+
+/**
+ * EVERY STRING AND EVERY GEOMETRY THE ROUTER CARD PRINTS, AS ONE PURE READ.
+ *
+ * Exported so the register is PINNED rather than asserted: the test reads the
+ * same object the card renders, so "the gap prints +0.10pp at two decimals"
+ * and "the last move prints as an absolute date past 60 days" are checked
+ * against what actually ships, not against a second copy of the arithmetic.
+ */
+export interface RouterReadout {
+  /** Loop published APY minus the floor's, as a fraction. */
+  gap: number;
+  gapText: string;
+  loopText: string;
+  floorText: string;
+  floorLabel: string;
+  asOfText: string;
+  /** The bar, the hysteresis and the CLAMPED move, as the foot prints them. */
+  barText: string;
+  rearmText: string;
+  moveText: string;
+  maxMove: number;
+  /** One cell per hour of the founder's window, and how many are filled. */
+  cells: number;
+  filled: number;
+  clockLabel: string;
+  /** Which cascade row is lit: 0 move to floor, 1 hold, 2 move to loop, 3 cooldown. */
+  lit: 0 | 1 | 2 | 3;
+  /** Full sustain window with a move pending. The ONLY licence for `Armed`. */
+  clockFull: boolean;
+  lastMoveText: string;
+  allocationText: string | null;
+  /** Band geometry: the needle's percent, and the four stops as SHARES that
+   *  sum to 1. They have to be shares: `.vxe-bar` is a flex row and
+   *  `.vxe-labels` a grid, and both distribute FREE space by their weights,
+   *  so raw APY fractions (0.015 / 0.02 / 0.04 / 0.015) summed to 0.09 and
+   *  drew a 59px band inside a 654px card. Caught in a browser. */
+  needlePct: number;
+  zMove: number;
+  zRearm: number;
+  zHold: number;
+}
+
+export function routerReadout(r: RouterAutomation): RouterReadout {
+  const replay = measuredRouterReplay();
+  const today = routerPublishedToday();
+
+  const loopLane = r.lanes[0];
+  const floorLane = r.lanes[1];
+  const loopApy = today?.loop ?? loopLane?.publishedApy ?? null;
+  const floorApy = today?.floor ?? floorLane?.publishedApy ?? null;
+  /* The gap the card is about. The published pair and the replay are two
+     reads of ONE day, so the pair wins when both are present and the replay
+     is the fallback: neither is ever averaged with the other. */
+  const gap = loopApy !== null && floorApy !== null ? loopApy - floorApy : replay.gapApy;
+
+  /* The clamped move, through the ONE owner in the store, which is the same
+     call the rule sentence and the Parameters row make. */
+  const maxMove = routerMaxMoveFrac(r);
+
+  // The band's axis: the bar either side plus half a bar of headroom, so both
+  // move stops are on screen with the needle between them.
+  const axis = r.thresholdApy * 1.5;
+
+  // One cell per hour of the founder's window, filled by the hours the
+  // trailing lane has actually been behind. Never a bar and never a
+  // countdown: a window that counts observations is drawn as observations.
+  const cells = Math.max(1, Math.round(r.sustainHours));
+  const filled = Math.min(cells, Math.round(replay.hoursBehind));
+
+  // The lit row IS the state; no separate word says "watching".
+  const lit: 0 | 1 | 2 | 3 = replay.inCooldown
+    ? 3
+    : gap <= -r.thresholdApy
+      ? 0
+      : gap >= r.thresholdApy
+        ? 2
+        : 1;
+
+  return {
+    gap,
+    gapText: ppSigned(gap),
+    loopText: pct(loopApy, 2),
+    floorText: pct(floorApy, 2),
+    floorLabel: floorLane?.label ?? "the lending lane",
+    asOfText: routerDayLabel(replay.asOfDate),
+    barText: ppMagnitude(r.thresholdApy),
+    rearmText: ppMagnitude(r.rearmApy),
+    moveText: ppMagnitude(maxMove, 1),
+    maxMove,
+    cells,
+    filled,
+    clockLabel: `${filled} of ${cells} hours behind`,
+    lit,
+    clockFull: replay.clockFull,
+    lastMoveText: replay.lastMove
+      ? routerDayLabel(replay.lastMove.date)
+      : `none in the last ${replay.days} days`,
+    allocationText:
+      loopLane && floorLane
+        ? `${loopLane.label} ${(loopLane.allocationBps / 100).toFixed(0)}%, ${floorLane.label} ${(
+            floorLane.allocationBps / 100
+          ).toFixed(0)}%`
+        : null,
+    needlePct: clampPct(((gap + axis) / (2 * axis)) * 100),
+    // The four stops span the axis exactly: half a bar of headroom, the
+    // hysteresis gap, the hold band, and half a bar of headroom again.
+    zMove: (0.5 * r.thresholdApy) / (2 * axis),
+    zRearm: (r.thresholdApy - r.rearmApy) / (2 * axis),
+    zHold: (r.rearmApy + r.thresholdApy) / (2 * axis),
+  };
+}
+
+function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomation }) {
+  const { ref, inView } = useInView<HTMLDivElement>();
+  const { chain } = venueParts(vault.venue);
+  const replay = measuredRouterReplay();
+  const read = routerReadout(r);
+  const { floorLabel, cells, filled, lit, zMove, zRearm, zHold } = read;
+  const gap = read.gap;
+  const needle = read.needlePct;
+  const move = read.moveText;
+  const bar = read.barText;
+
+  return (
+    <div ref={ref} className={`vxi${inView ? " vxi--in" : ""}`}>
+      <div className="vxi-head">
+        <div>
+          <span className="vxi-kick">{chain} · Capital routing</span>
+          <h3 className="vxi-title">Capital router</h3>
+          <p className="vxi-role">{moduleDepositorLine(ROUTER_MODULE) ?? ""}</p>
+        </div>
+        {read.clockFull ? <Chip tone="watch" label="Armed" /> : <ArmedChip vault={vault} />}
+      </div>
+      <div className="vxi-body">
+        <div className="vxe-read">
+          <b>{read.gapText}</b>
+          <span>
+            loop {read.loopText} against {floorLabel} {read.floorText}, on rates measured{" "}
+            {read.asOfText}
+          </span>
+          <i className="vxe-modeled">modeled</i>
+        </div>
+        <div className="vxk">
+          <div className="vxk-cells" aria-hidden>
+            {Array.from({ length: cells }, (_, i) => (
+              <span key={i} className={`vxk-cell${i < filled ? " vxk-cell--on" : ""}`} />
+            ))}
+          </div>
+          <div className="vxk-lab">{read.clockLabel}</div>
+        </div>
+        <div className="vxe-wrap">
+          <div className="vxe-bar" aria-hidden>
+            <span className="vxe-z vxe-z--del" style={{ flexGrow: zMove }} />
+            <span className="vxe-z vxe-z--up" style={{ flexGrow: zRearm }} />
+            <span className="vxe-z vxe-z--tgt" style={{ flexGrow: zHold }} />
+            <span className="vxe-z vxe-z--del" style={{ flexGrow: zMove }} />
+          </div>
+          <span className="vxe-needle" style={{ left: `${needle}%` }} aria-hidden />
+        </div>
+        <div
+          className="vxe-labels"
+          style={{ gridTemplateColumns: `${zMove}fr ${zRearm}fr ${zHold}fr ${zMove}fr` }}
+        >
+          <div className="vxe-lab vxe-lab--del">
+            <i>Move to {floorLabel}</i>
+            <b>
+              &lt; {MINUS}
+              {ppMagnitude(r.thresholdApy)}
+            </b>
+          </div>
+          <div className="vxe-lab vxe-lab--up">
+            <i>Re-arm</i>
+            <b>
+              {MINUS}
+              {ppMagnitude(r.rearmApy)}
+            </b>
+          </div>
+          <div className="vxe-lab vxe-lab--tgt">
+            <i>{gap >= 0 ? "Loop leads" : "Loop trails"}</i>
+            <b>{read.gapText}</b>
+          </div>
+          <div className="vxe-lab vxe-lab--del">
+            <i>Move to the loop</i>
+            <b>&gt; +{ppMagnitude(r.thresholdApy)}</b>
+          </div>
+        </div>
+        <div className="vxc">
+          <div className="vxc-k">The rule · one check per hour</div>
+          <div className="vxc-rows">
+            <div className={`vxc-row${lit === 0 ? " vxc-row--on" : ""}`} style={{ "--i": 0 } as CSSProperties}>
+              <span className="vxc-dot vxc-dot--del" />
+              <span className="vxc-cond">{floorLabel} leads by</span>
+              <b className="vxc-val">
+                {bar} for {r.sustainHours}h
+              </b>
+              <span className="vxc-arr">→</span>
+              <span className="vxc-act">Move {move} to {floorLabel}</span>
+            </div>
+            <div className={`vxc-row${lit === 1 ? " vxc-row--on" : ""}`} style={{ "--i": 1 } as CSSProperties}>
+              <span className="vxc-dot vxc-dot--tgt" />
+              <span className="vxc-cond">Gap inside</span>
+              <b className="vxc-val">±{bar}</b>
+              <span className="vxc-arr">→</span>
+              <span className="vxc-act">Hold</span>
+            </div>
+            <div className={`vxc-row${lit === 2 ? " vxc-row--on" : ""}`} style={{ "--i": 2 } as CSSProperties}>
+              <span className="vxc-dot vxc-dot--del" />
+              <span className="vxc-cond">Loop leads by</span>
+              <b className="vxc-val">
+                {bar} for {r.sustainHours}h
+              </b>
+              <span className="vxc-arr">→</span>
+              <span className="vxc-act">Move {move} to the loop</span>
+            </div>
+            <div className={`vxc-row${lit === 3 ? " vxc-row--on" : ""}`} style={{ "--i": 3 } as CSSProperties}>
+              <span className="vxc-dot vxc-dot--em" />
+              <span className="vxc-cond">Inside the cooldown</span>
+              <b className="vxc-val">{replay.cooldownHours}h</b>
+              <span className="vxc-arr">→</span>
+              <span className="vxc-act">Refuse</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="vxi-foot">
+        <span>
+          Bar · <b>{bar}</b>
+        </span>
+        <span>
+          Sustain · <b>{r.sustainHours}h</b>
+        </span>
+        <span>
+          Re-arm · <b>{read.rearmText}</b>
+        </span>
+        <span>
+          Max move · <b>{move}</b>
+        </span>
+        {read.allocationText === null ? null : (
+          <span>
+            Allocation · <b>{read.allocationText}</b>
+          </span>
+        )}
+        <span>
+          Last move · <b>{read.lastMoveText}</b>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /* ── 1. Dynamic leverage: protection envelope + cascade ── */
 
 function LeverageInstrument({
@@ -393,14 +699,14 @@ function LeverageInstrument({
         <div className="vxc">
           <div className="vxc-k">The cascade · one action per check</div>
           <div className="vxc-rows">
-            <div className={`vxc-row${zone === 0 ? " vxc-row--on" : ""}`}>
+            <div className={`vxc-row${zone === 0 ? " vxc-row--on" : ""}`} style={{ "--i": 0 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--em" />
               <span className="vxc-cond">Health factor is below</span>
               <b className="vxc-val">{fmtHf(floorHf)}</b>
               <span className="vxc-arr">→</span>
               <span className="vxc-act">Fast unwind</span>
             </div>
-            <div className={`vxc-row${zone === 1 ? " vxc-row--on" : ""}`}>
+            <div className={`vxc-row${zone === 1 ? " vxc-row--on" : ""}`} style={{ "--i": 1 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--del" />
               <span className="vxc-cond">Health factor between</span>
               <b className="vxc-val">
@@ -409,7 +715,7 @@ function LeverageInstrument({
               <span className="vxc-arr">→</span>
               <span className="vxc-act">Sell slice, repay borrow</span>
             </div>
-            <div className={`vxc-row${zone === 2 ? " vxc-row--on" : ""}`}>
+            <div className={`vxc-row${zone === 2 ? " vxc-row--on" : ""}`} style={{ "--i": 2 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--tgt" />
               <span className="vxc-cond">
                 {leverUpHf !== null ? "Health factor between" : "Health factor above"}
@@ -421,7 +727,7 @@ function LeverageInstrument({
               <span className="vxc-act">Hold</span>
             </div>
             {leverUpHf !== null ? (
-              <div className={`vxc-row${zone === 3 ? " vxc-row--on" : ""}`}>
+              <div className={`vxc-row${zone === 3 ? " vxc-row--on" : ""}`} style={{ "--i": 3 } as CSSProperties}>
                 <span className="vxc-dot vxc-dot--up" />
                 <span className="vxc-cond">Health factor is above</span>
                 <b className="vxc-val">{fmtHf(leverUpHf)}</b>
@@ -516,14 +822,14 @@ function HedgeInstrument({ vault, nowMs }: { vault: VaultRecord; nowMs: number }
         <div className="vxc">
           <div className="vxc-k">Margin · keeps the short funded</div>
           <div className="vxc-rows">
-            <div className="vxc-row">
+            <div className="vxc-row" style={{ "--i": 0 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--em" />
               <span className="vxc-cond">Margin is below</span>
               <b className="vxc-val">{h.marginTrimBelowPct}%</b>
               <span className="vxc-arr">→</span>
               <span className="vxc-act">Trim short, restore to {h.marginRestorePct}%</span>
             </div>
-            <div className="vxc-row">
+            <div className="vxc-row" style={{ "--i": 1 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--del" />
               <span className="vxc-cond">
                 {fundingFloor !== null ? "Funding below" : "Funding negative"}
@@ -626,7 +932,7 @@ function CompoundInstrument({
         </div>
         <div className="vxc">
           <div className="vxc-rows">
-            <div className={`vxc-row${ready ? " vxc-row--on" : ""}`}>
+            <div className={`vxc-row${ready ? " vxc-row--on" : ""}`} style={{ "--i": 0 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--tgt" />
               <span className="vxc-cond">At the {c.cadenceHours}h check, accrued at least</span>
               <b className="vxc-val">{fmtUsdFull(threshold)}</b>
@@ -730,14 +1036,14 @@ function RangeInstrument({
         <div className="vxc">
           <div className="vxc-k">The range · one action per check</div>
           <div className="vxc-rows">
-            <div className={`vxc-row${!atTrigger ? " vxc-row--on" : ""}`}>
+            <div className={`vxc-row${!atTrigger ? " vxc-row--on" : ""}`} style={{ "--i": 0 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--tgt" />
               <span className="vxc-cond">Price inside</span>
               <b className="vxc-val">±{trigger.toFixed(2)}%</b>
               <span className="vxc-arr">→</span>
               <span className="vxc-act">Hold, fees accrue</span>
             </div>
-            <div className={`vxc-row${atTrigger && inRange ? " vxc-row--on" : ""}`}>
+            <div className={`vxc-row${atTrigger && inRange ? " vxc-row--on" : ""}`} style={{ "--i": 1 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--del" />
               <span className="vxc-cond">Price walks past</span>
               <b className="vxc-val">
@@ -746,7 +1052,7 @@ function RangeInstrument({
               <span className="vxc-arr">→</span>
               <span className="vxc-act">Recenter around spot</span>
             </div>
-            <div className={`vxc-row${!inRange ? " vxc-row--on" : ""}`}>
+            <div className={`vxc-row${!inRange ? " vxc-row--on" : ""}`} style={{ "--i": 2 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--em" />
               <span className="vxc-cond">Price outside</span>
               <b className="vxc-val">±{w.toFixed(2)}%</b>
@@ -875,7 +1181,7 @@ function CollarInstrument({
           <div className="vxc-k">The collar · one action per roll</div>
           <div className="vxc-rows">
             {f !== null ? (
-              <div className={`vxc-row${below ? " vxc-row--on" : ""}`}>
+              <div className={`vxc-row${below ? " vxc-row--on" : ""}`} style={{ "--i": 0 } as CSSProperties}>
                 <span className="vxc-dot vxc-dot--del" />
                 <span className="vxc-cond">Spot at or below</span>
                 <b className="vxc-val">
@@ -886,7 +1192,7 @@ function CollarInstrument({
                 <span className="vxc-act">The put pays, the floor holds</span>
               </div>
             ) : null}
-            <div className={`vxc-row${!below && !above ? " vxc-row--on" : ""}`}>
+            <div className={`vxc-row${!below && !above ? " vxc-row--on" : ""}`} style={{ "--i": 1 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--tgt" />
               <span className="vxc-cond">
                 {f !== null && k !== null ? "Spot between" : f !== null ? "Spot above" : "Spot below"}
@@ -904,7 +1210,7 @@ function CollarInstrument({
               </span>
             </div>
             {k !== null ? (
-              <div className={`vxc-row${above ? " vxc-row--on" : ""}`}>
+              <div className={`vxc-row${above ? " vxc-row--on" : ""}`} style={{ "--i": 2 } as CSSProperties}>
                 <span className="vxc-dot vxc-dot--up" />
                 <span className="vxc-cond">Spot at or above</span>
                 <b className="vxc-val">+{k.toFixed(0)}%</b>
@@ -974,6 +1280,9 @@ export default function AutomationsSection({
     covered.add("covered call");
     covered.add("protective put");
   }
+  /* Or the router prints twice: once as this instrument and once as a prose
+     row in `Also installed` 400px below it. */
+  if (a?.router) covered.add(ROUTER_MODULE.toLowerCase());
   // Through the one list the Overview chips print (DL-2), so a module can
   // appear here under no other spelling than the chip it sits beside.
   const others = recordModuleNames(vault).filter((m) => {
@@ -992,7 +1301,13 @@ export default function AutomationsSection({
     return moduleDepositorLine(name) ?? recorded ?? "";
   };
 
-  const instruments = Boolean(a?.leverage) || Boolean(a?.hedge) || compoundShown || Boolean(range) || Boolean(collar);
+  const instruments =
+    Boolean(a?.router) ||
+    Boolean(a?.leverage) ||
+    Boolean(a?.hedge) ||
+    compoundShown ||
+    Boolean(range) ||
+    Boolean(collar);
   const anything = instruments || others.length > 0;
 
   return (
@@ -1000,6 +1315,8 @@ export default function AutomationsSection({
       <h2 className="vxd-sec-h">Automations</h2>
       {anything ? (
         <>
+          {/* Portfolio level, so it leads the position-level instruments. */}
+          {a?.router ? <RouterInstrument vault={vault} r={a.router} /> : null}
           {a?.leverage ? <LeverageInstrument vault={vault} lev={a.leverage} nowMs={nowMs} /> : null}
           {range ? <RangeInstrument vault={vault} cfg={range} nowMs={nowMs} /> : null}
           {collar ? <CollarInstrument vault={vault} cfg={collar} nowMs={nowMs} /> : null}
@@ -1016,7 +1333,15 @@ export default function AutomationsSection({
               ))}
             </div>
           ) : null}
-          <p className="vxd-note">Envelope, bands and thresholds are the vault&apos;s published parameters.</p>
+          {/* ONE note, one voice (founder, 2026-09-07). The router's rates are
+              not published parameters, so on a routed record the section's own
+              sentence is extended rather than a second italic note stacked
+              under it. */}
+          <p className="vxd-note">
+            {a?.router
+              ? `Envelope, bands and thresholds are the vault's published parameters. The router's rates are modeled from rates measured on ${routerNoteDay()}, and every move it decides starts in shadow.`
+              : "Envelope, bands and thresholds are the vault's published parameters."}
+          </p>
         </>
       ) : (
         <div className="vx-panel">

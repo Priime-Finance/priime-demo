@@ -6,6 +6,9 @@
  * the only number that counts up; the exit sentence, the stage label and the
  * coming-soon count come from their one owner each.
  */
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { attestationRows, ATTESTATION_NOTE } from "@/components/vaults/AttestationPanel";
@@ -21,7 +24,20 @@ import { heroRecord } from "@/lib/vaults/hero";
 import { captureJournal } from "@/lib/vaults/pipeline";
 import { heroNavPerShare, heroNavUsd, heroSettlingJournal, heroStrikes } from "@/lib/vaults/rows";
 import { SEED_VAULTS } from "@/lib/vaults/seeds";
-import { VAULT_STAGE_LABEL } from "@/lib/vaults/store";
+import {
+  VAULT_STAGE_LABEL,
+  type PublishedLane,
+  type RouterAutomation,
+} from "@/lib/vaults/store";
+import { routerReadout } from "@/components/vaults/AutomationsSection";
+import { RELOCATION_ACTION } from "@/components/vaults/ActivitySection";
+import {
+  DEMO_ROUTER_MOVE_WEIGHT,
+  DEMO_SUSTAIN_HOURS,
+  DEMO_SUSTAIN_PINS_HOURLY,
+  DEMO_UPGRADE_REARM,
+  DEMO_UPGRADE_THRESHOLD,
+} from "@/lib/canvas/orchestrator/demo-rules";
 
 describe("the attested register reads only from attested.ts / rows.ts", () => {
   it("the hero record's NAV is the settling capture's, byte for byte", () => {
@@ -177,5 +193,168 @@ describe("the one-owner strings", () => {
       expect(ordered[0]?.slug).toBe(HERO_SLUG);
       expect(ordered.length).toBe(SEED_VAULTS.length);
     }
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE ROUTER'S REGISTER (plan R6). Every number this card prints is modeled,
+   says so once, and comes out of an owner. The strings below are read off
+   `routerReadout`, which is the object the card renders, so this pins what
+   ships rather than a second copy of the arithmetic.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const ROUTER_LANES: PublishedLane[] = [
+  {
+    venue: "morpho-blue-base",
+    venueLabel: "Morpho Blue · Base",
+    market: "USDe/USDC",
+    label: "Leveraged loop",
+    family: "loop",
+    publishedApy: 0.0307572,
+    allocationBps: 10_000,
+  },
+  {
+    venue: "treasury-ausdc-base",
+    venueLabel: "Aave v3 · Base",
+    market: "USDC reserve",
+    label: "USDC lending",
+    family: "treasury",
+    publishedApy: 0.0297088,
+    allocationBps: 0,
+  },
+];
+
+const ROUTER_AUTOMATION: RouterAutomation = {
+  lanes: ROUTER_LANES,
+  thresholdApy: DEMO_UPGRADE_THRESHOLD,
+  rearmApy: DEMO_UPGRADE_REARM,
+  sustainHours: DEMO_SUSTAIN_HOURS,
+  moveWeight: DEMO_ROUTER_MOVE_WEIGHT,
+  maxConcentrationPct: 60,
+  ruleSentence: "",
+};
+
+describe("the router instrument prints the owners and nothing else", () => {
+  const read = routerReadout(ROUTER_AUTOMATION);
+
+  it("the reading is the gap at TWO decimals, because one erases it", () => {
+    expect(read.gapText).toBe("+0.10pp");
+    // At one decimal the whole subject of the card rounds away.
+    expect(read.loopText).toBe("3.08%");
+    expect(read.floorText).toBe("2.97%");
+    expect(read.asOfText).toBe("Sep 7, 2026");
+  });
+
+  it("the bar, the hysteresis and the clamped move come from their owners", () => {
+    expect(read.barText).toBe(`${(DEMO_UPGRADE_THRESHOLD * 100).toFixed(2)}pp`);
+    expect(read.rearmText).toBe(`${(DEMO_UPGRADE_REARM * 100).toFixed(2)}pp`);
+    // 12.5pp at the dials, 10.0pp after the 40% concentration floor.
+    expect(read.moveText).toBe("10.0pp");
+    expect(read.maxMove).toBeLessThan(DEMO_ROUTER_MOVE_WEIGHT);
+  });
+
+  it("the clock counts observations: one cell per hour, none filled today", () => {
+    expect(read.cells).toBe(DEMO_SUSTAIN_PINS_HOURLY);
+    expect(DEMO_SUSTAIN_HOURS).toBe(DEMO_SUSTAIN_PINS_HOURLY);
+    expect(read.filled).toBe(0);
+    expect(read.clockLabel).toBe("0 of 48 hours behind");
+  });
+
+  it("the lit row is the state, and it is Hold", () => {
+    expect(read.lit).toBe(1);
+    // Nothing is armed, so the chip has no licence to say so.
+    expect(read.clockFull).toBe(false);
+  });
+
+  it("the last move prints absolute, because the page's own clock switches past 60 days", () => {
+    expect(read.lastMoveText).toBe("Jun 12, 2026");
+    expect(read.lastMoveText).not.toMatch(/ago/);
+  });
+
+  it("the allocation is the record's, in the record's own lane labels", () => {
+    expect(read.allocationText).toBe("Leveraged loop 100%, USDC lending 0%");
+  });
+
+  it("the needle sits between the two move stops", () => {
+    expect(read.needlePct).toBeGreaterThan(2.5);
+    expect(read.needlePct).toBeLessThan(97.5);
+    // Just past the middle: a +0.10pp lead on a ±4.50pp axis.
+    expect(read.needlePct).toBeCloseTo(51.16, 1);
+  });
+
+  /* THE STOPS ARE SHARES AND MUST SUM TO ONE. `.vxe-bar` is a flex row and
+     `.vxe-labels` a grid: both distribute FREE space by these weights, so a
+     set summing to 0.09 draws a 59px band inside a 654px card. That shipped
+     for one browser pass and this is the assertion that would have caught
+     it without one. */
+  it("the four band stops sum to the whole bar", () => {
+    expect(read.zMove * 2 + read.zRearm + read.zHold).toBeCloseTo(1, 9);
+    for (const z of [read.zMove, read.zRearm, read.zHold]) expect(z).toBeGreaterThan(0);
+  });
+});
+
+describe("the router's copy carries the ban and the register", () => {
+  const automations = readFileSync(
+    join(process.cwd(), "components/vaults/AutomationsSection.tsx"),
+    "utf8",
+  );
+  const activity = readFileSync(
+    join(process.cwd(), "components/vaults/ActivitySection.tsx"),
+    "utf8",
+  );
+
+  it("the reading's tail is `modeled` and never the page's live heartbeat", () => {
+    expect(automations).toContain('className="vxe-modeled"');
+    expect(automations).toContain(">modeled<");
+    // One heartbeat per surface: `.vxe-live` belongs to the polled readings.
+    const card = automations.slice(
+      automations.indexOf("function RouterInstrument"),
+      automations.indexOf("/* ── 1. Dynamic leverage"),
+    );
+    expect(card.length).toBeGreaterThan(0);
+    expect(card).not.toContain("vxe-live");
+    // Green on this card would celebrate a move nobody asked for.
+    expect(card).not.toContain("vxi-chip--armed");
+  });
+
+  it("no rendered string claims a lane is relocated or emptied", () => {
+    for (const src of [automations, activity]) {
+      for (const banned of [
+        "Capital relocated",
+        "relocates the capital",
+        "unwinds and relocates",
+        "moves the capital to",
+      ]) {
+        expect(src).not.toContain(banned);
+      }
+    }
+    expect(RELOCATION_ACTION).toBe("Weight moved");
+  });
+
+  it("the vault page's data face stays Geist Mono: the canvas's mono does not cross the seam", () => {
+    const dir = join(process.cwd(), "components/vaults");
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(".tsx") || n.endsWith(".ts"))) {
+      const src = readFileSync(join(dir, f), "utf8");
+      expect(src, `${f} carries the canvas mono`).not.toContain("var(--fm)");
+      expect(src, `${f} names IBM Plex`).not.toContain("IBM Plex");
+    }
+  });
+
+  /* SCOPED TO THE ROUTER'S OWN CODE, deliberately. Both files carry em
+     dashes in prose block comments that predate this wave and are not
+     rendered; widening this to the whole file would fail on documentation
+     rather than on copy. */
+  it("no em dash reaches the router's own code", () => {
+    const card = automations.slice(
+      automations.indexOf("export interface RouterReadout"),
+      automations.indexOf("/* ── 1. Dynamic leverage"),
+    );
+    const rows = activity.slice(
+      activity.indexOf("export const RELOCATION_ACTION"),
+      activity.indexOf("function VerifyKey"),
+    );
+    expect(card.length).toBeGreaterThan(0);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const src of [card, rows]) expect(src).not.toContain("—");
   });
 });
