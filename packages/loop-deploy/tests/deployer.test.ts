@@ -10,7 +10,7 @@ import { workflowIds } from "../src/builder.ts";
 import { LoopDeployer } from "../src/deployer.ts";
 import { parseLossless } from "../src/json.ts";
 import { LoopRegistry } from "../src/registry.ts";
-import { fixtureServiceText, TEMPLATE_WORKFLOW_ID, validLoopInput } from "./fixtures.ts";
+import { fixtureServiceText, TEMPLATE_WORKFLOW_ID, validLoopResolveInput } from "./fixtures.ts";
 
 /**
  * In-memory chain + IPFS doubles. The "chain" holds the current service URI,
@@ -105,7 +105,7 @@ afterEach(() => {
 describe("LoopDeployer", () => {
   it("deploys a loop end to end and records every step", async () => {
     const { deployer, fakes } = makeDeployer();
-    const loop = await deployer.createLoop(validLoopInput());
+    const loop = await deployer.createLoop(validLoopResolveInput());
 
     expect(loop.status).toBe("active");
     expect(loop.step).toBe("active");
@@ -122,7 +122,7 @@ describe("LoopDeployer", () => {
   it("marks the loop failed on error and resumes without redeploying the handler", async () => {
     const { deployer, registry, fakes } = makeDeployer();
     fakes.failNextPin();
-    await expect(deployer.createLoop(validLoopInput())).rejects.toThrow("ipfs down");
+    await expect(deployer.createLoop(validLoopResolveInput())).rejects.toThrow("ipfs down");
 
     const [failed] = registry.list();
     expect(failed.status).toBe("failed");
@@ -138,7 +138,7 @@ describe("LoopDeployer", () => {
 
   it("serializes concurrent creates so both workflows land", async () => {
     const { deployer, fakes } = makeDeployer();
-    const [a, b] = await Promise.all([deployer.createLoop(validLoopInput()), deployer.createLoop(validLoopInput())]);
+    const [a, b] = await Promise.all([deployer.createLoop(validLoopResolveInput()), deployer.createLoop(validLoopResolveInput())]);
     const ids = workflowIds(fakes.currentDoc());
     expect(ids).toContain(a.workflowId);
     expect(ids).toContain(b.workflowId);
@@ -148,7 +148,7 @@ describe("LoopDeployer", () => {
 
   it("deactivates a loop by removing its workflow, keeping the handler", async () => {
     const { deployer, fakes } = makeDeployer();
-    const loop = await deployer.createLoop(validLoopInput());
+    const loop = await deployer.createLoop(validLoopResolveInput());
     const deactivated = await deployer.deactivateLoop(loop.id);
     expect(deactivated.status).toBe("inactive");
     expect(deactivated.handlerAddress).toBe(loop.handlerAddress);
@@ -157,7 +157,7 @@ describe("LoopDeployer", () => {
 
   it("refuses to deactivate the template workflow via a crafted record", async () => {
     const { deployer } = makeDeployer();
-    const loop = await deployer.createLoop(validLoopInput());
+    const loop = await deployer.createLoop(validLoopResolveInput());
     // Deactivating twice is a no-op, not an error.
     await deployer.deactivateLoop(loop.id);
     const again = await deployer.deactivateLoop(loop.id);
@@ -166,7 +166,7 @@ describe("LoopDeployer", () => {
 
   it("resume on an active loop is a no-op", async () => {
     const { deployer, fakes } = makeDeployer();
-    const loop = await deployer.createLoop(validLoopInput());
+    const loop = await deployer.createLoop(validLoopResolveInput());
     const resumed = await deployer.resumeLoop(loop.id);
     expect(resumed.status).toBe("active");
     expect(fakes.counters.setUri).toBe(1);
@@ -182,8 +182,8 @@ describe("LoopDeployer", () => {
   it("a failed mutation does not poison the queue for the next one", async () => {
     const { deployer, fakes } = makeDeployer();
     fakes.failNextPin();
-    await expect(deployer.createLoop(validLoopInput())).rejects.toThrow("ipfs down");
-    const ok = await deployer.createLoop(validLoopInput());
+    await expect(deployer.createLoop(validLoopResolveInput())).rejects.toThrow("ipfs down");
+    const ok = await deployer.createLoop(validLoopResolveInput());
     expect(ok.status).toBe("active");
   });
 });

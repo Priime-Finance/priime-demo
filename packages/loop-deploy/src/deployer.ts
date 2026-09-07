@@ -13,7 +13,7 @@
 
 import { addLoopWorkflow, newWorkflowId, removeLoopWorkflow } from "./builder.ts";
 import type { ChainPort } from "./chain.ts";
-import { componentConfigFor, cronFromSeconds, validateLoopConfig, type LoopConfig } from "./config.ts";
+import { componentConfigFor, cronFromSeconds, resolveLoopConfig, validateLoopConfig, type LoopConfig } from "./config.ts";
 import type { IpfsPort } from "./ipfs.ts";
 import { parseLossless, stringifyLossless } from "./json.ts";
 import type { LoopRecord, LoopRegistry } from "./registry.ts";
@@ -68,7 +68,7 @@ export class LoopDeployer {
 
   /** Validate, record, and fully deploy a new loop. */
   async createLoop(input: unknown): Promise<LoopRecord> {
-    const config = validateLoopConfig(input);
+    const config = resolveLoopConfig(input);
     const record = this.registry.create({
       id: `loop-${crypto.randomUUID().slice(0, 8)}`,
       name: config.name,

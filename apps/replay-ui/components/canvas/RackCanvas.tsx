@@ -855,6 +855,9 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
         ? `${pair || "A loop"} on ${venue}, ${(first?.p.targetLeverage ?? 3).toFixed(1)}x target, auto-managed end to end.`
         : `${lanes.length} loops with the router following modeled yield.`,
     };
+    const candidateId = first
+      ? String(nodeFor(first.loop, "liquidity-source")?.data.params.candidateId ?? "")
+      : "";
     return {
       defaultName: kind.defaultName,
       strategy: kind.strategy,
@@ -866,6 +869,8 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
       moduleLines,
       params,
       modeledApy: portfolioApy ?? 0,
+      candidateId,
+      targetLeverage: first?.p.targetLeverage ?? 0,
     };
   }, [laneComputed, orchOn, portfolio, portfolioApy]);
 

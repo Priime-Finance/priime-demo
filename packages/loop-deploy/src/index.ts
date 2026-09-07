@@ -3,10 +3,18 @@ export { isRecord } from "./guards.ts";
 export {
   ValidationError,
   validateLoopConfig,
+  resolveLoopConfig,
   cronFromSeconds,
   componentConfigFor,
   type LoopConfig,
+  type LoopConfigInput,
 } from "./config.ts";
+export {
+  listMarkets,
+  lookupMarket,
+  USDE_USDC_MORPHO_BASE,
+  type MarketSpec,
+} from "./catalog.ts";
 export {
   ServiceDocError,
   addLoopWorkflow,

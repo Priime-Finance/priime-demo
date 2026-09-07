@@ -31,6 +31,10 @@ import {
 
 export interface PublishDraft extends Omit<PublishInput, "name"> {
   defaultName: string;
+  /** Composer's liquidity-source candidate id, forwarded to loop-server. */
+  candidateId: string;
+  /** Composer's safety-buffer target-leverage value, forwarded to loop-server. */
+  targetLeverage: number;
 }
 
 const BEATS = ["Compose", "Verify", "Publish"] as const;
@@ -89,7 +93,12 @@ export default function PublishFlow({ draft, onClose }: { draft: PublishDraft; o
     runBeats();
     void (async () => {
       try {
-        const { loopId, handler } = await publishLoopToServer({ name: finalName, strategist: address });
+        const { loopId, handler } = await publishLoopToServer({
+          name: finalName,
+          strategist: address,
+          candidateId: draft.candidateId,
+          targetLeverage: draft.targetLeverage,
+        });
         const envelope = publishEnvelope({
           ...draft,
           name: finalName,

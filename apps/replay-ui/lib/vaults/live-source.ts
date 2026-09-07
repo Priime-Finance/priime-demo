@@ -56,22 +56,19 @@ export function fetchLoopJournals(id: string, limit = 20): Promise<LoopJournalsR
   return getJson<LoopJournalsResponse>(`/api/loops/${encodeURIComponent(id)}/journals${suffix}`);
 }
 
-/** Body shape for POST /api/loops. Matches the loop-deploy `LoopConfig`
- *  server-side; kept as a local interface so callers do not need to import
- *  the server package just to build the payload. */
+/**
+ * Body shape for POST /api/loops. Matches the loop-deploy `LoopConfigInput`
+ * server-side; kept as a local interface so callers do not need to import
+ * the server package just to build the payload. loop-server resolves the
+ * candidateId against its market catalog and returns 400 with per-field
+ * issues on anything it cannot deploy.
+ */
 export interface CreateLoopInput {
   name: string;
   strategist: string;
   cronSeconds: number;
-  marketId: string;
-  lltv: string;
-  usdeAddress: string;
-  oracleAddress: string;
-  irmAddress: string;
-  morphoAddress: string;
-  poolAddress: string;
-  twapWindowSecs: number;
-  inputsBlockLag: number;
+  candidateId: string;
+  targetLeverage: number;
 }
 
 export class LoopValidationError extends Error {
