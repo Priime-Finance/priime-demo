@@ -53,6 +53,10 @@ import { VerificationCanvas } from "./VerificationCanvas";
 import { apyCaption, feeRows, type FeeRecordRef } from "@/lib/canvas/fees";
 import { isModeledBinding } from "@/lib/canvas/capacity";
 import { collarForfeitLine } from "@/lib/canvas/templates";
+/* The floor lane's rate provenance and the capture's own clock, from their
+   one owner each. Neither the pool id nor the date is retyped here. */
+import { ROUTER_HISTORY_SOURCES } from "@/lib/canvas/router-history";
+import { measuredRouterReplay, routerDayLabel } from "@/lib/canvas/router-replay";
 import { APPLIED_LEVERAGE_LABEL } from "@/lib/canvas/labels";
 import {
   HF_TARGET_CAP_BPS,
@@ -76,11 +80,13 @@ import {
   loadWithdrawals,
   recordModuleNames,
   riskGrade,
+  routerConcentrationBand,
+  routerMaxMoveFrac,
   shareValueAt,
   VAULT_STAGE_LABEL,
   vaultDescription,
   vaultStage,
-  venueParts,
+  recordVenueParts,
   VAULTS_EVENT,
   type PositionRecord,
   type VaultRecord,
@@ -466,8 +472,26 @@ export default function VaultDetail({ slug }: { slug: string }) {
     const push = (label: string, value: string) => {
       rows.push({ label, value });
     };
-    push("Market", vault.market);
-    push("Venue", vault.venue);
+    /* TWO LANES, TWO HEADS (design 2026-09-07, item 22). On a routed record
+       the flat `Market` / `Venue` pair reads as vault-wide while describing
+       one lane only, so each lane names itself. A single-lane record keeps
+       today's two rows exactly, which is what every record in the product is
+       and what the invariance test pins. */
+    const routedLanes = vault.automations?.router?.lanes ?? null;
+    if (routedLanes && routedLanes.length >= 2) {
+      /* The head is the lane's ROLE, not its label: the router's two sides
+         are the loop and the floor everywhere else on this page (the
+         instrument's band, its cascade, the ledger's detail line), and the
+         labels themselves are already the VALUES two rows down. */
+      routedLanes.forEach((lane, i) => {
+        const role = i === 0 ? "Loop" : i === 1 ? "Floor" : lane.label;
+        push(`${role} market`, lane.market);
+        push(`${role} venue`, lane.venueLabel);
+      });
+    } else {
+      push("Market", vault.market);
+      push("Venue", vault.venue);
+    }
     const a = vault.automations;
     const envelope = Boolean(a?.leverage) && !unleveredRecord(vault);
     for (const p of vault.params) {
@@ -530,6 +554,52 @@ export default function VaultDetail({ slug }: { slug: string }) {
     return withFeeRows(dedupeParamRows(rows), vault);
   }, [vault, ceiling, attested]);
 
+  /* ── the router's own parameter group ──────────────────────────────────
+     Five dials and a provenance line appended to a 17-row flat table with no
+     head leaves a reader no way to know whose parameters they are, so the
+     router gets the `Also installed` idiom: its own panel with its own head.
+     Every figure is the record's, and the record's figures are the quant's
+     owners written at publish. The rule sentence leads, in prose, because it
+     is the one thing here that is a sentence rather than a number. */
+  const routerPanel = useMemo(() => {
+    const r = vault?.automations?.router ?? null;
+    if (!r || r.lanes.length < 2) return null;
+    const band = routerConcentrationBand(r);
+    const maxMove = routerMaxMoveFrac(r);
+    const src = ROUTER_HISTORY_SOURCES.aaveUsdcSupply;
+    const rows: ParamRow[] = [
+      { label: "Move bar", value: `${(r.thresholdApy * 100).toFixed(2)}pp` },
+      { label: "Sustain", value: `${r.sustainHours}h` },
+      { label: "Re-arm", value: `${(r.rearmApy * 100).toFixed(2)}pp` },
+      { label: "Max move per decision", value: `${(maxMove * 100).toFixed(1)}pp` },
+      {
+        label: "Concentration band",
+        value: `${(band.min * 100).toFixed(0)}% to ${(band.max * 100).toFixed(0)}%`,
+      },
+      {
+        label: "Floor rate source",
+        value: `${src.label}, daily · ${src.provider} ${src.pool.slice(0, 8)} · read ${routerDayLabel(
+          measuredRouterReplay().asOfDate,
+        )}`,
+      },
+    ];
+    return (
+      <div className="vx-panel">
+        <div className="vx-panel-h">Router</div>
+        <div className="vx-kv vx-kv--prose">
+          <span>Rule</span>
+          <b>{r.ruleSentence}</b>
+        </div>
+        {rows.map((row) => (
+          <div key={row.label} className="vx-kv">
+            <span>{row.label}</span>
+            <b>{row.value}</b>
+          </div>
+        ))}
+      </div>
+    );
+  }, [vault]);
+
   if (vault === undefined) return <div className="vx-root" />;
   if (vault === null) {
     return (
@@ -546,7 +616,15 @@ export default function VaultDetail({ slug }: { slug: string }) {
   const inceptionToday =
     Math.floor(nowMs / DAY_MS) ===
     Math.floor(Date.parse(vault.createdAt) / DAY_MS);
-  const { venue, chain } = venueParts(vault.venue);
+  /* ONE OWNER for the venue line: on a routed record `vault.venue` is the
+     word `Multi-venue`, which the naive split reads as both the venue and the
+     chain. `recordVenueParts` reads the lanes instead and falls through to
+     `venueParts` on every record that is not routed. */
+  const { venue, chain } = recordVenueParts(vault);
+  /* Routed = the record carries the two lanes the router routes between. The
+     header reads it because that is the only record whose `venue` field is a
+     word rather than a venue. */
+  const routed = (vault.automations?.router?.lanes.length ?? 0) >= 2;
   const chainLine =
     typeof vault.chainId === "number" && Number.isFinite(vault.chainId)
       ? `${chain} · ${String(vault.chainId)}`
@@ -588,8 +666,14 @@ export default function VaultDetail({ slug }: { slug: string }) {
               {VAULT_STAGE_LABEL.incubating}
             </span>
           )}
+          {/* THE RAW FIELD ON EVERY RECORD THAT HAS ONE, and the composed line
+              only where the raw field is the word `Multi-venue`. Rewriting
+              this unconditionally would have re-spelled every shipped record's
+              header (a funding vault's `Hyperliquid · funding` resolves to a
+              chain of `Hyperliquid L1`), so the routed case is the only one
+              that moves. */}
           <span className="vx-card-mkt">
-            {vault.market} · {vault.venue}
+            {vault.market} · {routed ? `${venue} · ${chain}` : vault.venue}
           </span>
           <span className="vx-dmeta-cur">
             Curated by <b>{vault.curator}</b>
@@ -794,6 +878,7 @@ export default function VaultDetail({ slug }: { slug: string }) {
                   </div>
                 ))}
               </div>
+              {routerPanel}
               <div className="vx-panel">
                 <div className="vx-panel-h">Composed modules</div>
                 {depositorModuleLines(vault).map((m) => (

@@ -36,18 +36,27 @@ import {
   modeledActivity,
   type ActivityRow,
   type PositionRecord,
+  type PublishedLane,
   type VaultRecord,
   type WithdrawalRecord,
 } from "@/lib/vaults/store";
 import { explorerTxUrl } from "@/lib/format";
 import { EXECUTION_CHAIN_ID, onchainExecutionsFor } from "@/lib/vaults/onchain-executions";
 import { collarConfig, collarRollTimes, rangeConfig, rangeRecenterTimes } from "./AutomationsSection";
+/* The relocation rows come from the SAME fold the router instrument reads, so
+   the ledger and the instrument foot can never name two different last moves. */
+import {
+  ROUTER_LOOP_SLOT,
+  measuredRouterReplay,
+  type RouterMove,
+} from "@/lib/canvas/router-replay";
+import type { CSSProperties } from "react";
 
 const MAX_ROWS = 8;
 
 /** The store's row plus the reader's withdrawals and the chain's executions. */
 type LedgerRow = Omit<ActivityRow, "kind"> & {
-  kind: ActivityRow["kind"] | "withdraw" | "onchain";
+  kind: ActivityRow["kind"] | "withdraw" | "onchain" | "router";
   /** The transaction that is this row's proof, where one exists. */
   txHash?: string;
 };
@@ -77,6 +86,57 @@ export const EXECUTION_ACTION = "Execution landed";
 /** `signed packet accepted · block 50,208,131` */
 export function executionDetail(blockNumber: number): string {
   return `signed packet accepted · block ${blockNumber.toLocaleString("en-US")}`;
+}
+
+/** The ledger's word for a router decision. `move`, never `relocate`: the
+ *  mechanism shifts weight inside the published concentration band and cannot
+ *  empty a lane, so a verb that claims a lane was emptied is not available. */
+export const RELOCATION_ACTION = "Weight moved";
+
+/**
+ * `10.0pp of the book, loop to USDC lending on Aave v3 Base`.
+ *
+ * THE SIZE TRAVELS WITH THE VERB, and that is the whole guard against the
+ * over-claim: a reader who sees `moved` without a size hears a lane being
+ * emptied. `lanes[0]` is the loop and `lanes[1]` the floor, in the canvas's
+ * own publish order, and the move's own `source` decides which way the
+ * sentence runs.
+ */
+export function routerMoveDetail(m: RouterMove, lanes: readonly PublishedLane[]): string {
+  const loop = lanes[0];
+  const floor = lanes[1];
+  if (!loop || !floor) return "";
+  const toFloor = m.source === ROUTER_LOOP_SLOT;
+  const from = toFloor ? "loop" : floor.label;
+  const to = toFloor ? floor : loop;
+  const where = to.venueLabel.replace(" · ", " ");
+  const size = `${(m.weightFrac * 100).toFixed(1)}pp`;
+  return `${size} of the book, ${from} to ${to.label} on ${where}`;
+}
+
+/**
+ * The router's own rows, from the measured replay.
+ *
+ * Exported and pure so the register is pinned rather than asserted: every row
+ * it returns carries `kind: "router"` (which is what prints the `modeled`
+ * tag) and NO `txHash`, which is what leaves the Verify cell empty. On a
+ * record with no router, or with one lane, it returns nothing and the section
+ * is byte for byte what it was.
+ *
+ * IT DOES NOT CHECK FOR A CHAIN LEDGER, and that is deliberate: the caller
+ * places this inside its own `if (!hasChain)` block, so the stand-down is
+ * structural and one function does not answer two questions.
+ */
+export function routerActivityRows(vault: VaultRecord): LedgerRow[] {
+  const lanes = vault.automations?.router?.lanes;
+  if (!lanes || lanes.length < 2) return [];
+  const out: LedgerRow[] = [];
+  for (const m of measuredRouterReplay().moves) {
+    const detail = routerMoveDetail(m, lanes);
+    if (!detail) continue;
+    out.push({ action: RELOCATION_ACTION, detail, ms: m.ms, kind: "router" });
+  }
+  return out;
 }
 
 function VerifyKey({ txHash }: { txHash: string }) {
@@ -146,6 +206,14 @@ export default function ActivitySection({
 
     const earning = vault.modeledApy > 0;
     const modeled: LedgerRow[] = modeledActivity(vault, nowMs, tvlUsd).filter((r) => {
+      /* WHERE A REAL LEDGER EXISTS THE MODELED ROWS STAND DOWN (founder,
+         2026-09-07). `router` is the OTHER modeled kind and it stands down
+         too, but structurally rather than here: `modeledActivity` emits only
+         `auto | publish | deposit`, and every router row is built inside the
+         `if (!hasChain)` block below, so adding it to this test would be a
+         comparison TypeScript rejects and a branch nothing reaches. The
+         guard is the block, and `tests/vaults.test.ts` asserts the outcome
+         rather than the branch. */
       if (hasChain && r.kind === "auto") return false;
       if (statesNegativeMoney(r.detail)) return false;
       if (!earning && /compound/i.test(r.action)) return false;
@@ -165,6 +233,7 @@ export default function ActivitySection({
           });
         }
       }
+      family.push(...routerActivityRows(vault));
       const collar = collarConfig(vault);
       if (collar?.strikePct !== null && collar?.rollDays !== null && collar !== null) {
         const strike = collar.strikePct.toFixed(0);
@@ -204,11 +273,13 @@ export default function ActivitySection({
           </thead>
           <tbody>
             {visible.map((r, i) => (
-              <tr key={`${r.kind}-${r.ms}-${i}`}>
+              <tr key={`${r.kind}-${r.ms}-${i}`} style={{ "--i": Math.min(i, 11) } as CSSProperties}>
                 <td className="vxa-action">
                   {r.action}
                   {r.mine ? <span className="vxa-tag vxa-tag--you">you</span> : null}
-                  {r.kind === "auto" ? <span className="vxa-tag">modeled</span> : null}
+                  {r.kind === "auto" || r.kind === "router" ? (
+                    <span className="vxa-tag">modeled</span>
+                  ) : null}
                   {r.kind === "onchain" ? <span className="vxa-tag vxa-tag--chain">on chain</span> : null}
                 </td>
                 <td className="vxa-detail">{r.detail}</td>

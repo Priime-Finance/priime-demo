@@ -50,6 +50,18 @@ import { adverseMoveLine, liquidationDistance, liquidationDistanceAtHf } from "@
 import { MODULE_DEFS, defaultValueFor } from "@/lib/canvas/modules";
 import { EXEC_DRAG_APR } from "@/lib/model-constants";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
+/* THE ROUTER'S NUMBERS HAVE ONE OWNER EACH (plan seam 4). The bar, the
+   hysteresis, the founder's window and the move weight are imported here and
+   retyped nowhere: `deriveAutomations` uses them only as the backfill for a
+   record that predates the field, exactly as `deriveHfBands` backfills the
+   health envelope. */
+import {
+  DEMO_ROUTER_MOVE_WEIGHT,
+  DEMO_SUSTAIN_HOURS,
+  DEMO_UPGRADE_REARM,
+  DEMO_UPGRADE_THRESHOLD,
+} from "@/lib/canvas/orchestrator/demo-rules";
+import { ORCH_DIAL_DEFAULTS } from "@/lib/canvas/param-schema";
 import { VAULTS_EVENT } from "./events";
 import { heroNavUsd } from "./rows";
 
@@ -248,6 +260,81 @@ export interface VaultRecord {
   exogenousParams?: Record<string, ParamValue> | null;
   failedGates?: string[] | null;
   gatesTotal?: number | null;
+
+  /**
+   * THE ROUTED RECORD (plan R5, seam 1). Declared here by WP-3, written by
+   * the canvas at publish, read by the Capital router instrument.
+   *
+   * Both fields are OPTIONAL and absent on every record written before the
+   * router existed, which is every record in the product today. A reader
+   * therefore handles three states exactly as it does for the published
+   * model above: a value states what the user saw, `null` states that the
+   * model declines to state it, and ABSENT means a single-lane record that
+   * must render precisely as it did before this field existed. Nothing
+   * defaults either of them at the write site.
+   *
+   * `lanes` carries one entry per composed lane, in the canvas's own order.
+   * A record with fewer than two lanes is not routed, whatever it carries in
+   * `router`: `deriveAutomations` seats the instrument only when BOTH are
+   * present and `lanes.length >= 2`, so a half-written record renders as the
+   * single-lane vault it actually is rather than as a router with one side.
+   */
+  lanes?: PublishedLane[];
+  router?: PublishedRouter | null;
+}
+
+/**
+ * One lane of a routed vault, exactly as the canvas priced it.
+ *
+ * `publishedApy` is FROZEN at publish, the same discipline `modeledApy` and
+ * `capacityUsd` are held to: re-deriving a lane's rate later from a drifted
+ * capture would disagree with the pair the depositor read before publishing.
+ * Null on a lane whose composition never priced.
+ */
+export interface PublishedLane {
+  /** The venue slug the canvas priced (`morpho-blue-base`, `treasury-ausdc-base`). */
+  venue: string;
+  /** The venue in the page's own words (`Morpho Blue · Base`). */
+  venueLabel: string;
+  /** The market as the depositor reads it (`USDe/USDC`, `USDC reserve`). */
+  market: string;
+  /** The lane label the canvas gave it (`Leveraged loop`, `USDC lending`). */
+  label: string;
+  /** The lane's template family, from the same graph the composition was read from. */
+  family: StrategyKind;
+  /** The lane's published net APY at publish, as a fraction. */
+  publishedApy: number | null;
+  /** The lane's share of the book at publish, in basis points. 10000 = the whole book. */
+  allocationBps: number;
+}
+
+/**
+ * The capital router, as the canvas published it.
+ *
+ * Every number here has ONE owner in `lib/canvas/orchestrator/demo-rules.ts`
+ * and the canvas reads it from there at publish rather than typing it. The
+ * record carries them so the page can render what the depositor was shown
+ * even after the owners move, in the same way `automations` carries the
+ * health bands rather than re-deriving them; a reader that finds a field
+ * absent falls back to the owner's value and never to a literal.
+ */
+export interface PublishedRouter {
+  /** Dial 1: how fast the rules react (`ORCH_DIAL_DEFAULTS.reactivity`). */
+  reactivity: string;
+  /** Dial 2: the concentration cap, percent of the book on one lane. */
+  maxConcentrationPct: number;
+  /** Dial 3: the weekly turnover budget, percent of the book. */
+  turnoverBudgetPctWeek: number;
+  /** The rule in the depositor's words, one sentence, composed at publish. */
+  ruleSentence: string;
+  /** The improvement a move must clear, as a fraction (`DEMO_UPGRADE_THRESHOLD`). */
+  thresholdApy: number;
+  /** Hysteresis: the improvement the rule re-arms at (`DEMO_UPGRADE_REARM`). */
+  rearmApy: number;
+  /** The founder's window in hours (`DEMO_SUSTAIN_HOURS`). Fixed by ruling. */
+  sustainHours: number;
+  /** What one firing moves, as a fraction of the book (`DEMO_ROUTER_MOVE_WEIGHT`). */
+  moveWeight: number;
 }
 
 /**
@@ -262,6 +349,8 @@ export type AutomationSource = Pick<
   Partial<
     Pick<
       VaultRecord,
+      | "lanes"
+      | "router"
       | "liqLtv"
       | "appliedLeverage"
       | "hfTargetBps"
@@ -350,10 +439,43 @@ export interface CompoundAutomation {
   thresholdUsd: number;
 }
 
+/**
+ * The capital router's instrument parameters, seated only on a record that
+ * actually carries two lanes AND a router (plan R5).
+ *
+ * Every figure is the RECORD's where the record states it, and the owner's
+ * (`lib/canvas/orchestrator/demo-rules.ts`) where it does not, the same
+ * published-then-backfill discipline the leverage envelope follows. Nothing
+ * here is a literal: a record published before a field existed reads the
+ * constant that produced it, never a number retyped on this line.
+ */
+export interface RouterAutomation {
+  /** The lanes the router routes between, in the record's own order. */
+  lanes: readonly PublishedLane[];
+  /** The improvement a move must clear, as a fraction. */
+  thresholdApy: number;
+  /** The improvement the rule re-arms at, as a fraction. */
+  rearmApy: number;
+  /** The founder's window, in hours. */
+  sustainHours: number;
+  /** What one firing moves, as a fraction of the book. */
+  moveWeight: number;
+  /** The concentration cap, percent of the book on one lane. */
+  maxConcentrationPct: number;
+  /** The rule in the depositor's words, one sentence. */
+  ruleSentence: string;
+}
+
 export interface VaultAutomations {
   leverage: LeverageAutomation | null;
   hedge: HedgeAutomation | null;
   compound: CompoundAutomation | null;
+  /**
+   * ABSENT, not null, on every record written before the router existed, so
+   * a stored `automations` object from an older publish still satisfies this
+   * type and `loadUserVaults` does not have to rewrite it.
+   */
+  router?: RouterAutomation | null;
 }
 
 export interface PositionRecord {
@@ -1390,7 +1512,108 @@ export function deriveAutomations(v: AutomationSource): VaultAutomations {
     compound = { cadenceHours, thresholdUsd };
   }
 
-  return { leverage, hedge, compound };
+  // ── the capital router ─────────────────────────────────────────────────
+  //
+  // TWO CONDITIONS, both required. `lanes.length >= 2` because a router with
+  // one lane routes nothing, and `router` because the dials are what the rule
+  // is made of. A record carrying one without the other is a half-written
+  // publish and renders as the single-lane vault it actually is, which is
+  // also exactly what every record written before this field existed does.
+  let router: RouterAutomation | null = null;
+  const lanes = Array.isArray(v.lanes) ? v.lanes : [];
+  if (lanes.length >= 2 && v.router) {
+    const r = v.router;
+    const thresholdApy = finite(r.thresholdApy) ?? DEMO_UPGRADE_THRESHOLD;
+    const rearmApy = finite(r.rearmApy) ?? DEMO_UPGRADE_REARM;
+    const sustainHours = finite(r.sustainHours) ?? DEMO_SUSTAIN_HOURS;
+    const moveWeight = finite(r.moveWeight) ?? DEMO_ROUTER_MOVE_WEIGHT;
+    const maxConcentrationPct =
+      finite(r.maxConcentrationPct) ?? ORCH_DIAL_DEFAULTS.maxConcentrationPct;
+    router = {
+      lanes,
+      thresholdApy,
+      rearmApy,
+      sustainHours,
+      moveWeight,
+      maxConcentrationPct,
+      ruleSentence:
+        typeof r.ruleSentence === "string" && r.ruleSentence.trim()
+          ? r.ruleSentence.trim()
+          : routerRuleSentence({
+              lanes,
+              thresholdApy,
+              sustainHours,
+              moveWeight,
+              maxConcentrationPct,
+            }),
+    };
+  }
+
+  return { leverage, hedge, compound, router };
+}
+
+/**
+ * THE RULE IN THE DEPOSITOR'S WORDS, ONE OWNER.
+ *
+ * The canvas composes this at publish and writes it onto the record; this
+ * function is what it calls, and it is also the backfill a record published
+ * without the field gets. Two spellings of one rule is how a vault page and
+ * the review sheet that published it come to describe different machines.
+ *
+ * THE VERB IS `move`, and the SIZE TRAVELS WITH IT. The mechanism shifts
+ * weight inside the published concentration band and cannot empty a lane, so
+ * `relocates`, `unwinds and relocates` and `moves the capital to` are not
+ * available: they all claim a lane is emptied. `move` plus `Np of the book`
+ * is the claim the arithmetic supports.
+ */
+export function routerRuleSentence(r: {
+  lanes: readonly PublishedLane[];
+  thresholdApy: number;
+  sustainHours: number;
+  moveWeight: number;
+  maxConcentrationPct: number;
+}): string {
+  const other = r.lanes[1]?.label ?? "the other lane";
+  const size = `${(routerMaxMoveFrac(r) * 100).toFixed(1)}pp`;
+  const bar = `${(r.thresholdApy * 100).toFixed(2)}pp`;
+  return `Moves ${size} of the book to ${other} when it has paid more than the loop for ${r.sustainHours} hours by at least ${bar}, and back the same way.`;
+}
+
+/**
+ * THE MOVE THIS BOOK CAN ACTUALLY MAKE, and the one owner of it.
+ *
+ * `moveWeight` is the DIAL: 12.5pp of the book at the defaults. The
+ * concentration band refuses most of it, because a book sitting at its target
+ * weight can only travel as far as the band's edge: two lanes under a 60% cap
+ * run 40% to 60%, and 60% minus a 50% target is 10pp. The quant measured the
+ * one move in the history at exactly 10.0pp for this reason.
+ *
+ * IT LIVES HERE BECAUSE THREE SURFACES PRINT IT: the rule sentence, the
+ * instrument's cascade and foot, and the Parameters row. The first shipped
+ * pass computed it in two of the three and typed the dial into the sentence,
+ * so one page said `Moves 12.5pp` four lines above `Max move · 10.0pp`. Found
+ * in the browser, not by a test, which is why the arithmetic is one call now.
+ */
+export function routerMaxMoveFrac(r: {
+  lanes: readonly PublishedLane[];
+  moveWeight: number;
+  maxConcentrationPct: number;
+}): number {
+  const laneCount = Math.max(2, r.lanes.length);
+  const maxW = r.maxConcentrationPct / 100;
+  const minW = Math.max(0, 1 - (laneCount - 1) * maxW);
+  const targetW = 1 / laneCount;
+  return Math.max(0, Math.min(r.moveWeight, maxW - targetW, targetW - minW));
+}
+
+/** The band a lane's weight may travel in, as fractions. */
+export function routerConcentrationBand(r: {
+  lanes: readonly PublishedLane[];
+  maxConcentrationPct: number;
+}): { min: number; max: number } {
+  const laneCount = Math.max(2, r.lanes.length);
+  const max = r.maxConcentrationPct / 100;
+  return { min: Math.max(0, 1 - (laneCount - 1) * max), max };
 }
 
 // ── liquidation geometry (one definition, used by every surface) ───────────
@@ -1538,6 +1761,12 @@ export const MODULE_VOCAB: readonly ModuleVocabEntry[] = [
 const MODULE_ALIASES: Record<string, string> = {
   "range engine": "Auto center",
   "yield router": "Capital router",
+  /* The router arrives from three writers (the canvas graph key, the record's
+     module list, a hand-seeded localStorage record), and a second spelling on
+     this page prints the instrument once and the same machine again as a
+     prose row in `Also installed` 400px below it. */
+  router: "Capital router",
+  "capital-router": "Capital router",
   "dynamic leverage": "Dynamic leverage",
   "safety buffer": "Dynamic leverage",
   "auto compound": "Auto-compound",
@@ -1874,7 +2103,12 @@ export function automationCount(v: VaultRecord): number {
     v.modules.some((m) => canonicalModuleName(m) === name),
   ).length;
   if (!a) return family;
-  return [a.leverage, a.hedge, a.compound].filter(Boolean).length + family;
+  /* THE ROUTER COUNTS. The directory card prints this number beside the card
+     that links to the page, and the page mounts the router as its FIRST
+     instrument, so a routed record that counted three while showing four made
+     the card and the page disagree about the same vault. `router` is absent
+     on every record written before it existed, so nothing else moves. */
+  return [a.leverage, a.hedge, a.compound, a.router].filter(Boolean).length + family;
 }
 
 /** Split "Morpho Blue · Base" into venue + chain; single-name venues map honestly.
@@ -1939,6 +2173,53 @@ function soleVenue(label: string, venueIds?: readonly string[] | null): string |
   }
   if (distinctParts.size > 1) return null;
   return parts[0] ?? label;
+}
+
+/**
+ * THE VENUE LINE A ROUTED RECORD ACTUALLY HAS, and the one owner of it.
+ *
+ * `venueParts` splits ONE label, and the label a two-venue composition
+ * publishes is the word `Multi-venue`, which the split then reads as both the
+ * venue AND the chain. The Projection card printed `Multi-venue · Multi-venue`
+ * on a vault whose two lanes never leave Base, while the Modeled APY row two
+ * lines below it printed a composed two-lane number: one card, two answers to
+ * "what is this vault". All three rail rows move together on a routed record
+ * or the rail contradicts itself.
+ *
+ * THE SHAPE IS THE PAGE'S OWN `<name> · <chain>` and not a counted phrase: the
+ * lanes name themselves, joined by the word the depositor would use, and the
+ * chain is stated once because it is one chain. A routed record whose lanes
+ * genuinely sit on different chains keeps the label's own answer, because at
+ * that point `Cross-venue` is the true one.
+ *
+ * Falls through to `venueParts` on every record that is not routed, which is
+ * every record in the product today, so nothing that ships moves.
+ */
+export function recordVenueParts(v: {
+  venue: string;
+  automations?: VaultAutomations | null;
+}): { venue: string; chain: string } {
+  const lanes = v.automations?.router?.lanes ?? null;
+  if (!lanes || lanes.length < 2) return venueParts(v.venue);
+  const split = lanes.map((l) => {
+    const ix = l.venueLabel.indexOf("·");
+    return ix >= 0
+      ? { name: l.venueLabel.slice(0, ix).trim(), chain: l.venueLabel.slice(ix + 1).trim() }
+      : { name: l.venueLabel.trim(), chain: "" };
+  });
+  const names = Array.from(new Set(split.map((x) => x.name).filter(Boolean)));
+  const chains = Array.from(new Set(split.map((x) => x.chain).filter(Boolean)));
+  if (names.length === 0 || chains.length !== 1) {
+    return venueParts(
+      v.venue,
+      lanes.map((l) => l.venue),
+    );
+  }
+  const joined =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return { venue: joined, chain: chains[0] };
 }
 
 // ── live derivation helpers (all deterministic, slug + clock seeded) ───────
@@ -2325,7 +2606,11 @@ export function resolvedPositionCounts(
 
 export function vaultDescription(v: VaultRecord): string {
   const a = v.automations;
-  const { venue, chain } = venueParts(v.venue);
+  /* THROUGH THE ROUTED OWNER. On a two-venue record `v.venue` is the word
+     `Multi-venue`, and the split reads it as the chain too, so this sentence
+     said a vault runs "via Multi-venue on Multi-venue" while the panel beside
+     it named both venues and Base. */
+  const { venue, chain } = recordVenueParts(v);
   const lev = a?.leverage;
   const hedged = Boolean(a?.hedge);
   const cad = a?.compound?.cadenceHours;

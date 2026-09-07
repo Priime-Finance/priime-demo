@@ -30,7 +30,7 @@ import {
   fmtPct,
   fmtUsd,
   fmtUsdFull,
-  venueParts,
+  recordVenueParts,
   withdrawPosition,
   type PositionRecord,
   type VaultRecord,
@@ -279,7 +279,11 @@ export default function DepositRail({
   const myValue = positions.reduce((s, p) => s + (p.amountUsd / p.shareValueAtDeposit) * sv, 0);
   const myPnl = myValue - myDeposited;
   const pnlFlat = Math.abs(myPnl) < 0.005;
-  const { venue, chain } = venueParts(vault.venue);
+  /* The Projection card's own head. Through `recordVenueParts` so this row
+     and the configuration panel's `Venue` row can never name two vaults; on a
+     routed record the label alone says `Multi-venue` and the split reads that
+     as the chain too. */
+  const { venue, chain } = recordVenueParts(vault);
 
   const wParsed = Number(wAmount);
   const wStop = evaluateWithdraw(wAmount, wParsed, myValue);

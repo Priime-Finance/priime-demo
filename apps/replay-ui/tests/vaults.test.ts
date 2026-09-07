@@ -39,8 +39,31 @@ import {
 import { DEMO_MARKET_ID, HERO_SEED_LEVERAGE } from "@/lib/demo/market";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
 import { heroNavUsd } from "@/lib/vaults/rows";
+import { onchainExecutionsFor } from "@/lib/vaults/onchain-executions";
 import { SEED_SLUGS, SEED_VAULTS } from "@/lib/vaults/seeds";
+import { measuredRouterReplay } from "@/lib/canvas/router-replay";
+import { routerPublishedToday } from "@/lib/canvas/router-history";
 import {
+  DEMO_ROUTER_MOVE_WEIGHT,
+  DEMO_SUSTAIN_HOURS,
+  DEMO_UPGRADE_REARM,
+  DEMO_UPGRADE_THRESHOLD,
+} from "@/lib/canvas/orchestrator/demo-rules";
+import {
+  RELOCATION_ACTION,
+  routerActivityRows,
+  routerMoveDetail,
+} from "@/components/vaults/ActivitySection";
+import {
+  MODULE_VOCAB,
+  canonicalModuleName,
+  moduleDepositorLine,
+  recordModuleNames,
+  recordVenueParts,
+  routerRuleSentence,
+  venueParts,
+  type AutomationSource,
+  type PublishedLane,
   deriveAutomations,
   guessLiqLtv,
   loadPositions,
@@ -461,5 +484,310 @@ describe("publish onto the live record", () => {
     expect(withdrawPosition(HERO_SLUG, 10)).toBeNull();
     expect(withdrawPosition(HERO_SLUG, 0)).toBeNull();
     expect(withdrawPosition(HERO_SLUG, Number.NaN)).toBeNull();
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE CAPITAL ROUTER ON THE VAULT PAGE (plan WP-3, rulings R4b / R5 / R6).
+
+   Four questions, and the fourth is the one that protects everything already
+   shipped: does a record without the new fields render EXACTLY as it did.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const ROUTED_LANES: PublishedLane[] = [
+  {
+    venue: "morpho-blue-base",
+    venueLabel: "Morpho Blue · Base",
+    market: "USDe/USDC",
+    label: "Leveraged loop",
+    family: "loop",
+    publishedApy: 0.0307572,
+    allocationBps: 10_000,
+  },
+  {
+    venue: "treasury-ausdc-base",
+    venueLabel: "Aave v3 · Base",
+    market: "USDC reserve",
+    label: "USDC lending",
+    family: "treasury",
+    publishedApy: 0.0297088,
+    allocationBps: 0,
+  },
+];
+
+/** A record shaped exactly as the canvas will publish it (seam 1). */
+function routedSource(over: Partial<AutomationSource> = {}): AutomationSource {
+  return {
+    strategy: "loop",
+    venue: "Morpho Blue and Aave v3 · Base",
+    market: "USDe/USDC",
+    modules: ["Liquidity source", "Capital router"],
+    params: [],
+    lanes: ROUTED_LANES,
+    router: {
+      reactivity: "standard",
+      maxConcentrationPct: 60,
+      turnoverBudgetPctWeek: 25,
+      ruleSentence: "",
+      thresholdApy: DEMO_UPGRADE_THRESHOLD,
+      rearmApy: DEMO_UPGRADE_REARM,
+      sustainHours: DEMO_SUSTAIN_HOURS,
+      moveWeight: DEMO_ROUTER_MOVE_WEIGHT,
+    },
+    ...over,
+  };
+}
+
+describe("deriveAutomations seats the router on two lanes and a rule, never on one", () => {
+  it("seats it when the record carries both", () => {
+    const r = deriveAutomations(routedSource()).router;
+    expect(r).not.toBeNull();
+    expect(r?.lanes).toHaveLength(2);
+    // Every figure is the quant's owner, not a literal on this line.
+    expect(r?.thresholdApy).toBe(DEMO_UPGRADE_THRESHOLD);
+    expect(r?.rearmApy).toBe(DEMO_UPGRADE_REARM);
+    expect(r?.sustainHours).toBe(DEMO_SUSTAIN_HOURS);
+    expect(r?.moveWeight).toBe(DEMO_ROUTER_MOVE_WEIGHT);
+  });
+
+  it("refuses a one-lane record and a record with no router", () => {
+    expect(deriveAutomations(routedSource({ lanes: [ROUTED_LANES[0]!] })).router).toBeNull();
+    expect(deriveAutomations(routedSource({ router: null })).router).toBeNull();
+  });
+
+  it("backfills the rule sentence from the owners, in the depositor's words", () => {
+    const line = deriveAutomations(routedSource()).router?.ruleSentence ?? "";
+    expect(line).toBe(
+      routerRuleSentence({
+        lanes: ROUTED_LANES,
+        thresholdApy: DEMO_UPGRADE_THRESHOLD,
+        sustainHours: DEMO_SUSTAIN_HOURS,
+        moveWeight: DEMO_ROUTER_MOVE_WEIGHT,
+        maxConcentrationPct: 60,
+      }),
+    );
+    expect(line).toContain("USDC lending");
+    expect(line).toContain(`${DEMO_SUSTAIN_HOURS} hours`);
+    // The verb is `move` and the size travels with it (design item 11).
+    expect(line.startsWith("Moves ")).toBe(true);
+    /* THE SENTENCE STATES THE CLAMPED MOVE, not the dial. Found in a browser:
+       the first pass typed `moveWeight` here and printed `Moves 12.5pp` four
+       lines above `Max move · 10.0pp` on one page. */
+    expect(line).toContain("Moves 10.0pp of the book");
+    expect(line).not.toContain("12.5pp");
+    for (const banned of ["relocat", "unwinds and relocates", "moves the capital to"]) {
+      expect(line.toLowerCase()).not.toContain(banned);
+    }
+  });
+
+  it("prefers what the record published over the owner's value", () => {
+    const src = routedSource();
+    const r = deriveAutomations({
+      ...src,
+      router: { ...src.router!, thresholdApy: 0.05, ruleSentence: "  " },
+    }).router;
+    expect(r?.thresholdApy).toBe(0.05);
+    // A blank published sentence is not a sentence; the backfill answers.
+    expect(r?.ruleSentence.startsWith("Moves ")).toBe(true);
+  });
+});
+
+describe("the router vocabulary names one machine once", () => {
+  it("every spelling canonicalises to `Capital router`", () => {
+    for (const raw of ["Capital router", "capital router", "yield router", "router", "capital-router"]) {
+      expect(canonicalModuleName(raw)).toBe("Capital router");
+    }
+  });
+
+  it("the depositor line is the vocabulary's, edited nowhere", () => {
+    const entry = MODULE_VOCAB.find((e) => e.name === "Capital router");
+    expect(entry).toBeDefined();
+    expect(moduleDepositorLine("yield router")).toBe(entry!.depositorLine);
+    expect(entry!.depositorLine).toBe(
+      "Moves capital between the vault's positions inside the published concentration cap.",
+    );
+  });
+
+  it("`Also installed` cannot print it a second time: the roster dedupes on the canonical name", () => {
+    expect(recordModuleNames({ modules: ["Capital router", "yield router", "router"] })).toEqual([
+      "Capital router",
+    ]);
+  });
+});
+
+describe("the measured replay is the quant's, to the day and to the weight", () => {
+  const replay = measuredRouterReplay();
+
+  it("folds one move, on 2026-06-12, loop to floor, 10.0pp of the book", () => {
+    expect(replay.days).toBe(89);
+    expect(replay.moves).toHaveLength(1);
+    const m = replay.moves[0]!;
+    expect(m.date).toBe("2026-06-12");
+    expect(m.source).toBe("loop");
+    expect(m.dest).toBe("floor");
+    // 12.5pp at the dials, clamped to 10.0pp by the 40% concentration floor.
+    expect(m.weightFrac).toBeCloseTo(0.1, 9);
+    expect(m.weightFrac).toBeLessThan(DEMO_ROUTER_MOVE_WEIGHT);
+    expect(replay.endWeights).toEqual({ loop: 0.4, floor: 0.6 });
+  });
+
+  it("today the loop leads, so the clock is empty and nothing is armed", () => {
+    const today = routerPublishedToday();
+    expect(today?.date).toBe(replay.asOfDate);
+    expect(replay.gapApy).toBeCloseTo((today?.loop ?? 0) - (today?.floor ?? 0), 12);
+    expect(replay.gapApy).toBeGreaterThan(0);
+    // Well under the bar: a 3.00pp ratchet over a 0.10pp spread.
+    expect(replay.gapApy).toBeLessThan(DEMO_UPGRADE_THRESHOLD);
+    expect(replay.behindLane).toBeNull();
+    expect(replay.breachDays).toBe(0);
+    expect(replay.hoursBehind).toBe(0);
+    expect(replay.clockFull).toBe(false);
+    expect(replay.inCooldown).toBe(false);
+  });
+
+  it("reads the same answer twice: the fold is pure", () => {
+    expect(measuredRouterReplay()).toBe(replay);
+  });
+});
+
+describe("the ledger's relocation rows", () => {
+  it("state the size with the verb and name both ends", () => {
+    const detail = routerMoveDetail(measuredRouterReplay().moves[0]!, ROUTED_LANES);
+    expect(detail).toBe("10.0pp of the book, loop to USDC lending on Aave v3 Base");
+    expect(RELOCATION_ACTION).toBe("Weight moved");
+  });
+
+  it("carry no transaction, so the Verify cell is empty rather than a dead key", () => {
+    const record = { ...heroRecord(), automations: deriveAutomations(routedSource()) };
+    const rows = routerActivityRows(record);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.kind).toBe("router");
+    expect(rows[0]!.txHash).toBeUndefined();
+    expect(rows[0]!.mine).toBeUndefined();
+  });
+
+  it("come from nothing on a record with no router", () => {
+    expect(routerActivityRows(heroRecord())).toEqual([]);
+  });
+
+  /* THE STAND-DOWN'S PREMISE, pinned. `routerActivityRows` deliberately does
+     not ask whether a chain ledger exists; the section places the call inside
+     its own `if (!hasChain)` block, so what a test CAN hold still is that the
+     attested slug is the one carrying a ledger and that the rows the router
+     would contribute are all older than it. Walked in a browser on a record
+     carrying both: eight chain rows, a Verify column, zero `Weight moved`. */
+  it("the attested slug is the one with a chain ledger, and the move predates it", () => {
+    const chain = onchainExecutionsFor(HERO_SLUG);
+    expect(chain.length).toBeGreaterThan(0);
+    const oldestChainMs = Math.min(...chain.map((x) => x.timestamp * 1000));
+    const record = { ...heroRecord(), automations: deriveAutomations(routedSource()) };
+    const rows = routerActivityRows(record);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.ms).toBeLessThan(oldestChainMs);
+  });
+});
+
+describe("an older single-lane record renders exactly as it did", () => {
+  const legacy: AutomationSource = {
+    strategy: "loop",
+    venue: "Morpho Blue · Base",
+    market: "USDe/USDC",
+    modules: ["Liquidity source", "Dynamic leverage", "Auto-compound"],
+    params: [
+      { label: "Applied leverage", value: "2.50x" },
+      { label: "Liquidation LTV", value: "91.5%" },
+    ],
+    appliedLeverage: 2.5,
+    liqLtv: 0.915,
+  };
+
+  it("seats no router and moves no other instrument", () => {
+    const a = deriveAutomations(legacy);
+    expect(a.router).toBeNull();
+    // The three instruments that existed before this wave are untouched.
+    expect(a.leverage).not.toBeNull();
+    expect(a.compound).not.toBeNull();
+    expect(a.hedge).toBeNull();
+    // The three shipped instruments, and nothing else in the object.
+    expect(Object.keys(a).sort()).toEqual(["compound", "hedge", "leverage", "router"]);
+  });
+
+  it("adds no ledger row and no module to the roster", () => {
+    const record = { ...heroRecord(), automations: deriveAutomations(legacy) };
+    expect(routerActivityRows(record)).toEqual([]);
+    expect(recordModuleNames(legacy)).not.toContain("Capital router");
+  });
+
+  it("the venue line and the automation count are the record's, unchanged", () => {
+    const legacyRecord = { ...heroRecord(), automations: deriveAutomations(legacy) };
+    // `venueParts` is what every record in the product resolves through today.
+    expect(recordVenueParts(legacyRecord)).toEqual(venueParts(legacyRecord.venue));
+    expect(automationCountFor(heroRecord())).toBe(3);
+  });
+
+  it("the shipped seed vaults publish neither field, so none of them route", () => {
+    for (const v of SEED_VAULTS) {
+      expect(v.lanes).toBeUndefined();
+      expect(v.router).toBeUndefined();
+      expect(deriveAutomations(v).router).toBeNull();
+    }
+    expect(heroRecord().lanes).toBeUndefined();
+    expect(deriveAutomations(heroRecord()).router).toBeNull();
+  });
+});
+
+describe("the rail names one vault on a routed record", () => {
+  /* `vault.venue` on a two-venue publish is the word `Multi-venue`, which the
+     naive split reads as the chain as well, so the Projection card printed
+     `Multi-venue · Multi-venue` for a vault that never leaves Base while the
+     Modeled APY row below it printed a composed two-lane number. */
+  const routed = {
+    ...heroRecord(),
+    venue: "Multi-venue",
+    automations: deriveAutomations(routedSource()),
+  };
+
+  it("reads the lanes, in the page's own `<name> · <chain>` shape", () => {
+    expect(recordVenueParts(routed)).toEqual({
+      venue: "Morpho Blue and Aave v3",
+      chain: "Base",
+    });
+    // The shape the old owner produced, and the reason it had to be replaced.
+    expect(venueParts("Multi-venue")).toEqual({
+      venue: "Multi-venue",
+      chain: "Multi-venue",
+    });
+  });
+
+  it("counts the router among the vault's automations", () => {
+    /* THE CARD AND THE PAGE COUNT THE SAME VAULT. The directory prints this
+       number beside the link, and the page mounts the router FIRST, so a
+       routed record that counted three while showing four made one vault
+       read as two. Asserted as a DELTA on the hero's own automations, never
+       against a typed total: the base is three (Dynamic leverage,
+       Auto-compound, the quorum) and the router is the fourth. */
+    const hero = heroRecord();
+    expect(automationCountFor(hero)).toBe(3);
+    const withRouter = {
+      ...hero,
+      automations: { ...hero.automations!, router: deriveAutomations(routedSource()).router },
+    };
+    expect(automationCountFor(withRouter)).toBe(4);
+  });
+
+  it("falls through to the label on a record whose lanes are on two chains", () => {
+    const crossChain = {
+      ...heroRecord(),
+      venue: "Multi-venue",
+      automations: deriveAutomations(
+        routedSource({
+          lanes: [
+            ROUTED_LANES[0]!,
+            { ...ROUTED_LANES[1]!, venueLabel: "Aave v3 · Ethereum" },
+          ],
+        }),
+      ),
+    };
+    expect(recordVenueParts(crossChain).chain).toBe("Cross-venue");
   });
 });
