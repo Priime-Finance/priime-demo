@@ -9,12 +9,17 @@
  *      build can see that: the wire is untyped at the boundary.
  *   2. THE INVARIANT THE WHOLE MACHINE RESTS ON, per tick rather than once:
  *      Σ target weight is 1 on every day of every regime.
- *   3. THE ROUTE AND THE QUANT'S BACKTEST ARE MEASURING ONE RUN. The
- *      transforms are defined twice by necessity (the backtest's live in a
- *      test file, which no production module may import), so the measured
- *      regime's move count is pinned to the quant's own finding. If the two
- *      copies ever drift, this fails rather than the panel quietly drawing a
- *      different history from the one `docs/plans/ROUTER_QUANT.md` prints.
+ *   3. THE ROUTE AND THE QUANT'S BACKTEST ARE MEASURING ONE RUN, WHERE THEY
+ *      DO, AND THE ONE PLACE THEY DO NOT IS PINNED TOO. The transforms are
+ *      defined twice by necessity (the backtest's live in a test file, which
+ *      no production module may import), so three regimes' move counts are
+ *      pinned to the quant's own findings. The fourth, `whipsaw`, disagrees:
+ *      the backtest is a hand fold and this route folds the shipped
+ *      `evaluateOrchestrator`, whose reverse-edge lock and payback gate
+ *      refuse two firings the hand fold takes. That gap is pinned at its
+ *      measured value rather than left to drift, so a change in either
+ *      direction goes red and reaches a reader instead of quietly redrawing
+ *      the history `docs/plans/ROUTER_QUANT.md` prints.
  */
 
 import { describe, expect, it } from "vitest";
@@ -248,6 +253,42 @@ describe("GET /api/canvas/orchestrate", () => {
     /* Every refusal states its own reason; a code with no sentence is a
        number the panel cannot render. */
     for (const r of w.refusals) expect(r.reason.length).toBeGreaterThan(0);
+  });
+
+  it("the two mild stresses move once each, which is the count the quant's backtest prints", () => {
+    /* The hand fold and the shipped evaluator agree exactly here, so the
+       panel and `docs/plans/ROUTER_QUANT.md` describe one run. */
+    for (const id of ["incentive-halves", "usdc-squeeze"] as const) {
+      expect(runs.get(id)!.moves).toBe(1);
+    }
+  });
+
+  it("the whipsaw is where the shipped evaluator is STRICTER than the quant's hand fold, and by how much", () => {
+    /* MEASURED, NOT ASSERTED AS AGREEMENT. `tests/router-backtest.test.ts`
+       walks the days itself and takes five moves on this regime. This route
+       folds `evaluateOrchestrator`, which also ranks a destination, gates a
+       firing on payback and locks the reverse edge until the last move pays
+       back. It reproduces the hand fold's first three moves date for date and
+       then refuses the fourth and fifth. Pinned at the gap's measured value
+       so neither side can move in silence; the reconciliation is a
+       cross-package question for the quant, not an edit this package may
+       make to an owner it does not own. */
+    const w = runs.get("whipsaw")!;
+    expect(w.moves).toBe(3);
+    expect(w.firings).toBe(6);
+    expect(w.decisions.map((d) => d.scenarioRef.tick)).toEqual([1, 43, 55]);
+    expect(w.decisions.map((d) => ROUTER_HISTORY_ALIGNED[d.scenarioRef.tick]?.date)).toEqual([
+      "2026-06-12",
+      "2026-07-24",
+      "2026-08-05",
+    ]);
+    /* The two the hand fold takes and this fold refuses, with the gate that
+       refused each: a count with no reason is a number nobody can act on. */
+    const refusedOn = w.refusals.map(
+      (r) => `${ROUTER_HISTORY_ALIGNED[r.tickIndex]?.date}:${r.code}`,
+    );
+    expect(refusedOn).toContain("2026-08-16:edge-lock");
+    expect(refusedOn).toContain("2026-08-28:weight-band");
   });
 
   it("the bar and the patience the run enforces are the quant's owners, never a second table", () => {

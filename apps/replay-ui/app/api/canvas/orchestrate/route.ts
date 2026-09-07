@@ -43,11 +43,26 @@
  * The quant's module exports no transform: the four regimes live in
  * `tests/router-backtest.test.ts`, a test file, which no production module
  * may import. They are therefore defined ONCE here, with the same anchors,
- * the same sizes and the same growing-run whipsaw the backtest ran, and the
- * seam is named: if these two ever disagree, the printed backtest and the
- * panel are describing two different runs. `tests/orchestrate-route.test.ts`
- * pins the measured regime's move count against the quant's finding so the
- * disagreement cannot ship silently.
+ * the same sizes and the same growing-run whipsaw the backtest ran.
+ *
+ * ⚠ THE TRANSFORMS AGREE AND THE FOLDS DO NOT, ON ONE REGIME, MEASURED AND
+ * STATED RATHER THAN PAPERED OVER. The backtest is a HAND FOLD: it walks the
+ * days itself over `advanceRuleState`, `applyMove` and the edge locks. This
+ * route folds the SHIPPED `evaluateOrchestrator`, which additionally ranks a
+ * destination through `selectDestination`, gates each firing on payback and
+ * locks the reverse edge until the last move has paid back. On `measured`,
+ * `incentive-halves` and `usdc-squeeze` the two agree exactly, one move each.
+ * On `whipsaw` they do not: the hand fold takes five moves, and this route
+ * reproduces its first three (2026-06-12 loop to floor 10.0pp, 2026-07-24 and
+ * 2026-08-05 floor to loop) and then REFUSES the fourth and fifth, at
+ * 2026-08-16 on the reverse-edge lock and at 2026-08-28 on the concentration
+ * band. The shipped machine is the stricter of the two, which is the
+ * direction a protection ratchet should err in, but the printed backtest's
+ * whipsaw row and this panel's whipsaw run are then two different counts.
+ * `tests/orchestrate-route.test.ts` pins BOTH the agreement and the
+ * divergence so neither can move without a test going red, and the
+ * disagreement is carried to the quant as a cross-package finding rather
+ * than reconciled here by editing an owner this package does not own.
  */
 
 import { NextResponse } from "next/server";
