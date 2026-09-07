@@ -40,6 +40,7 @@ import {
   type VaultRecord,
   type WithdrawalRecord,
 } from "@/lib/vaults/store";
+import { MINUS } from "@/lib/canvas/format";
 import { explorerTxUrl } from "@/lib/format";
 import { EXECUTION_CHAIN_ID, onchainExecutionsFor } from "@/lib/vaults/onchain-executions";
 import { collarConfig, collarRollTimes, rangeConfig, rangeRecenterTimes } from "./AutomationsSection";
@@ -88,30 +89,31 @@ export function executionDetail(blockNumber: number): string {
   return `signed packet accepted · block ${blockNumber.toLocaleString("en-US")}`;
 }
 
-/** The ledger's word for a router decision. `move`, never `relocate`: the
- *  mechanism shifts weight inside the published concentration band and cannot
- *  empty a lane, so a verb that claims a lane was emptied is not available. */
-export const RELOCATION_ACTION = "Weight moved";
+/** The ledger's word for a router decision. `relocated` is available now and
+ *  it was not before: under the switch (G1) a firing carries the whole lane
+ *  and the source ends at zero, so the verb that claims a lane was emptied is
+ *  the verb that describes what happened. */
+export const RELOCATION_ACTION = "Capital relocated";
 
 /**
- * `10.0pp of the book, loop to USDC lending on Aave v3 Base`.
+ * `loop to USDC lending, +14.11pp`.
  *
- * THE SIZE TRAVELS WITH THE VERB, and that is the whole guard against the
- * over-claim: a reader who sees `moved` without a size hears a lane being
- * emptied. `lanes[0]` is the loop and `lanes[1]` the floor, in the canvas's
- * own publish order, and the move's own `source` decides which way the
- * sentence runs.
+ * THE DIRECTION AND THE GAP, which are the two things a reader of a ledger row
+ * wants: which way the capital went and what it went for. The size clause is
+ * gone because there is no longer a size to state, the move is the whole lane
+ * and the action word already says so. `lanes[0]` is the loop and `lanes[1]`
+ * the floor, in the canvas's own publish order, and the move's own `source`
+ * decides which way the sentence runs.
  */
 export function routerMoveDetail(m: RouterMove, lanes: readonly PublishedLane[]): string {
   const loop = lanes[0];
   const floor = lanes[1];
   if (!loop || !floor) return "";
   const toFloor = m.source === ROUTER_LOOP_SLOT;
-  const from = toFloor ? "loop" : floor.label;
-  const to = toFloor ? floor : loop;
-  const where = to.venueLabel.replace(" · ", " ");
-  const size = `${(m.weightFrac * 100).toFixed(1)}pp`;
-  return `${size} of the book, ${from} to ${to.label} on ${where}`;
+  const from = toFloor ? loop.label : floor.label;
+  const to = toFloor ? floor.label : loop.label;
+  const gap = `${m.improvementApy >= 0 ? "+" : MINUS}${Math.abs(m.improvementApy * 100).toFixed(2)}pp`;
+  return `${from} to ${to}, ${gap}`;
 }
 
 /**

@@ -6,10 +6,9 @@
  *
  * The scan snapshot carries no economics row for it (the v1 gate excludes the
  * market because Morpho pays no supply APY on USDe collateral, so its carry is
- * incentive-paid). The row below supplies the row's own inputs: the liquidation
- * threshold, the scan-shaped ceiling and the modeled capacity, all typed, plus
- * the two RATES, which are measured and come from the capture's last aligned
- * day through `demoMarketRates` (see the block on it below). It states no APY of its own. Every number a surface prints is
+ * incentive-paid). The row below supplies the TYPED INPUTS only: the two
+ * rates, the liquidation threshold, the scan-shaped ceiling and the modeled
+ * capacity. It states no APY of its own. Every number a surface prints is
  * `publishedNetApy(repriceAtLeverage(row, L), false)` from the one owner in
  * `lib/canvas/mock-quote.ts`, at the leverage the surface builds at, with the
  * house fee inside.
@@ -22,7 +21,6 @@
 import { EXEC_DRAG_UNHEDGED } from "@/lib/model-constants";
 import { repriceAtLeverage } from "@/lib/canvas/mock-quote";
 import type { ProjectedCandidate } from "@/lib/canvas/opportunities";
-import { routerLastAlignedDay } from "@/lib/canvas/router-history";
 import { HERO_MARKET_ID } from "@/lib/demo-scope";
 
 export const DEMO_MARKET_ID = HERO_MARKET_ID;
@@ -42,45 +40,28 @@ const DEMO_LOOP_LEVERAGE = 3.25;
 const DEMO_CAPACITY_USD = 10_000_000;
 
 /**
- * ══ THE ROW'S TWO RATES ARE MEASURED, NOT TYPED (router lane, item 1) ══════
+ * ══ THE ROW'S TWO RATES ARE TYPED INPUTS, AND THEY SAY SO (G3) ═══════════
  *
- * This row used to carry `0.044` and `0.035` as literals, captured months
- * before the router was built. They publish 4.3% at the seed leverage, and the
- * router prices the SAME lane at 3.1% from the last aligned day of the capture
- * (`loopRewardPct` 4.75, `loopBorrowPct` 5.0869). Two frames 300px apart in
- * one viewport: the canvas would say the loop leads the floor by 1.30pp while
- * the router instrument says +0.10pp and sits watching. Annotating the two
- * frames was rejected; welding them is the fix.
+ * They were briefly substituted with the capture's last aligned day, to weld
+ * the canvas frame to the router frame. That substitution is REVERTED, because
+ * it broke the one live workflow the demo is built around: today's measured
+ * pair is a 4.75% incentive against a 5.09% borrow, so leverage SUBTRACTS on
+ * this row, `Install defaults` withheld Dynamic leverage, and the hero fell to
+ * 3.1%. A market row that cannot seat the module the product is about is not a
+ * better row, it is a different demo.
  *
- * So the row reads the LAST ALIGNED DAY through `routerLastAlignedDay()`,
- * which is the same object `loopRowForDay` substitutes into on every other day
- * of the replay: today's row IS the replay's last tick. That accessor exists
- * so three callers cannot each pick their own last day, and this is one of the
- * three. No figure is typed here and no second copy of the pair exists.
- *
- * ⚠ The import is a CYCLE by construction (router-history reads
- * `demoMarketCandidate` to build the same row for the other 88 days) and it is
- * safe in both directions because neither module touches the other's bindings
- * while it is initialising: this function runs at call time, and
- * `router-history`'s own module body reads only `templates.ts`. `demoMarketRates`
- * is exported so a test can assert the substitution rather than infer it.
+ * So the two rates below are TYPED INPUTS, captured before the router existed,
+ * and every surface that prints from them labels the number `modeled` at the
+ * stored leverage. The MEASURED series lives in `lib/canvas/router-history.ts`
+ * and is what the router reads, day by day; every surface that prints the
+ * loop's rate FOR A DAY labels it `measured` with that day's date. Two numbers,
+ * two questions, two labels, and neither is re-typed to match the other
+ * (docs/plans/ROUTER_LANE_PLAN.md, G3).
  */
-export function demoMarketRates(): {
-  readonly date: string;
-  readonly collateralYieldApy: number;
-  readonly borrowApyMarginal: number;
-} {
-  const day = routerLastAlignedDay();
-  if (!day) throw new Error("router history has no aligned day: the demo row has no rates");
-  return {
-    date: day.date,
-    collateralYieldApy: day.loopRewardApr,
-    borrowApyMarginal: day.loopBorrowApy,
-  };
-}
+const DEMO_COLLATERAL_YIELD_APY = 0.044;
+const DEMO_BORROW_APY_MARGINAL = 0.035;
 
 export function demoMarketCandidate(): ProjectedCandidate {
-  const rates = demoMarketRates();
   const inputs: ProjectedCandidate = {
     id: DEMO_MARKET_ID,
     venue: "morpho-blue-base",
@@ -106,8 +87,8 @@ export function demoMarketCandidate(): ProjectedCandidate {
       capacityUsd: DEMO_CAPACITY_USD,
       capacityBinding: "modeled",
       fundingP25Apr: null,
-      collateralYieldApy: rates.collateralYieldApy,
-      borrowApyMarginal: rates.borrowApyMarginal,
+      collateralYieldApy: DEMO_COLLATERAL_YIELD_APY,
+      borrowApyMarginal: DEMO_BORROW_APY_MARGINAL,
       executionDragApr: EXEC_DRAG_UNHEDGED,
     },
     firstFailedGate: null,

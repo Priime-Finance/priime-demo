@@ -65,9 +65,11 @@ describe("POST /api/canvas/reprice", () => {
     expect(b).not.toBeNull();
     expect(a).toBeCloseTo(b ?? Number.NaN, 6);
     /* The vault number the header prints, from the one owner, with the fee
-       inside, and it is the ROUTER's own loop number, not a typed constant
-       (router lane WP-1, design item 1: one owner across the two frames). */
-    expect(a).toBe(routerPublishedToday()!.loop);
+       inside: the TYPED row at the seed leverage, 4.28%. It is deliberately
+       NOT the router's measured day (3.08%): two questions, two labels (G3),
+       and the rail must keep answering the canvas's one. */
+    expect(a).toBeCloseTo(0.0428, 4);
+    expect(a).not.toBe(routerPublishedToday()!.loop);
     expect((fromRail as Ok).candidate?.economics?.loopLeverage).toBeCloseTo(HERO_SEED_LEVERAGE, 6);
   });
 

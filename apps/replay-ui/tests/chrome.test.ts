@@ -161,27 +161,28 @@ describe("icon (1.7)", () => {
    print has one owner each, and the greps below are what stops a second copy
    of a figure or of a retired claim from landing beside it. */
 
-describe("the demo row's two rates are measured, not typed (item 1)", () => {
+describe("the demo row's two rates are typed inputs, and the row says so (G3)", () => {
   const src = read("lib/demo/market.ts");
-  it("carries no literal rate pair and reads the capture's own owner", () => {
-    /* Code only: the docblock NAMES the two retired literals, which is the
-       record of what moved and must stay readable. */
-    const code = src.split("\n").filter((l) => !l.trimStart().startsWith("*")).join("\n");
-    expect(code).not.toContain("0.044");
-    expect(code).not.toContain("0.035");
-    expect(code).not.toContain("DEMO_COLLATERAL_YIELD_APY");
-    expect(code).not.toContain("DEMO_BORROW_APY_MARGINAL");
-    expect(src).toContain('from "@/lib/canvas/router-history"');
-    expect(src).toContain("routerLastAlignedDay()");
-    expect(src).toContain("collateralYieldApy: rates.collateralYieldApy");
-    expect(src).toContain("borrowApyMarginal: rates.borrowApyMarginal");
+  it("carries the two named constants and reads no measured series", () => {
+    /* The substitution is reverted (item 8a): the row is the pair captured
+       before the router, the measured series stays in `router-history.ts`, and
+       the two answer different questions under different labels. This module
+       must not reach for the capture at all, or the two frames weld again. */
+    expect(src).toContain("const DEMO_COLLATERAL_YIELD_APY = 0.044;");
+    expect(src).toContain("const DEMO_BORROW_APY_MARGINAL = 0.035;");
+    expect(src).toContain("collateralYieldApy: DEMO_COLLATERAL_YIELD_APY");
+    expect(src).toContain("borrowApyMarginal: DEMO_BORROW_APY_MARGINAL");
+    expect(src).not.toContain('from "@/lib/canvas/router-history"');
+    expect(src).not.toContain("routerLastAlignedDay()");
   });
 });
 
 describe("the router is not advertised as a yield follower (item 2)", () => {
   it("prints the measured claim on the plate key and on both summaries", () => {
     const plate = read("components/canvas/OrchestratorPlate.tsx");
-    expect(plate).toContain("Hold the better lane");
+    /* `Best lane` (item 9): two words on a key with room for two. The claim is
+       the same measured one, a protection ratchet rather than a follower. */
+    expect(plate).toContain("Best lane");
     expect(plate).not.toMatch(/^\s+Follow yield$/m);
     const rack = read("components/canvas/RackCanvas.tsx");
     expect(rack).not.toContain("following modeled yield");

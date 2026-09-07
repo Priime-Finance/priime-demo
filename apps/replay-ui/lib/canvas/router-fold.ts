@@ -46,7 +46,8 @@
  *   the bar, the re-arm, the
  *   48 hours and the move size    `lib/canvas/orchestrator/demo-rules.ts`
  *   the risk-adjusted frame       `riskAdjUnified`, the shipped owner
- *   the concentration band        `clampConcentrationPct`
+ *   the band, the budget and the
+ *   whole-lane move weight        `lib/canvas/floor-pair.ts`
  *   the book the friction is
  *   quoted against                `DEMO_ROUTER_BOOK_USD`
  * Nothing below re-derives an APY, a threshold, a friction or a weight.
@@ -56,8 +57,8 @@
  * the rack lives in `RackCanvas` and no portfolio exists on the server for
  * this route to read. The two slots below are therefore built by hand, field
  * for field in the shape that builder produces, with the same derivations:
- * `maxWeight` from `clampConcentrationPct` at the slot count, `minWeight`
- * from B.5's `max(0, 1 - (N - 1) * maxWeight)`, `cls` from the row, and
+ * `maxWeight` and `minWeight` from `lib/canvas/floor-pair.ts` (the switch's
+ * own band, G1), `cls` from the row, and
  * `metrics` false on both axes because neither lane seats a perp leg. This
  * is the same slot pair `tests/router-backtest.test.ts` folds, so the route
  * and the quant's gate are measuring one portfolio.
@@ -90,17 +91,20 @@
 
 import { publishedNetApy, repriceAtLeverage } from "@/lib/canvas/mock-quote";
 import { marketKeyOf } from "@/lib/canvas/ids";
-import {
-  canonicalRules,
-  clampConcentrationPct,
-  riskAdjUnified,
-} from "@/lib/canvas/orchestrator";
+import { canonicalRules, riskAdjUnified } from "@/lib/canvas/orchestrator";
 import {
   DEMO_ROUTER_BOOK_USD,
   DEMO_SUSTAIN_PINS_DAILY,
+  DEMO_UPGRADE_THRESHOLD,
   demoDeriveAllRouterRules,
   validateDemoRouter,
 } from "@/lib/canvas/orchestrator/demo-rules";
+import {
+  FLOOR_PAIR_MAX_CONCENTRATION_PCT,
+  FLOOR_PAIR_MAX_WEIGHT,
+  FLOOR_PAIR_MIN_WEIGHT,
+  FLOOR_PAIR_TURNOVER_PCT_WEEK,
+} from "@/lib/canvas/floor-pair";
 import { decisionIdOf, unresolvedReferences } from "@/lib/canvas/orchestrator/attest";
 import { evaluateOrchestrator } from "@/lib/canvas/orchestrator/evaluate";
 import type { AttestedDecision } from "@/lib/canvas/orchestrator/types";
@@ -192,7 +196,7 @@ function whipsawSign(index: number): number {
   return sign;
 }
 
-const REGIME_TRANSFORM: Record<
+export const REGIME_TRANSFORM: Record<
   RegimeId,
   (rows: readonly RouterHistoryAlignedRow[]) => RouterHistoryAlignedRow[]
 > = {
@@ -286,18 +290,66 @@ interface RunAnswer {
   [k: string]: unknown;
 }
 
-export function foldRouterRun(regimeParam: string | null): RunAnswer {
-  const regime: RegimeId = isRegimeId(regimeParam) ? regimeParam : DEFAULT_REGIME;
-  const rows = REGIME_TRANSFORM[regime](ROUTER_HISTORY_ALIGNED);
+/**
+ * ONE FOLD, PARAMETERISED, so the gate and the product measure one machine.
+ *
+ * `foldRouterRun` is this function on the aligned window at the shipped bar.
+ * `tests/router-backtest.test.ts` is this function on a chosen window at a
+ * chosen bar, which is what makes the sensitivity table (G2) a measurement of
+ * the SHIPPED evaluator rather than of a hand fold that happens to agree with
+ * it on three regimes out of four. The tick builder lives here and there is
+ * only one of it.
+ */
+export interface RouterScenarioFold {
+  regime: RegimeId;
+  /** One `YYYY-MM-DD` per tick, in tick order. */
+  days: string[];
+  /** The two published series over those days, fee inside. */
+  loopPublishedApy: number[];
+  floorPublishedApy: number[];
+  loopCapacityUsd: number[];
+  cfg: OrchestratorConfig;
+  result: ReturnType<typeof evaluateOrchestrator>;
+  scenarioHash: string;
+  orchestratedTvlUsd: number;
+  /** The observation hashes this run minted, for the reference check. */
+  observations: Map<string, { slotId: string; tick: number }>;
+  settlementDays: number;
+}
+
+export function foldRouterScenario(args: {
+  regime: RegimeId;
+  /** Defaults to the whole aligned window. A shorter window is a WINDOW, not
+   *  a different history: the transforms are date-anchored, so a regime is the
+   *  same event on the same calendar in both. */
+  rows?: readonly RouterHistoryAlignedRow[];
+  /** Defaults to the shipped bar. Any other value is a sensitivity fold and
+   *  the caller states which window it was folded over (F7). */
+  bar?: number;
+}): RouterScenarioFold {
+  const regime = args.regime;
+  const bar = args.bar ?? DEMO_UPGRADE_THRESHOLD;
+  const rows = REGIME_TRANSFORM[regime](args.rows ?? ROUTER_HISTORY_ALIGNED);
 
   const loopBase = demoMarketCandidate();
   if (!FLOOR_ROW) throw new Error(`the floor row ${ROUTER_FLOOR_CANDIDATE_ID} is not in TREASURY_CANDIDATES`);
 
   // ── The slots ───────────────────────────────────────────────────────────
-  const dials = clampOrchDials(ORCH_DIAL_DEFAULTS);
-  const slotCount = 2;
-  const maxWeight = clampConcentrationPct(dials.maxConcentrationPct, slotCount) / 100;
-  const minWeight = Math.max(0, 1 - (slotCount - 1) * maxWeight);
+  /* THE SWITCH'S OWN BAND AND BUDGET (G1). The pair is banded [0, 1] so a
+     firing can evacuate a lane and rebuild it, the concentration dial states
+     the same ceiling the band carries, and the weekly budget admits exactly
+     ONE full move: a second inside the same seven ticks is refused by the
+     budget rather than sized down. All four numbers come from
+     `lib/canvas/floor-pair.ts`; nothing here retypes one, and
+     `clampConcentrationPct` is deliberately NOT applied to the published
+     ceiling, because clamping it would put the dial back inside a range the
+     slots no longer obey. */
+  const dials = clampOrchDials({
+    ...ORCH_DIAL_DEFAULTS,
+    turnoverBudgetPctWeek: FLOOR_PAIR_TURNOVER_PCT_WEEK,
+  });
+  const maxWeight = FLOOR_PAIR_MAX_WEIGHT;
+  const minWeight = FLOOR_PAIR_MIN_WEIGHT;
   const slots: LoopSlot[] = [
     {
       slotId: LOOP_SLOT,
@@ -338,13 +390,13 @@ export function foldRouterRun(regimeParam: string | null): RunAnswer {
      the lane-count clamp on the published dial, is that builder's line for
      line. `validateDemoRouter` then re-checks every invariant and clears R38
      only after re-deriving from the same pure function. */
-  const rules = demoDeriveAllRouterRules(dials, slots, DEMO_SUSTAIN_PINS_DAILY);
+  const rules = demoDeriveAllRouterRules(dials, slots, DEMO_SUSTAIN_PINS_DAILY, bar);
   const cfg: OrchestratorConfig = {
     v: 1,
     loops: [...slots].sort((a, b) => a.slotId.localeCompare(b.slotId)),
     dials: {
       ...dials,
-      maxConcentrationPct: clampConcentrationPct(dials.maxConcentrationPct, slotCount),
+      maxConcentrationPct: FLOOR_PAIR_MAX_CONCENTRATION_PCT,
     },
     rules,
     /* THE SHIPPED OWNER, awaited. `rulesHash` is the Web Crypto sha-256 over
@@ -354,7 +406,7 @@ export function foldRouterRun(regimeParam: string | null): RunAnswer {
        match anything else in the product. */
     rulesHash: rulesHashSync(rules),
   };
-  const violations = validateDemoRouter(cfg, DEMO_SUSTAIN_PINS_DAILY);
+  const violations = validateDemoRouter(cfg, DEMO_SUSTAIN_PINS_DAILY, bar);
   if (violations.length > 0) {
     throw new Error(
       `the replay's config violates ${violations.length} invariants: ${violations[0]?.invariant}: ${violations[0]?.detail}`,
@@ -491,6 +543,33 @@ export function foldRouterRun(regimeParam: string | null): RunAnswer {
   }
 
   return {
+    regime,
+    days,
+    loopPublishedApy: laneSeries.carryPublishedApy,
+    floorPublishedApy: laneSeries.floorPublishedApy,
+    loopCapacityUsd: laneSeries.carryCapacityUsd,
+    cfg,
+    result,
+    scenarioHash,
+    orchestratedTvlUsd,
+    observations,
+    settlementDays,
+  };
+}
+
+export function foldRouterRun(regimeParam: string | null): RunAnswer {
+  const regime: RegimeId = isRegimeId(regimeParam) ? regimeParam : DEFAULT_REGIME;
+  const fold = foldRouterScenario({ regime });
+  const { cfg, result, days, scenarioHash, orchestratedTvlUsd, settlementDays } = fold;
+  const loopBase = demoMarketCandidate();
+  if (!FLOOR_ROW) throw new Error(`the floor row ${ROUTER_FLOOR_CANDIDATE_ID} is not in TREASURY_CANDIDATES`);
+  const laneSeries = {
+    carryPublishedApy: fold.loopPublishedApy,
+    floorPublishedApy: fold.floorPublishedApy,
+    carryCapacityUsd: fold.loopCapacityUsd,
+  };
+
+  return {
     ok: true,
     modeled: true,
     days,
@@ -499,7 +578,7 @@ export function foldRouterRun(regimeParam: string | null): RunAnswer {
     scenario: {
       hash: scenarioHash,
       seed: 0,
-      ticks: ticks.length,
+      ticks: days.length,
       /* The capture instant, verbatim from its owner. This is what the panel
          prints where a generated run would print a seed. */
       calibratedTo: ROUTER_HISTORY_CAPTURED_AT,
@@ -516,7 +595,7 @@ export function foldRouterRun(regimeParam: string | null): RunAnswer {
       {
         slotId: LOOP_SLOT,
         candidateId: DEMO_MARKET_ID,
-        venue: slots[0].venue,
+        venue: cfg.loops.find((l) => l.slotId === LOOP_SLOT)?.venue ?? "",
         /* The book, as the row names it. */
         book: loopBase.pair ?? "USDe/USDC",
         capacityUsd: loopBase.economics?.capacityUsd ?? 0,
@@ -526,7 +605,7 @@ export function foldRouterRun(regimeParam: string | null): RunAnswer {
       {
         slotId: FLOOR_SLOT,
         candidateId: ROUTER_FLOOR_CANDIDATE_ID,
-        venue: slots[1].venue,
+        venue: cfg.loops.find((l) => l.slotId === FLOOR_SLOT)?.venue ?? "",
         /* Plan R1's lane label, which is what a reader calls this lane. The
            row's own `collateralSymbol` is the receipt token, aUSDC, and the
            band key is a lane key rather than a token key. */

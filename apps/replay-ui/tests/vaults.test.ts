@@ -36,8 +36,13 @@ import {
   strikeDueAt,
   type DepositRequest,
 } from "@/lib/vaults/requests";
-import { DEMO_MARKET_ID, HERO_SEED_LEVERAGE, demoMarketRates } from "@/lib/demo/market";
+import { publishedNetApy, repriceAtLeverage } from "@/lib/canvas/mock-quote";
+import { DEMO_MARKET_ID, HERO_SEED_LEVERAGE, demoMarketCandidate } from "@/lib/demo/market";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
+import {
+  FLOOR_PAIR_MAX_CONCENTRATION_PCT,
+  FLOOR_PAIR_MOVE_WEIGHT,
+} from "@/lib/canvas/floor-pair";
 import { heroNavUsd } from "@/lib/vaults/rows";
 import { onchainExecutionsFor } from "@/lib/vaults/onchain-executions";
 import { SEED_SLUGS, SEED_VAULTS } from "@/lib/vaults/seeds";
@@ -324,17 +329,16 @@ describe("the vault", () => {
   it("prices through the live owners at the seed leverage, with the fee inside", () => {
     const hero = heroRecord();
     expect(hero.appliedLeverage).toBe(HERO_SEED_LEVERAGE);
-    /* THE HERO PRICES THROUGH THE MEASURED ROW, and so does the router, so
-       this is asserted against the router's own owner rather than against a
-       literal, and by identity rather than inside a band:
-       `routerPublishedToday().loop` IS `publishedNetApy` on the demo row at
-       `HERO_SEED_LEVERAGE`, which is the same call `heroRecord` makes. The
-       retired pin was `|modeledApy - 0.043| < 0.0005`, the typed row's
-       number in a tolerance wide enough to hide a frame change; holding it
-       again after the substitution would pin the page to a frame the product
-       has left. `tests/mock-quote.test.ts` asserts the other end of the same
-       weld. */
-    expect(hero.modeledApy).toBe(routerPublishedToday()!.loop);
+    /* THE HERO PRICES THE TYPED ROW AT THE STORED LEVERAGE (G3), through the
+       same owner the canvas calls, and it is deliberately NOT the router's
+       measured day: two numbers, two questions, two labels. The identity is
+       asserted against the owner rather than a literal so the pin follows the
+       row; the inequality is asserted too, because the defect this ruling
+       replaced was a page welding the two into one frame. */
+    expect(hero.modeledApy).toBe(
+      publishedNetApy(repriceAtLeverage(demoMarketCandidate(), HERO_SEED_LEVERAGE), false),
+    );
+    expect(hero.modeledApy).not.toBe(routerPublishedToday()!.loop);
     expect(hero.stage).toBe("attested");
     expect(vaultStage(hero)).toBe("attested");
     expect(hero.register).toBe("sample");
@@ -575,22 +579,28 @@ describe("a card's venue line", () => {
 });
 
 describe("the hero record's two rates are labelled by how they were obtained", () => {
-  /* Design item 22. The row said `Collateral yield, typed` while the value
-     had become the capture's own last aligned day (item 1), so the page
-     called a measured rate typed. The pins read the owner, never a literal. */
-  it("says measured, at the precision the capture carries, with its provenance", () => {
+  /* Design item 22, re-ruled by G3. The rates are TYPED INPUTS again, so the
+     rows say typed and the third row points at the measured series they are
+     not drawn from. The pins read the owner, never a literal. */
+  it("says typed, at the precision the row carries, beside the measured series", () => {
     const rows = heroRecord().params;
-    const rates = demoMarketRates();
-    expect(rows.find((r) => r.label === "Collateral yield, measured")?.value).toBe(
-      `${(rates.collateralYieldApy * 100).toFixed(2)}%`,
+    const e = demoMarketCandidate().economics;
+    expect(rows.find((r) => r.label === "Collateral yield, typed")?.value).toBe(
+      `${((e?.collateralYieldApy ?? 0) * 100).toFixed(2)}%`,
     );
-    expect(rows.find((r) => r.label === "Borrow rate, measured")?.value).toBe(
-      `${(rates.borrowApyMarginal * 100).toFixed(2)}%`,
+    expect(rows.find((r) => r.label === "Borrow rate, typed")?.value).toBe(
+      `${((e?.borrowApyMarginal ?? 0) * 100).toFixed(2)}%`,
     );
-    expect(rows.find((r) => r.label === "Rates measured")?.value).toBe(
+    expect(rows.find((r) => r.label === "Measured series")?.value).toBe(
       `${ROUTER_MEASURED_ON} · ${ROUTER_HISTORY_SOURCES.loopReward.provider}`,
     );
-    for (const r of rows) expect(r.label).not.toContain("typed");
+    /* The hero prices the TYPED row at the seed leverage, and it is 4.3%: the
+       one live workflow the demo is built around (Install defaults seats
+       Dynamic leverage at 2.50x) depends on this row supporting leverage. */
+    expect(publishedNetApy(repriceAtLeverage(demoMarketCandidate(), HERO_SEED_LEVERAGE), false)).toBeCloseTo(
+      0.0428,
+      3,
+    );
   });
 });
 
@@ -640,20 +650,20 @@ describe("deriveAutomations seats the router on two lanes and a rule, never on o
         lanes: ROUTED_LANES,
         thresholdApy: DEMO_UPGRADE_THRESHOLD,
         sustainHours: DEMO_SUSTAIN_HOURS,
-        moveWeight: DEMO_ROUTER_MOVE_WEIGHT,
-        maxConcentrationPct: 60,
+        moveWeight: FLOOR_PAIR_MOVE_WEIGHT,
+        maxConcentrationPct: FLOOR_PAIR_MAX_CONCENTRATION_PCT,
       }),
     );
     expect(line).toContain("USDC lending");
     expect(line).toContain(`${DEMO_SUSTAIN_HOURS} hours`);
-    // The verb is `move` and the size travels with it (design item 11).
-    expect(line.startsWith("Moves ")).toBe(true);
-    /* THE SENTENCE STATES THE CLAMPED MOVE, not the dial. Found in a browser:
-       the first pass typed `moveWeight` here and printed `Moves 12.5pp` four
-       lines above `Max move · 10.0pp` on one page. */
-    expect(line).toContain("Moves 10.0pp of the book");
+    /* THE FOUNDER'S OWN SENTENCE (item 5): everything moves, the bar and the
+       window are named, and the rebuild is the same rule read from the other
+       end. No size clause, because the move is the whole lane. */
+    expect(line.startsWith("Moves everything to ")).toBe(true);
+    expect(line).toContain("rebuilds the");
+    expect(line).not.toContain("of the book");
     expect(line).not.toContain("12.5pp");
-    for (const banned of ["relocat", "unwinds and relocates", "moves the capital to"]) {
+    for (const banned of ["moves the capital to", "follows the yield"]) {
       expect(line.toLowerCase()).not.toContain(banned);
     }
   });
@@ -696,17 +706,17 @@ describe("the router vocabulary names one machine once", () => {
 describe("the measured replay is the quant's, to the day and to the weight", () => {
   const replay = measuredRouterReplay();
 
-  it("folds one move, on 2026-06-12, loop to floor, 10.0pp of the book", () => {
+  it("folds one move, on 2026-06-12, loop to floor, the whole lane", () => {
     expect(replay.days).toBe(89);
     expect(replay.moves).toHaveLength(1);
     const m = replay.moves[0]!;
     expect(m.date).toBe("2026-06-12");
     expect(m.source).toBe("loop");
     expect(m.dest).toBe("floor");
-    // 12.5pp at the dials, clamped to 10.0pp by the 40% concentration floor.
-    expect(m.weightFrac).toBeCloseTo(0.1, 9);
-    expect(m.weightFrac).toBeLessThan(DEMO_ROUTER_MOVE_WEIGHT);
-    expect(replay.endWeights).toEqual({ loop: 0.4, floor: 0.6 });
+    /* THE SWITCH (G1): the source ends at zero and the floor holds the book.
+       50.0pp out of an even split, which is the whole lane, not a band shift. */
+    expect(m.weightFrac).toBeCloseTo(0.5, 9);
+    expect(replay.endWeights).toEqual({ loop: 0, floor: 1 });
   });
 
   it("today the loop leads, so the clock is empty and nothing is armed", () => {
@@ -729,10 +739,12 @@ describe("the measured replay is the quant's, to the day and to the weight", () 
 });
 
 describe("the ledger's relocation rows", () => {
-  it("state the size with the verb and name both ends", () => {
+  it("name both ends and the gap that fired the move", () => {
+    /* Item 5: the direction and the gap. The size clause is gone because the
+       action word already states it: the whole lane relocated. */
     const detail = routerMoveDetail(measuredRouterReplay().moves[0]!, ROUTED_LANES);
-    expect(detail).toBe("10.0pp of the book, loop to USDC lending on Aave v3 Base");
-    expect(RELOCATION_ACTION).toBe("Weight moved");
+    expect(detail).toBe("Leveraged loop to USDC lending, +10.66pp");
+    expect(RELOCATION_ACTION).toBe("Capital relocated");
   });
 
   it("carry no transaction, so the Verify cell is empty rather than a dead key", () => {

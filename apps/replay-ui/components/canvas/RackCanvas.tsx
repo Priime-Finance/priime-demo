@@ -170,7 +170,7 @@ import { deriveLaneSignals, dialsFromParams, ORCHESTRATOR_DEF, slotsFromPortfoli
    initialization`. Kept directly under the orchestrator import so the order is
    stated rather than accidental. The cycle itself is not WP-1's to unpick. */
 import { publishedRouter, type PublishedLane } from "@/lib/canvas/published-lanes";
-import { measuredRateRows } from "@/lib/canvas/router-history";
+import { typedRateRows } from "@/lib/canvas/router-history";
 import CopilotPanel from "./CopilotPanel";
 import {
   discoverAbsence,
@@ -1817,6 +1817,11 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
    * `netApy` is the lane's display number, `hasMarket` is whether a market is
    * pinned at all, and `repricing` is the same per-lane flag the plates read.
    */
+  /* THE SLOTS THE VALIDATOR SEES. The plate draws `minWeight` and `maxWeight`
+     off these, so the tick on an allocation bar is the bound
+     `validateOrchestrator` enforces rather than a second opinion about it. */
+  const orchSlots = useMemo(() => slotsFromPortfolio(portfolio), [portfolio]);
+
   const orchSignals: LaneSignal[] = useMemo(
     () =>
       deriveLaneSignals(
@@ -1827,16 +1832,15 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
           netApy: l.netApy,
           hasMarket: !!l.p.candidateId,
           repricing: repricing[l.loop.id] ?? false,
+          /* THE SLOT'S OWN SCREEN (item 8b), never a house floor: a lane is
+             drying when it falls under the screen it was ADMITTED through, and
+             neither demo lane was screened at all. */
+          screenedAtApy: orchSlots.find((s) => s.slotId === l.loop.id)?.screenedAtApy ?? null,
         })),
         portfolio.orchestrator.allocationsBps,
       ),
-    [laneComputed, portfolio.orchestrator.allocationsBps, repricing],
+    [laneComputed, portfolio.orchestrator.allocationsBps, repricing, orchSlots],
   );
-
-  /* THE SLOTS THE VALIDATOR SEES. The plate draws `minWeight` and `maxWeight`
-     off these, so the tick on an allocation bar is the bound
-     `validateOrchestrator` enforces rather than a second opinion about it. */
-  const orchSlots = useMemo(() => slotsFromPortfolio(portfolio), [portfolio]);
   const orchDials = useMemo(
     () => dialsFromParams(portfolio.orchestrator.params),
     [portfolio.orchestrator.params],
@@ -2152,7 +2156,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                are the capture's own last aligned day since item 1, and the
                three rows are owned beside that capture so this site and
                `lib/vaults/hero.ts` cannot spell them differently. */
-            measuredRateRows(
+            typedRateRows(
               first.ok.candidate.economics.collateralYieldApy,
               first.ok.candidate.economics.borrowApyMarginal,
             )
@@ -3660,7 +3664,6 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                     signals={orchSignals}
                     bands={orchBands}
                     route={orchRoute}
-                    turnoverCeiling={orchDials.turnoverBudgetPctWeek / 100}
                     params={portfolio.orchestrator.params}
                     focused={focus?.kind === "orchestrator"}
                     snap={snapKeys.has("orchestrator")}

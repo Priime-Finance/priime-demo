@@ -413,6 +413,11 @@
 .vxc-val{font-family:var(--font-mono,ui-monospace);font-weight:600;white-space:nowrap}
 .vxc-arr{color:var(--vx-faint)}
 .vxc-act{font-weight:600;text-align:right}
+/* THE PAYBACK LOCK'S OWN LINE, under the cascade. Same annotation register
+   as every other italic note on this page (`.vx-spark-note`, `.vx-dep-note`):
+   the serif italic at --vx-faint, which is redefined in the dark block, so
+   this follows the theme without a twin. */
+.vxc-note{font-family:var(--vx-ser);font-style:italic;font-size:11.5px;color:var(--vx-faint);margin-top:8px}
 /* THE LIQUIDATION VERDICT, first group in the register. `.vxv-h` is
    `.vx-kv--prose b`'s prose register at `.vx-kv`'s own size — the page's
    existing statement-sentence type, not a new one. The blind value drops to

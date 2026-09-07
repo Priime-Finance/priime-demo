@@ -36,11 +36,15 @@
  */
 
 import {
-  DEMO_ROUTER_MOVE_WEIGHT,
   DEMO_SUSTAIN_HOURS,
   DEMO_UPGRADE_REARM,
   DEMO_UPGRADE_THRESHOLD,
 } from "@/lib/canvas/orchestrator/demo-rules";
+import {
+  FLOOR_PAIR_MAX_CONCENTRATION_PCT,
+  FLOOR_PAIR_MOVE_WEIGHT,
+  FLOOR_PAIR_TURNOVER_PCT_WEEK,
+} from "@/lib/canvas/floor-pair";
 import type { OrchestratorDials } from "@/lib/canvas/orchestrator/types";
 import { routerRuleSentence, type PublishedLane, type PublishedRouter } from "@/lib/vaults/store";
 
@@ -50,31 +54,36 @@ export type { PublishedLane, PublishedRouter };
  * The router block for a published record, or null when no router is on.
  *
  * `dials` is the SAME object the plate and the validator read
- * (`dialsFromParams`), and `lanes` is the array the record itself carries, so
- * the record cannot describe a router over lanes the canvas did not show, and
- * the sentence cannot name a size the `Max move` row disagrees with:
- * `routerRuleSentence` derives the size from these same lanes and this same
- * concentration cap through `routerMaxMoveFrac`.
+ * (`dialsFromParams`) and supplies the reactivity; the three numbers the
+ * switch owns come from `lib/canvas/floor-pair.ts`, which is also what the
+ * replay folds, so the record cannot describe a machine the run does not
+ * have. `lanes` is the array the record itself carries.
  */
 export function publishedRouter(
   dials: OrchestratorDials,
   lanes: readonly PublishedLane[],
 ): PublishedRouter | null {
   if (lanes.length < 2) return null;
+  /* THE RECORD PUBLISHES THE SWITCH'S OWN THREE NUMBERS (G1), not the
+     reactivity dial's siblings: between a lane and its floor the band is
+     [0, 1], one firing carries the whole lane, and the week admits one full
+     move. `reactivity` is still the user's, because it scales the cooldown and
+     the cooldown is unchanged. A record that published a 60% ceiling over a
+     machine that evacuates would state a policy the vault does not keep. */
   return {
     reactivity: dials.reactivity,
-    maxConcentrationPct: dials.maxConcentrationPct,
-    turnoverBudgetPctWeek: dials.turnoverBudgetPctWeek,
+    maxConcentrationPct: FLOOR_PAIR_MAX_CONCENTRATION_PCT,
+    turnoverBudgetPctWeek: FLOOR_PAIR_TURNOVER_PCT_WEEK,
     ruleSentence: routerRuleSentence({
       lanes,
       thresholdApy: DEMO_UPGRADE_THRESHOLD,
       sustainHours: DEMO_SUSTAIN_HOURS,
-      moveWeight: DEMO_ROUTER_MOVE_WEIGHT,
-      maxConcentrationPct: dials.maxConcentrationPct,
+      moveWeight: FLOOR_PAIR_MOVE_WEIGHT,
+      maxConcentrationPct: FLOOR_PAIR_MAX_CONCENTRATION_PCT,
     }),
     thresholdApy: DEMO_UPGRADE_THRESHOLD,
     rearmApy: DEMO_UPGRADE_REARM,
     sustainHours: DEMO_SUSTAIN_HOURS,
-    moveWeight: DEMO_ROUTER_MOVE_WEIGHT,
+    moveWeight: FLOOR_PAIR_MOVE_WEIGHT,
   };
 }

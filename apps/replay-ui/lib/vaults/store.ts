@@ -462,6 +462,10 @@ export interface RouterAutomation {
   moveWeight: number;
   /** The concentration cap, percent of the book on one lane. */
   maxConcentrationPct: number;
+  /** The weekly turnover budget, percent of the book. Under the switch it is
+   *  the bound that still binds: one full move per week, and the second is
+   *  refused rather than sized down. */
+  turnoverBudgetPctWeek: number;
   /** The rule in the depositor's words, one sentence. */
   ruleSentence: string;
 }
@@ -1537,6 +1541,8 @@ export function deriveAutomations(v: AutomationSource): VaultAutomations {
     const moveWeight = finite(r.moveWeight) ?? DEMO_ROUTER_MOVE_WEIGHT;
     const maxConcentrationPct =
       finite(r.maxConcentrationPct) ?? ORCH_DIAL_DEFAULTS.maxConcentrationPct;
+    const turnoverBudgetPctWeek =
+      finite(r.turnoverBudgetPctWeek) ?? ORCH_DIAL_DEFAULTS.turnoverBudgetPctWeek;
     router = {
       lanes,
       thresholdApy,
@@ -1544,6 +1550,7 @@ export function deriveAutomations(v: AutomationSource): VaultAutomations {
       sustainHours,
       moveWeight,
       maxConcentrationPct,
+      turnoverBudgetPctWeek,
       ruleSentence:
         typeof r.ruleSentence === "string" && r.ruleSentence.trim()
           ? r.ruleSentence.trim()
@@ -1568,11 +1575,17 @@ export function deriveAutomations(v: AutomationSource): VaultAutomations {
  * without the field gets. Two spellings of one rule is how a vault page and
  * the review sheet that published it come to describe different machines.
  *
- * THE VERB IS `move`, and the SIZE TRAVELS WITH IT. The mechanism shifts
- * weight inside the published concentration band and cannot empty a lane, so
- * `relocates`, `unwinds and relocates` and `moves the capital to` are not
- * available: they all claim a lane is emptied. `move` plus `Np of the book`
- * is the claim the arithmetic supports.
+ * THE VERB IS `moves everything`, AND IT IS NOW TRUE (G1). It used to be
+ * `moves Np of the book`, because the mechanism shifted weight inside a
+ * concentration band and could not empty a lane. Between a lane and its floor
+ * it now evacuates and rebuilds: one firing carries the whole lane, the band
+ * is [0, 1], and the measured replay leaves the loop at exactly zero. So the
+ * sentence says what the machine does, in the founder's own words, and the
+ * size clause goes because there is no longer a size to state: it is all of it.
+ *
+ * The payback lock is NOT in this sentence. It is its own line wherever the
+ * rule renders, because a clause about when the way back opens does not belong
+ * inside a sentence about when the way out fires.
  */
 export function routerRuleSentence(r: {
   lanes: readonly PublishedLane[];
@@ -1590,25 +1603,24 @@ export function routerRuleSentence(r: {
      word, for the plan's own lane labels and for a name the builder typed. */
   const dest = r.lanes[1]?.label ?? "other";
   const source = r.lanes[0]?.label ?? "first";
-  const size = `${(routerMaxMoveFrac(r) * 100).toFixed(1)}pp`;
   const bar = `${(r.thresholdApy * 100).toFixed(2)}pp`;
-  return `Moves ${size} of the book to the ${dest} lane when it has paid more than the ${source} lane for ${r.sustainHours} hours by at least ${bar}, and back the same way.`;
+  return `Moves everything to ${dest} when it has paid at least ${bar} more than the ${source} for ${r.sustainHours} hours; rebuilds the ${source} the same way.`;
 }
 
 /**
  * THE MOVE THIS BOOK CAN ACTUALLY MAKE, and the one owner of it.
  *
- * `moveWeight` is the DIAL: 12.5pp of the book at the defaults. The
- * concentration band refuses most of it, because a book sitting at its target
- * weight can only travel as far as the band's edge: two lanes under a 60% cap
- * run 40% to 60%, and 60% minus a 50% target is 10pp. The quant measured the
- * one move in the history at exactly 10.0pp for this reason.
+ * A lane can give at most the weight it holds and a peer can take at most the
+ * room under its ceiling, so the move is `min(moveWeight, max - target,
+ * target - min)`. Under the switch (G1) the band is [0, 1] and the rule asks
+ * for the whole lane, so from an even split this is 50pp of the book and the
+ * source ends at zero: the same 50.0pp the measured replay's one decision
+ * records. Under the shipped band it was 10pp against a 12.5pp dial.
  *
- * IT LIVES HERE BECAUSE THREE SURFACES PRINT IT: the rule sentence, the
- * instrument's cascade and foot, and the Parameters row. The first shipped
- * pass computed it in two of the three and typed the dial into the sentence,
- * so one page said `Moves 12.5pp` four lines above `Max move · 10.0pp`. Found
- * in the browser, not by a test, which is why the arithmetic is one call now.
+ * IT LIVES HERE BECAUSE THE PARAMETERS ROW AND THE REPLAY BOTH STATE IT, and
+ * an earlier pass computed it twice and typed the dial into the sentence, so
+ * one page said `Moves 12.5pp` four lines above `Max move · 10.0pp`. Found in
+ * the browser, not by a test, which is why the arithmetic is one call.
  */
 export function routerMaxMoveFrac(r: {
   lanes: readonly PublishedLane[];

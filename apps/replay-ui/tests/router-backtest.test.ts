@@ -1,30 +1,36 @@
 /**
- * THE ROUTER BACKTEST, AS A GATE.
+ * THE ROUTER BACKTEST, AS A GATE, FOLDED THROUGH THE SHIPPED EVALUATOR.
  *
- * It folds the measured 90 days and each of the plan's three stress regimes
- * through the SAME machine the route will run: `demoRouterRules` for the rule
- * set, `advanceRuleState` for the streak and the hysteresis, `sizeMove` and
- * `applyMove` for the transfer, `lockReverseEdge` for the anti-cycle,
- * `paybackMs` for the horizon gate, and the two published series out of
- * `router-history.ts`. Nothing here re-derives an APY, a threshold or a
- * friction: every one of them has an owner and this file imports it.
+ * ══ WHAT CHANGED, AND WHY IT MATTERS (G2, G3 of the quant seam) ═══════════
  *
- * The one thing it does restate is the two-line breach test, because
- * `evaluate.ts` is not in this app yet (plan WP-2 ports it verbatim). It is
- * the live file's own lines, `lib/canvas/orchestrator/evaluate.ts:304-305`:
+ * This file used to be a HAND FOLD: it walked the days itself over
+ * `advanceRuleState`, `applyMove` and the edge locks, and it restated
+ * `evaluate.ts`'s two-line breach predicate because the evaluator was not in
+ * the app yet. That produced two answers to "how many moves did the measured
+ * 90 days take" — five against three on `whipsaw` — because a hand fold does
+ * not rank a destination through `selectDestination`, gate a firing on
+ * payback, or lock a reverse edge until the last move has paid back.
  *
- *     if (!Number.isFinite(improvement)) return { breaching: false, safeSide: true };
- *     return { breaching: improvement >= rule.threshold, safeSide: improvement <= rule.rearmLevel };
+ * It now folds `foldRouterScenario` (`lib/canvas/router-fold.ts`), which is
+ * the SAME call `GET /api/canvas/orchestrate` and the vault page's Capital
+ * router instrument make, over the same ticks, with the window and the bar as
+ * parameters. There is one machine and this file measures it. Nothing here
+ * restates a predicate the evaluator owns: the sustain is asserted off the
+ * decision's own `streakAtFire`, the churn refusal off its own `firings`
+ * against `moves`, and the friction off the decision's own `cost.oneShotUsd`.
  *
- * SEAM, stated: when WP-2 lands `evaluate.ts`, this fold must call it rather
- * than keep its own copy.
+ * ── THE ROUTED BOOK, AND THE ONE CONVENTION IT NEEDS ─────────────────────
+ * `earningWeightByTick` is recorded AFTER a tick's moves are applied, so the
+ * yield for day i accrues on the weights day i-1 left behind. A move decided
+ * on today's observation cannot have earned today's rate.
  */
 
 import { describe, expect, it } from "vitest";
 
-import { publishedNetApy, repriceAtLeverage } from "@/lib/canvas/mock-quote";
-
 import {
+  DEMO_BAR_ONE_WAY_BREAKEVEN,
+  DEMO_BAR_REGISTER_FLOOR,
+  DEMO_BAR_ROUND_TRIP_BREAKEVEN,
   DEMO_MOVE_FRICTION_FRAC_ONE_WAY,
   DEMO_MOVE_GAS_ACTIONS,
   DEMO_MOVE_GAS_FRAC,
@@ -32,6 +38,7 @@ import {
   DEMO_ROUTER_BOOK_USD,
   DEMO_ROUTER_MOVED_USD,
   DEMO_ROUTER_MOVE_WEIGHT,
+  DEMO_ROUTER_RELAXATIONS,
   DEMO_ROUTER_SWAP_NOTIONAL_USD,
   DEMO_SUSTAIN_HOURS,
   DEMO_SUSTAIN_PINS_DAILY,
@@ -41,24 +48,34 @@ import {
   demoDeriveAllRouterRules,
   demoExitProfile,
   demoRouterRules,
+  isFloorPairSlot,
   validateDemoRouter,
 } from "@/lib/canvas/orchestrator/demo-rules";
 import {
+  FLOOR_PAIR_MAX_CONCENTRATION_PCT,
+  FLOOR_PAIR_MAX_WEIGHT,
+  FLOOR_PAIR_MIN_WEIGHT,
+  FLOOR_PAIR_MOVE_WEIGHT,
+  FLOOR_PAIR_TURNOVER_PCT_WEEK,
+  isDemoFloorPair,
+} from "@/lib/canvas/floor-pair";
+import {
   MOVE_FRICTION_FRAC_SAME_CHAIN,
+  MOVE_WEIGHT_CAP,
   PAYBACK_HORIZON_DAYS,
-  advanceRuleState,
-  applyMove,
   chainOfVenue,
-  edgeLocked,
-  initialRuleState,
-  lockReverseEdge,
   paybackMs,
   rulesHash,
   sizeMove,
 } from "@/lib/canvas/orchestrator/rule-schema";
-import type { LoopSlot, OrchRule, OrchRuleState } from "@/lib/canvas/orchestrator/types";
-import type { EdgeLockState } from "@/lib/canvas/orchestrator/rule-schema";
+import type { LoopSlot } from "@/lib/canvas/orchestrator/types";
 import { ORCH_DIAL_DEFAULTS } from "@/lib/canvas/param-schema";
+import {
+  ROUTER_FLOOR_SLOT,
+  ROUTER_LOOP_SLOT,
+  foldRouterRun,
+  foldRouterScenario,
+} from "@/lib/canvas/router-fold";
 import {
   ROUTER_HISTORY,
   ROUTER_HISTORY_ALIGNED,
@@ -67,22 +84,23 @@ import {
   floorPublishedApyByDay,
   floorRowForRate,
   loopPublishedApyByDay,
-  loopRowForDay,
   routerPublishedToday,
   type RouterHistoryAlignedRow,
 } from "@/lib/canvas/router-history";
-import { TREASURY_CANDIDATES, treasuryIssuerFacts } from "@/lib/canvas/templates";
+import { REGIME_IDS, type RegimeId } from "@/lib/canvas/scenario/regime-ids";
+import {
+  TREASURY_CANDIDATES,
+  issuerRedemptionTerms,
+  settlementDaysOf,
+  treasuryIssuerFacts,
+} from "@/lib/canvas/templates";
 import { DEMO_MARKET_ID, HERO_SEED_LEVERAGE } from "@/lib/demo/market";
 import { ONCHAIN_EXECUTIONS } from "@/lib/vaults/onchain-executions";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TVL = DEMO_ROUTER_BOOK_USD;
-const LOOP = "loop";
-const FLOOR = "floor";
-
-const MAX_WEIGHT = ORCH_DIAL_DEFAULTS.maxConcentrationPct / 100;
-/** The B.5 derivation: `max(0, 1 - (N - 1) * maxWeight)` at N = 2. */
-const MIN_WEIGHT = Math.max(0, 1 - 1 * MAX_WEIGHT);
+const LOOP = ROUTER_LOOP_SLOT;
+const FLOOR = ROUTER_FLOOR_SLOT;
 
 function slot(slotId: string, venue: string, candidateId: string): LoopSlot {
   return {
@@ -92,15 +110,14 @@ function slot(slotId: string, venue: string, candidateId: string): LoopSlot {
     marketKey: candidateId,
     cls: "N1",
     targetWeight: 0.5,
-    minWeight: MIN_WEIGHT,
-    maxWeight: MAX_WEIGHT,
-    /* NULL, and it is load-bearing. `ECON_FLOOR_APY` is the levered-loop SCAN
-       gate and this market never passed through one: the scan snapshot lists
-       it under `ineligible` (lib/demo/market.ts). Handing it a screen it was
-       never admitted through would leave an evacuation rule permanently
+    minWeight: FLOOR_PAIR_MIN_WEIGHT,
+    maxWeight: FLOOR_PAIR_MAX_WEIGHT,
+    /* NULL, and it is load-bearing (F5). `ECON_FLOOR_APY` is the levered-loop
+       SCAN gate and this market never passed through one: the scan snapshot
+       lists it under `ineligible` (lib/demo/market.ts). Handing it a screen it
+       was never admitted through would leave an evacuation rule permanently
        breaching, and `evaluate.ts`'s `evacuationBreaching` would then
-       disqualify the loop as a DESTINATION, which silently deletes the
-       founder's return leg. */
+       disqualify the loop as a DESTINATION, silently deleting the return leg. */
     screenedAtApy: null,
     metrics: { funding: false, basis: false },
   };
@@ -110,325 +127,115 @@ const LOOP_SLOT = slot(LOOP, "morpho-blue-base", DEMO_MARKET_ID);
 const FLOOR_SLOT = slot(FLOOR, "treasury-ausdc-base", ROUTER_FLOOR_CANDIDATE_ID);
 const SLOTS = [LOOP_SLOT, FLOOR_SLOT];
 
-// ── The regimes (plan R3), each stating its transform ─────────────────────
-
-interface Regime {
-  readonly id: string;
-  readonly mechanism: string;
-  readonly transform: (rows: readonly RouterHistoryAlignedRow[]) => RouterHistoryAlignedRow[];
-}
-
-/**
- * THE TRANSFORMS ARE ANCHORED TO DATES, NOT TO ARRAY POSITIONS.
- *
- * A regime keyed on the index of whatever window it is handed is a different
- * event in every window: "day 45" is 2026-07-25 in the 89-day replay and
- * 2026-09-05 in the 47-day one, so the same regime name would mean two
- * different stresses. Every transform below reads the day's position in
- * `ROUTER_HISTORY_ALIGNED`, so a regime is one event on one calendar.
- */
-const alignedIndexOf = (date: string): number =>
-  ROUTER_HISTORY_ALIGNED.findIndex((r) => r.date === date);
-
-/** Day 45 of the aligned window: two days after the incentive first paid. */
-const HALVE_FROM = "2026-07-25";
-/** Day 61 of the aligned window, and 20 days of squeeze from there. */
-const SQUEEZE_FROM = "2026-08-10";
-const SQUEEZE_DAYS = 20;
-/**
- * The squeeze's size, and it is SIZED TO THE BAR rather than picked.
- *
- * The plan asked for 3pp. Measured, 3pp does not clear the bar: 0.8 x 3pp is
- * 2.4pp of published lift against a loop that leads by about 0.3pp in the
- * post-incentive era, so the regime produced zero crossings and demonstrated
- * nothing. The smallest lift that clears 3.0pp is 4.13pp; this is that,
- * rounded up to a round number. A USDC supply rate reaching about 8.7% in a
- * utilization spike is the stress the regime is named for, and the fact that
- * a 3pp spike is NOT enough to move this router is itself the finding.
- */
-const SQUEEZE_LIFT = 0.05;
-/** The whipsaw's square wave on the Aave input, and its growing run lengths. */
-const WHIPSAW_AMPLITUDE = 0.07;
-
-function whipsawSign(index: number): number {
-  let cursor = 0;
-  let run = 2;
-  let sign = 1;
-  while (cursor + run <= index) {
-    cursor += run;
-    run += 1;
-    sign = -sign;
-  }
-  return sign;
-}
-
-const REGIMES: readonly Regime[] = [
-  {
-    id: "measured",
-    mechanism: "the last 90 days as they happened, no transform",
-    transform: (rows) => [...rows],
-  },
-  {
-    id: "incentive-halves",
-    mechanism: `loopRewardApr is halved from ${HALVE_FROM} on`,
-    transform: (rows) =>
-      rows.map((r) =>
-        r.date >= HALVE_FROM ? { ...r, loopRewardApr: r.loopRewardApr * 0.5 } : r,
-      ),
-  },
-  {
-    id: "usdc-squeeze",
-    mechanism: `aaveUsdcSupplyApy gains ${(SQUEEZE_LIFT * 100).toFixed(0)}pp for ${SQUEEZE_DAYS} days from ${SQUEEZE_FROM}, then reverts`,
-    transform: (rows) => {
-      const from = alignedIndexOf(SQUEEZE_FROM);
-      return rows.map((r) => {
-        const i = alignedIndexOf(r.date);
-        return i >= from && i < from + SQUEEZE_DAYS
-          ? { ...r, aaveUsdcSupplyApy: r.aaveUsdcSupplyApy + SQUEEZE_LIFT }
-          : r;
-      });
-    },
-  },
-  {
-    id: "whipsaw",
-    mechanism: `aaveUsdcSupplyApy gains a square wave of +/-${(WHIPSAW_AMPLITUDE * 100).toFixed(0)}pp whose runs grow 2, 3, 4, 5 days`,
-    transform: (rows) =>
-      rows.map((r) => ({
-        ...r,
-        aaveUsdcSupplyApy:
-          r.aaveUsdcSupplyApy + whipsawSign(alignedIndexOf(r.date)) * WHIPSAW_AMPLITUDE,
-      })),
-  },
-];
-
-// ── The fold ──────────────────────────────────────────────────────────────
-
-interface Move {
-  readonly index: number;
-  readonly date: string;
-  readonly source: string;
-  readonly dest: string;
-  readonly weight: number;
-  readonly nowMs: number;
-  readonly improvement: number;
-}
-
-interface Refusal {
-  readonly index: number;
-  readonly code: string;
-}
+// ── The one fold, read ────────────────────────────────────────────────────
 
 interface RunResult {
-  readonly regime: string;
+  readonly regime: RegimeId;
   readonly days: number;
-  readonly moves: readonly Move[];
-  readonly refusals: readonly Refusal[];
+  readonly moves: number;
+  readonly firings: number;
+  readonly refusalCodes: string;
+  readonly refusals: number;
   readonly routedApy: number;
   readonly staticLoopApy: number;
   readonly staticFloorApy: number;
   readonly staticHalfApy: number;
   readonly frictionApy: number;
   readonly dwellDays: number;
-  readonly crossings: number;
-  readonly breachHistory: Record<string, boolean[]>;
-  readonly endWeights: Record<string, number>;
-  /** The book's gross rate on every day, before friction. */
-  readonly dailyBook: readonly number[];
+  readonly moveLine: string;
+  readonly endWeights: string;
+  readonly streaks: number[];
+  readonly improvements: number[];
+  readonly dailyBook: number[];
   readonly dailyLoop: readonly number[];
   readonly dailyFloor: readonly number[];
 }
 
-/* The two owners, applied one row at a time. `router-history` exports the
-   series over the CAPTURED window; a regime walks a transform of it, so these
-   two call the same owners on the transformed rows. The module's public
-   surface stays the captured history, which is what every product surface
-   reads. */
-function loopPublishedApyOn(row: RouterHistoryAlignedRow): number | null {
-  return publishedNetApy(repriceAtLeverage(loopRowForDay(row), HERO_SEED_LEVERAGE), false);
-}
-
-function floorPublishedApyOn(row: RouterHistoryAlignedRow): number | null {
-  return publishedNetApy(floorRowForRate(row.aaveUsdcSupplyApy), false);
-}
-
-function seriesFor(rows: readonly RouterHistoryAlignedRow[]): {
-  dates: string[];
-  loop: number[];
-  floor: number[];
-} {
-  const dates: string[] = [];
-  const loop: number[] = [];
-  const floor: number[] = [];
-  for (const row of rows) {
-    const l = loopPublishedApyOn(row);
-    const f = floorPublishedApyOn(row);
-    if (l === null || f === null) continue;
-    dates.push(row.date);
-    loop.push(l);
-    floor.push(f);
-  }
-  return { dates, loop, floor };
-}
-
-function ruleFor(rules: readonly OrchRule[], slotId: string): OrchRule {
-  const r = rules.find((x) => x.ruleId === `${slotId}:upgrade`);
-  if (!r) throw new Error(`no upgrade rule for ${slotId}`);
-  return r;
-}
-
 function run(
-  regime: Regime,
+  regime: RegimeId,
   window: readonly RouterHistoryAlignedRow[] = ROUTER_HISTORY_ALIGNED,
-  barOverride?: number,
+  bar: number = DEMO_UPGRADE_THRESHOLD,
 ): RunResult {
-  const rows = regime.transform(window);
-  const { dates, loop, floor } = seriesFor(rows);
-  const derived = demoDeriveAllRouterRules(ORCH_DIAL_DEFAULTS, SLOTS);
-  /* The sensitivity below re-runs the fold at the RAW break-even bar instead
-     of the register floor. Only the bar and its own 2pp re-arm gap move; the
-     sustain, the cooldown and the sizing are untouched. */
-  const rules =
-    barOverride === undefined
-      ? derived
-      : derived.map((r) =>
-          r.metric === "better_elsewhere"
-            ? { ...r, threshold: barOverride, rearmLevel: Number((barOverride - 0.02).toFixed(6)) }
-            : r,
-        );
-  const states: Record<string, OrchRuleState> = {
-    [LOOP]: initialRuleState(),
-    [FLOOR]: initialRuleState(),
-  };
-  const bounds = {
-    [LOOP]: { min: MIN_WEIGHT, max: MAX_WEIGHT },
-    [FLOOR]: { min: MIN_WEIGHT, max: MAX_WEIGHT },
-  };
-  let weights: Record<string, number> = { [LOOP]: 0.5, [FLOOR]: 0.5 };
-  let locks: EdgeLockState = { reverseLockedUntilMs: {} };
-  const moves: Move[] = [];
-  const refusals: Refusal[] = [];
-  const breachHistory: Record<string, boolean[]> = { [LOOP]: [], [FLOOR]: [] };
+  const f = foldRouterScenario({ regime, rows: window, bar });
+  const n = f.days.length;
+  const w = f.result.earningWeightByTick;
   const dailyBook: number[] = [];
-  let bookSum = 0;
-  let frictionFrac = 0;
-  let crossings = 0;
-  const wasBreaching: Record<string, boolean> = { [LOOP]: false, [FLOOR]: false };
-
-  for (let i = 0; i < dates.length; i += 1) {
-    const date = dates[i] as string;
-    const apy: Record<string, number> = { [LOOP]: loop[i] as number, [FLOOR]: floor[i] as number };
-    const nowMs = Date.parse(`${date}T00:00:00.000Z`);
-    /* Yield accrues on the weights in force at the START of the day; a move
-       decided on today's observation cannot have earned today's rate. */
-    const bookToday =
-      (weights[LOOP] as number) * (apy[LOOP] as number) +
-      (weights[FLOOR] as number) * (apy[FLOOR] as number);
-    dailyBook.push(bookToday);
-    bookSum += bookToday;
-
-    for (const source of [LOOP, FLOOR]) {
-      const dest = source === LOOP ? FLOOR : LOOP;
-      const rule = ruleFor(rules, source);
-      const improvement = (apy[dest] as number) - (apy[source] as number);
-      // evaluate.ts:304-305, verbatim.
-      const breaching = Number.isFinite(improvement) && improvement >= rule.threshold;
-      const safeSide = !Number.isFinite(improvement) || improvement <= rule.rearmLevel;
-      breachHistory[source]?.push(breaching);
-      if (breaching && !wasBreaching[source]) crossings += 1;
-      wasBreaching[source] = breaching;
-
-      const advanced = advanceRuleState(rule, states[source] as OrchRuleState, {
-        ref: { kind: "modeled", seq: i, hash: "", label: `day ${date}` },
-        breaching,
-        safeSide,
-        nowMs,
-      });
-      states[source] = advanced.state;
-      if (!advanced.fired) continue;
-
-      if (edgeLocked(locks, source, dest, nowMs)) {
-        refusals.push({ index: i, code: "anti-cycle" });
-        continue;
-      }
-      const exit = demoExitProfile();
-      const pbMs = paybackMs(exit, improvement);
-      if (!(pbMs / DAY_MS <= PAYBACK_HORIZON_DAYS)) {
-        refusals.push({ index: i, code: "payback" });
-        continue;
-      }
-      const sizing = sizeMove({
-        moveWeight: rule.moveWeight,
-        orchestratedTvlUsd: TVL,
-        sourceEquityUsd: (weights[source] as number) * TVL,
-        destMarginBands: null,
-      });
-      if (sizing.deferred) {
-        refusals.push({ index: i, code: "min-move" });
-        continue;
-      }
-      const before = weights[dest] as number;
-      const next = applyMove(weights, bounds, source, dest, sizing.moveUsd / TVL);
-      const actual = Number(((next[dest] as number) - before).toFixed(9));
-      if (!(actual > 0)) {
-        refusals.push({ index: i, code: "weight-band" });
-        continue;
-      }
-      weights = next;
-      frictionFrac += exit.oneShotFrac * actual;
-      moves.push({ index: i, date, source, dest, weight: actual, nowMs, improvement });
-      locks = lockReverseEdge(locks, source, dest, nowMs, rule.cooldownMs, pbMs);
-    }
+  for (let i = 0; i < n; i += 1) {
+    const wl = i === 0 ? 0.5 : (w[LOOP][i - 1] as number);
+    const wf = i === 0 ? 0.5 : (w[FLOOR][i - 1] as number);
+    dailyBook.push(wl * (f.loopPublishedApy[i] as number) + wf * (f.floorPublishedApy[i] as number));
   }
-
-  const n = dates.length;
-  const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
-  const frictionApy = (frictionFrac * 365) / n;
+  const moved = f.result.decisions.filter((d) => d.moved.destSlotId !== "pause");
+  /* THE FRICTION IS THE EVALUATOR'S OWN, off each decision's cost record, so
+     the table charges what the machine charged and never a second estimate. */
+  const frictionUsd = moved.reduce((s, d) => s + d.cost.oneShotUsd, 0);
+  const frictionApy = ((frictionUsd / f.orchestratedTvlUsd) * 365) / n;
+  const mean = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
   const gaps: number[] = [];
   let cursor = 0;
-  for (const m of moves) {
-    gaps.push(m.index - cursor);
-    cursor = m.index;
+  for (const d of moved) {
+    gaps.push(d.scenarioRef.tick - cursor);
+    cursor = d.scenarioRef.tick;
   }
   gaps.push(n - 1 - cursor);
-
   return {
-    regime: regime.id,
+    regime,
     days: n,
-    moves,
-    refusals,
-    routedApy: bookSum / n - frictionApy,
-    staticLoopApy: mean(loop),
-    staticFloorApy: mean(floor),
-    staticHalfApy: mean(loop.map((l, i) => 0.5 * l + 0.5 * (floor[i] as number))),
+    moves: f.result.moves,
+    firings: f.result.firings,
+    refusals: f.result.refusals.length,
+    refusalCodes: [...new Set(f.result.refusals.map((r) => r.code))].join(",") || "none",
+    routedApy: mean(dailyBook) - frictionApy,
+    staticLoopApy: mean(f.loopPublishedApy),
+    staticFloorApy: mean(f.floorPublishedApy),
+    staticHalfApy: mean(f.loopPublishedApy.map((l, i) => 0.5 * l + 0.5 * (f.floorPublishedApy[i] as number))),
     frictionApy,
     dwellDays: mean(gaps),
-    crossings,
-    breachHistory,
-    endWeights: weights,
+    moveLine:
+      moved
+        .map(
+          (d) =>
+            `${f.days[d.scenarioRef.tick]} ${d.moved.sourceSlotId}->${d.moved.destSlotId} ${(
+              (d.moved.weightBefore - d.moved.weightAfter) *
+              100
+            ).toFixed(1)}pp`,
+        )
+        .join(" | ") || "none",
+    endWeights: `${(f.result.weights[LOOP] as number).toFixed(3)} / ${(f.result.weights[FLOOR] as number).toFixed(3)}`,
+    streaks: moved.map((d) => d.rule.streakAtFire),
+    improvements: moved.map(
+      (d) =>
+        (d.moved.destSlotId === FLOOR
+          ? (f.floorPublishedApy[d.scenarioRef.tick] as number) - (f.loopPublishedApy[d.scenarioRef.tick] as number)
+          : (f.loopPublishedApy[d.scenarioRef.tick] as number) - (f.floorPublishedApy[d.scenarioRef.tick] as number)),
+    ),
     dailyBook,
-    dailyLoop: loop,
-    dailyFloor: floor,
+    dailyLoop: f.loopPublishedApy,
+    dailyFloor: f.floorPublishedApy,
   };
 }
 
-const RUNS = REGIMES.map((r) => run(r));
+const RUNS = REGIME_IDS.map((r) => run(r));
 
 /**
  * THE SECOND WINDOW, and it is a finding rather than a feature.
  *
  * The USDe incentive is exactly zero for the first 42 aligned days, so on
  * those days a 2.5x loop pays a borrow out of no collateral yield and the
- * floor clears the 3pp bar every single day. The router spends its whole
- * concentration band there, in June, and every stress regime downstream then
- * has no room left to demonstrate anything. This window starts on the day the
- * incentive arrived (2026-07-23), which is the first day this vault could
- * have existed as a product, and it is what the regimes actually exercise.
+ * floor clears the bar every single day. This window starts on the day the
+ * incentive arrived (2026-07-23), which is the first day this vault could have
+ * existed as a product, and G2 rules the bar by what happens here.
  */
 const INCENTIVE_START_INDEX = ROUTER_HISTORY_ALIGNED.findIndex((r) => r.loopRewardApr > 0);
 const SINCE_INCENTIVE = ROUTER_HISTORY_ALIGNED.slice(INCENTIVE_START_INDEX);
-const RUNS_SINCE = REGIMES.map((r) => run(r, SINCE_INCENTIVE));
+const RUNS_SINCE = REGIME_IDS.map((r) => run(r, SINCE_INCENTIVE));
 
 const pct = (x: number): string => `${(x * 100).toFixed(3)}%`;
+
+/** The improvement at which the evaluator's OWN payback gate stops refusing:
+ *  `exitProfileFor` charges the same-chain rail on the whole book, and
+ *  `paybackMs` refuses anything that runs past the 90-day horizon. */
+const PAYBACK_EFFECTIVE_BAR = (MOVE_FRICTION_FRAC_SAME_CHAIN * 365) / PAYBACK_HORIZON_DAYS;
 
 // ── The capture ───────────────────────────────────────────────────────────
 
@@ -471,9 +278,6 @@ describe("router-history: the capture, its gaps and its owners", () => {
     const fl = floorPublishedApyByDay();
     expect(loop).toHaveLength(89);
     expect(fl).toHaveLength(89);
-    /* The floor is unlevered, so its published number is exactly the issuer
-       rate less the 20% compute fee. This is the fee identity, checked on the
-       lane rather than asserted about it. */
     for (let i = 0; i < fl.length; i += 1) {
       const row = ROUTER_HISTORY_ALIGNED[i] as RouterHistoryAlignedRow;
       expect((fl[i] as { apy: number }).apy).toBeCloseTo(row.aaveUsdcSupplyApy * 0.8, 12);
@@ -491,6 +295,98 @@ describe("router-history: the capture, its gaps and its owners", () => {
   });
 });
 
+// ── The switch ────────────────────────────────────────────────────────────
+
+describe("the switch: what G1 relaxes, and the three facts that make this pair a floor pair", () => {
+  it("is a treasury-family lane, on the same chain, with an atomic route", () => {
+    /* G1's condition is structural and `floor-pair.ts` asks it by id. These
+       are the three structural facts, pinned against the owners that hold
+       them, so the id list can never outlive the structure. */
+    expect(TREASURY_CANDIDATES.some((c) => c.id === ROUTER_FLOOR_CANDIDATE_ID)).toBe(true);
+    expect(chainOfVenue(LOOP_SLOT.venue)).toBe(chainOfVenue(FLOOR_SLOT.venue));
+    const terms = issuerRedemptionTerms(ROUTER_FLOOR_CANDIDATE_ID);
+    expect(terms).not.toBeNull();
+    expect(settlementDaysOf(terms as NonNullable<typeof terms>)).toBe(0);
+    expect(isDemoFloorPair([DEMO_MARKET_ID, ROUTER_FLOOR_CANDIDATE_ID])).toBe(true);
+    expect(isFloorPairSlot(LOOP_SLOT, SLOTS)).toBe(true);
+    expect(isFloorPairSlot(FLOOR_SLOT, SLOTS)).toBe(true);
+  });
+
+  it("a lane that is not half of this pair keeps the shipped move cap", () => {
+    const stranger = slot("other", "morpho-blue-base", "morpho-blue-base:8453:WETH-USDC:0xdeadbeef");
+    expect(isDemoFloorPair([DEMO_MARKET_ID, stranger.candidateId])).toBe(false);
+    const rules = demoRouterRules(ORCH_DIAL_DEFAULTS, LOOP_SLOT, [LOOP_SLOT, stranger]);
+    const upgrade = rules.find((r) => r.metric === "better_elsewhere")!;
+    expect(upgrade.moveWeight).toBe(DEMO_ROUTER_MOVE_WEIGHT);
+    expect(upgrade.moveWeight).toBeLessThanOrEqual(MOVE_WEIGHT_CAP);
+  });
+
+  it("ONE number for a move on this pair: the whole lane, on every rule and every surface", () => {
+    /* Item 8(d): "13% of the book per move" and "10.0pp" were two numbers for
+       one thing. Under the switch there is one, and it is the whole lane. */
+    expect(FLOOR_PAIR_MOVE_WEIGHT).toBe(1);
+    expect(FLOOR_PAIR_MIN_WEIGHT).toBe(0);
+    expect(FLOOR_PAIR_MAX_WEIGHT).toBe(1);
+    expect(FLOOR_PAIR_MAX_CONCENTRATION_PCT).toBe(100);
+    expect(FLOOR_PAIR_TURNOVER_PCT_WEEK).toBe(100);
+    for (const r of demoDeriveAllRouterRules(ORCH_DIAL_DEFAULTS, SLOTS)) {
+      if (r.metric === "better_elsewhere") expect(r.moveWeight).toBe(FLOOR_PAIR_MOVE_WEIGHT);
+    }
+    /* And the sizing owner honours it rather than clamping it back to R33's
+       quarter: `max(0.25, moveWeight)`, which is the identity inside R15. */
+    const whole = sizeMove({
+      moveWeight: FLOOR_PAIR_MOVE_WEIGHT,
+      orchestratedTvlUsd: TVL,
+      sourceEquityUsd: 0.5 * TVL,
+      destMarginBands: null,
+    });
+    expect(whole.moveUsd).toBe(0.5 * TVL);
+    const shipped = sizeMove({
+      moveWeight: MOVE_WEIGHT_CAP,
+      orchestratedTvlUsd: TVL,
+      sourceEquityUsd: 0.5 * TVL,
+      destMarginBands: null,
+    });
+    expect(shipped.moveUsd).toBe(0.25 * 0.5 * TVL);
+  });
+
+  it("relaxes exactly two invariants, by name, and enforces every other one", () => {
+    expect(DEMO_ROUTER_RELAXATIONS.map((r) => r.invariant)).toEqual([
+      "per-tick-and-budget-caps",
+      "dial-range",
+    ]);
+    const fold = foldRouterScenario({ regime: "measured" });
+    /* The shipped validator, run on the config the route actually folds: zero
+       violations left once the two named ones are cleared. */
+    expect(validateDemoRouter(fold.cfg)).toEqual([]);
+    /* And the two it clears are really there: the plain validator sees them. */
+    const rules = fold.cfg.rules;
+    for (const r of rules) {
+      if (r.metric !== "better_elsewhere") continue;
+      expect(r.moveWeight).toBeGreaterThan(MOVE_WEIGHT_CAP);
+      /* R25, R28 and R29 stay enforced at their shipped floors. */
+      expect(r.sustainPins).toBe(DEMO_SUSTAIN_PINS_DAILY);
+      expect(r.threshold - r.rearmLevel).toBeCloseTo(0.02, 12);
+      expect(r.cooldownMs).toBeGreaterThanOrEqual(6 * 60 * 60 * 1000);
+    }
+  });
+
+  it("passes the orchestrator validator, with R38 re-checked against the demo derivation", async () => {
+    const rules = demoDeriveAllRouterRules(ORCH_DIAL_DEFAULTS, SLOTS);
+    const cfg = {
+      v: 1 as const,
+      loops: SLOTS,
+      dials: { ...ORCH_DIAL_DEFAULTS, maxConcentrationPct: FLOOR_PAIR_MAX_CONCENTRATION_PCT },
+      rules,
+      rulesHash: await rulesHash(rules),
+    };
+    expect(validateDemoRouter(cfg)).toEqual([]);
+    /* A tampered rule set keeps everything, including the two relaxations. */
+    const tampered = { ...cfg, rules: rules.map((r) => ({ ...r, sustainPins: 9 })) };
+    expect(validateDemoRouter(tampered).length).toBeGreaterThan(0);
+  });
+});
+
 // ── The constants ─────────────────────────────────────────────────────────
 
 describe("demo-rules: the friction, the bar and the 48 hours", () => {
@@ -505,17 +401,24 @@ describe("demo-rules: the friction, the bar and the 48 hours", () => {
     expect(DEMO_MOVE_GAS_ACTIONS).toBe(4);
   });
 
-  it("derives the bar through upgradeThreshold, and the register floor is what binds", () => {
-    const raw = (DEMO_MOVE_FRICTION_FRAC_ONE_WAY * 365) / PAYBACK_HORIZON_DAYS;
-    expect(raw).toBeLessThan(0.03);
-    expect(DEMO_UPGRADE_THRESHOLD).toBe(0.03);
+  it("carries all three candidate bars, and ships the one the machine honours", () => {
+    expect(DEMO_BAR_ONE_WAY_BREAKEVEN).toBeCloseTo(0.00754, 6);
+    expect(DEMO_BAR_ROUND_TRIP_BREAKEVEN).toBeCloseTo(0.01508, 6);
+    expect(DEMO_BAR_REGISTER_FLOOR).toBe(0.03);
+    expect(DEMO_UPGRADE_THRESHOLD).toBe(DEMO_BAR_REGISTER_FLOOR);
     expect(DEMO_UPGRADE_REARM).toBe(0.01);
-    /* R28 met exactly, in the invariant's own terms. */
     expect(DEMO_UPGRADE_THRESHOLD - DEMO_UPGRADE_REARM).toBeCloseTo(0.02, 12);
-    /* A move at the bar pays itself back well inside the horizon. */
-    expect(paybackMs(demoExitProfile(), DEMO_UPGRADE_THRESHOLD) / DAY_MS).toBeLessThan(
-      PAYBACK_HORIZON_DAYS,
-    );
+    /* THE ARGUMENT THE TABLE BELOW MAKES, AS AN ASSERTION. Under the switch
+       the rail rides the whole book, so `exitProfileFor` charges 0.7% of it
+       and `paybackMs` refuses any move whose improvement runs past the 90-day
+       horizon. That is an EFFECTIVE bar of 2.84pp, whatever the rule
+       publishes: a bar under it admits moves the evaluator then refuses, and
+       the depositor sentence would name a margin the machine does not act on.
+       The shipped bar is the only one of the three above that floor. */
+    expect(PAYBACK_EFFECTIVE_BAR).toBeCloseTo(0.02839, 5);
+    expect(DEMO_BAR_ONE_WAY_BREAKEVEN).toBeLessThan(PAYBACK_EFFECTIVE_BAR);
+    expect(DEMO_BAR_ROUND_TRIP_BREAKEVEN).toBeLessThan(PAYBACK_EFFECTIVE_BAR);
+    expect(DEMO_UPGRADE_THRESHOLD).toBeGreaterThan(PAYBACK_EFFECTIVE_BAR);
   });
 
   it("maps 48 hours onto both cadences, and the live cadence is measured", () => {
@@ -526,9 +429,10 @@ describe("demo-rules: the friction, the bar and the 48 hours", () => {
     const gaps: number[] = [];
     for (let i = 1; i < stamps.length; i += 1) gaps.push((stamps[i] as number) - (stamps[i - 1] as number));
     gaps.sort((a, b) => a - b);
-    const mid = gaps.length % 2 === 1 ? (gaps[(gaps.length - 1) / 2] as number)
-      : ((gaps[gaps.length / 2 - 1] as number) + (gaps[gaps.length / 2] as number)) / 2;
-    /* The handler lands about hourly: the median gap rounds to one hour. */
+    const mid =
+      gaps.length % 2 === 1
+        ? (gaps[(gaps.length - 1) / 2] as number)
+        : ((gaps[gaps.length / 2 - 1] as number) + (gaps[gaps.length / 2] as number)) / 2;
     expect(Math.round(mid / 3600)).toBe(1);
     expect(DEMO_SUSTAIN_PINS_HOURLY).toBe(DEMO_SUSTAIN_HOURS / 1);
   });
@@ -539,183 +443,148 @@ describe("demo-rules: the friction, the bar and the 48 hours", () => {
     expect(upgrade.sustainPins).toBe(DEMO_SUSTAIN_PINS_DAILY);
     expect(upgrade.threshold).toBe(DEMO_UPGRADE_THRESHOLD);
     expect(upgrade.rearmLevel).toBe(DEMO_UPGRADE_REARM);
-    /* Both lanes settle on Base, so the pair is same-chain and one margin
-       governs both directions. */
-    expect(chainOfVenue(LOOP_SLOT.venue)).toBe(chainOfVenue(FLOOR_SLOT.venue));
+    for (const r of base) {
+      if (r.metric === "better_elsewhere") continue;
+      expect(r.moveWeight).toBe(DEMO_ROUTER_MOVE_WEIGHT);
+    }
     const floorUpgrade = demoRouterRules(ORCH_DIAL_DEFAULTS, FLOOR_SLOT, SLOTS).find(
       (r) => r.metric === "better_elsewhere",
     )!;
     expect(floorUpgrade.threshold).toBe(upgrade.threshold);
     expect(floorUpgrade.rearmLevel).toBe(upgrade.rearmLevel);
     expect(floorUpgrade.sustainPins).toBe(upgrade.sustainPins);
-  });
-
-  it("passes the orchestrator validator, with R38 re-checked against the demo derivation", async () => {
-    const rules = demoDeriveAllRouterRules(ORCH_DIAL_DEFAULTS, SLOTS);
-    const cfg = {
-      v: 1 as const,
-      loops: SLOTS,
-      dials: ORCH_DIAL_DEFAULTS,
-      rules,
-      rulesHash: await rulesHash(rules),
-    };
-    expect(validateDemoRouter(cfg)).toEqual([]);
+    expect(floorUpgrade.moveWeight).toBe(upgrade.moveWeight);
   });
 });
 
 // ── The backtest ──────────────────────────────────────────────────────────
 
-describe("the backtest: the mechanism over the measured window and three regimes", () => {
-  it("prints the table", () => {
+const HEAD = "regime            moves firings dwell  routed   loop     floor    50/50    friction  refusals";
+
+function tableRow(r: RunResult): string {
+  return [
+    r.regime.padEnd(17),
+    String(r.moves).padStart(5),
+    String(r.firings).padStart(7),
+    r.dwellDays.toFixed(1).padStart(6),
+    pct(r.routedApy).padStart(8),
+    pct(r.staticLoopApy).padStart(8),
+    pct(r.staticFloorApy).padStart(8),
+    pct(r.staticHalfApy).padStart(8),
+    pct(r.frictionApy).padStart(9),
+    `  ${r.refusals} (${r.refusalCodes})`,
+  ].join(" ");
+}
+
+describe("the backtest: the switch over the measured window and three regimes", () => {
+  it("prints the table, at all three bars, over both windows", () => {
     const lines = [
       "",
-      `router backtest, ${RUNS[0]?.days} aligned days, book $${TVL.toLocaleString("en-US")}, L ${HERO_SEED_LEVERAGE}x`,
-      `bar ${pct(DEMO_UPGRADE_THRESHOLD)} / re-arm ${pct(DEMO_UPGRADE_REARM)} / sustain ${DEMO_SUSTAIN_PINS_DAILY} daily pins / friction ${pct(DEMO_MOVE_FRICTION_FRAC_ONE_WAY)} one way`,
-      "regime            moves dwell  routed   loop     floor    50/50    friction  refusals",
+      `router backtest UNDER THE SWITCH, ${RUNS[0]?.days} aligned days, book $${TVL.toLocaleString("en-US")}, L ${HERO_SEED_LEVERAGE}x`,
+      `bar ${pct(DEMO_UPGRADE_THRESHOLD)} / re-arm ${pct(DEMO_UPGRADE_REARM)} / sustain ${DEMO_SUSTAIN_PINS_DAILY} daily pins / one firing carries the whole lane / budget ${FLOOR_PAIR_TURNOVER_PCT_WEEK}% per week`,
+      `friction charged by the evaluator: ${pct(MOVE_FRICTION_FRAC_SAME_CHAIN)} of the capital moved (exitProfileFor, same chain), which on a whole-book move is ${pct(MOVE_FRICTION_FRAC_SAME_CHAIN)} of the book`,
+      HEAD,
     ];
+    for (const r of RUNS) lines.push(tableRow(r));
     for (const r of RUNS) {
-      lines.push(
-        [
-          r.regime.padEnd(17),
-          String(r.moves.length).padStart(5),
-          r.dwellDays.toFixed(1).padStart(6),
-          pct(r.routedApy).padStart(8),
-          pct(r.staticLoopApy).padStart(8),
-          pct(r.staticFloorApy).padStart(8),
-          pct(r.staticHalfApy).padStart(8),
-          pct(r.frictionApy).padStart(9),
-          `  ${r.refusals.length} (${[...new Set(r.refusals.map((x) => x.code))].join(",") || "none"})`,
-        ].join(" "),
-      );
-    }
-    for (const r of RUNS) {
-      lines.push(
-        `${r.regime}: crossings ${r.crossings}, end weights loop ${(r.endWeights[LOOP] as number).toFixed(3)} / floor ${(r.endWeights[FLOOR] as number).toFixed(3)}, moves ${r.moves.map((m) => `${m.date} ${m.source}->${m.dest} ${(m.weight * 100).toFixed(1)}pp`).join(" | ") || "none"}`,
-      );
+      lines.push(`${r.regime}: end weights ${r.endWeights}, moves ${r.moveLine}`);
     }
     lines.push("");
     lines.push(
       `since the incentive arrived (${SINCE_INCENTIVE[0]?.date} on, ${SINCE_INCENTIVE.length} days), the window in which this vault could have existed`,
     );
-    lines.push("regime            moves dwell  routed   loop     floor    50/50    friction  refusals");
+    lines.push(HEAD);
+    for (const r of RUNS_SINCE) lines.push(tableRow(r));
     for (const r of RUNS_SINCE) {
-      lines.push(
-        [
-          r.regime.padEnd(17),
-          String(r.moves.length).padStart(5),
-          r.dwellDays.toFixed(1).padStart(6),
-          pct(r.routedApy).padStart(8),
-          pct(r.staticLoopApy).padStart(8),
-          pct(r.staticFloorApy).padStart(8),
-          pct(r.staticHalfApy).padStart(8),
-          pct(r.frictionApy).padStart(9),
-          `  ${r.refusals.length} (${[...new Set(r.refusals.map((x) => x.code))].join(",") || "none"})`,
-        ].join(" "),
-      );
+      lines.push(`since-incentive ${r.regime}: end weights ${r.endWeights}, moves ${r.moveLine}`);
     }
-    for (const r of RUNS_SINCE) {
-      lines.push(
-        `since-incentive ${r.regime}: crossings ${r.crossings}, end weights loop ${(r.endWeights[LOOP] as number).toFixed(3)} / floor ${(r.endWeights[FLOOR] as number).toFixed(3)}, moves ${r.moves.map((m) => `${m.date} ${m.source}->${m.dest} ${(m.weight * 100).toFixed(1)}pp`).join(" | ") || "none"}`,
-      );
-    }
-    /* THE BAR'S OWN SENSITIVITY. The break-even for this pair is 0.75% and
-       the register floor lifts it to 3.0%. This is what the other choice
-       would have produced, so the ruling is measured rather than asserted. */
-    const RAW_BAR = (DEMO_MOVE_FRICTION_FRAC_ONE_WAY * 365) / PAYBACK_HORIZON_DAYS;
+
+    /* ══ G2: THE BAR, RE-MEASURED UNDER THE SWITCH ══════════════════════════
+       Three bars, two windows, four regimes, one machine. */
     lines.push("");
-    lines.push(
-      `sensitivity: the same fold at the RAW break-even bar ${pct(RAW_BAR)} instead of the ${pct(DEMO_UPGRADE_THRESHOLD)} register floor`,
-    );
-    lines.push("window          regime            moves  routed   50/50    friction");
+    lines.push("the bar, re-measured under the switch: three candidates, both windows");
+    lines.push("window          bar          value  regime            moves firings   routed    50/50   friction  refusals");
     for (const [label, win] of [
       ["full", ROUTER_HISTORY_ALIGNED],
       ["since-incentive", SINCE_INCENTIVE],
     ] as const) {
-      for (const reg of REGIMES) {
-        const r = run(reg, win, RAW_BAR);
-        lines.push(
-          [
-            label.padEnd(15),
-            r.regime.padEnd(17),
-            String(r.moves.length).padStart(5),
-            pct(r.routedApy).padStart(8),
-            pct(r.staticHalfApy).padStart(8),
-            pct(r.frictionApy).padStart(9),
-          ].join(" "),
-        );
+      for (const [barName, bar] of [
+        ["one-way", DEMO_BAR_ONE_WAY_BREAKEVEN],
+        ["round-trip", DEMO_BAR_ROUND_TRIP_BREAKEVEN],
+        ["register", DEMO_BAR_REGISTER_FLOOR],
+      ] as const) {
+        for (const reg of REGIME_IDS) {
+          const r = run(reg, win, bar);
+          lines.push(
+            [
+              label.padEnd(15),
+              barName.padEnd(11),
+              pct(bar).padStart(7),
+              reg.padEnd(17),
+              String(r.moves).padStart(5),
+              String(r.firings).padStart(7),
+              pct(r.routedApy).padStart(9),
+              pct(r.staticHalfApy).padStart(8),
+              pct(r.frictionApy).padStart(9),
+              `  ${r.refusals} (${r.refusalCodes})`,
+            ].join(" "),
+          );
+        }
       }
     }
-     
+    lines.push("");
+    lines.push(
+      `the evaluator's own payback gate is an effective bar of ${pct(PAYBACK_EFFECTIVE_BAR)}: below it a move is refused whatever the rule published`,
+    );
+
     console.log(lines.join("\n"));
     expect(RUNS).toHaveLength(4);
     expect(RUNS_SINCE).toHaveLength(4);
     expect(INCENTIVE_START_INDEX).toBe(42);
-    expect(alignedIndexOf(HALVE_FROM)).toBe(44);
-    expect(alignedIndexOf(SQUEEZE_FROM)).toBe(60);
   });
 
-  it("never moves without the sustain: every move has 2 consecutive breaching days behind it", () => {
+  it("the fold in this file IS the fold the route serves, on the same regime", () => {
+    /* Item 3, asserted rather than assumed: the gate and the product are one
+       machine. The route's decisions for `measured` and this table's move
+       count for `measured` are the same number, off the same call. */
+    const routed = foldRouterRun("measured");
+    const here = RUNS.find((r) => r.regime === "measured")!;
+    const routeMoves = routed.decisions.filter((d) => d.moved.destSlotId !== "pause").length;
+    expect(routeMoves).toBe(here.moves);
+    expect(routed.days).toHaveLength(here.days);
+    expect(routed.dials).toEqual({
+      maxConcentrationPct: FLOOR_PAIR_MAX_CONCENTRATION_PCT,
+      turnoverBudgetPctWeek: FLOOR_PAIR_TURNOVER_PCT_WEEK,
+    });
+  });
+
+  it("the switch evacuates and rebuilds: every move carries a whole lane", () => {
     for (const r of [...RUNS, ...RUNS_SINCE]) {
-      for (const m of r.moves) {
-        const hist = r.breachHistory[m.source] as boolean[];
-        expect(hist[m.index]).toBe(true);
-        expect(hist[m.index - 1]).toBe(true);
+      const f = foldRouterScenario({ regime: r.regime });
+      for (const d of f.result.decisions) {
+        if (d.moved.destSlotId === "pause") continue;
+        /* The source ends at zero. That is what "relocates the capital" means,
+           and it is the sentence the founder asked for. */
+        expect(d.moved.weightAfter).toBe(0);
       }
     }
   });
 
-  it("never round-trips inside one cooldown", () => {
+  it("never moves without the sustain: the evaluator's own streak at fire clears the window", () => {
     for (const r of [...RUNS, ...RUNS_SINCE]) {
-      for (let i = 1; i < r.moves.length; i += 1) {
-        const prev = r.moves[i - 1] as Move;
-        const cur = r.moves[i] as Move;
-        if (cur.source === prev.dest && cur.dest === prev.source) {
-          const rule = ruleFor(demoDeriveAllRouterRules(ORCH_DIAL_DEFAULTS, SLOTS), prev.source);
-          expect(cur.nowMs - prev.nowMs).toBeGreaterThanOrEqual(rule.cooldownMs);
-        }
-      }
+      for (const s of r.streaks) expect(s).toBeGreaterThanOrEqual(DEMO_SUSTAIN_PINS_DAILY);
     }
   });
 
-  it("whipsaw: the crossings outnumber the moves, so the mechanism refuses churn", () => {
+  it("whipsaw fires more often than it moves, so the mechanism refuses churn", () => {
     for (const runs of [RUNS, RUNS_SINCE]) {
       const w = runs.find((r) => r.regime === "whipsaw")!;
-      expect(w.crossings).toBeGreaterThan(0);
-      expect(w.moves.length).toBeLessThan(w.crossings);
+      expect(w.firings).toBeGreaterThan(w.moves);
+      expect(w.refusals).toBeGreaterThan(0);
     }
-  });
-
-  it("the concentration band, not the rule, is what caps a relocation", () => {
-    /* At two lanes and a 60% ceiling the B.5 floor is 40%, so a book seated
-       50/50 can shift at most 10pp before `applyMove` has no room. The
-       founder's sentence says "relocates the capital"; the mechanism SHIFTS
-       allocation inside a band and never evacuates a lane. Every regime that
-       stays inverted ends at the same 0.400 / 0.600. */
-    expect(MIN_WEIGHT).toBe(0.4);
-    expect(MAX_WEIGHT).toBe(0.6);
-    const m = RUNS.find((r) => r.regime === "measured")!;
-    expect(m.endWeights[LOOP]).toBeCloseTo(MIN_WEIGHT, 9);
-    expect((m.moves[0] as Move).weight).toBeCloseTo(0.1, 9);
-    expect((m.moves[0] as Move).weight).toBeLessThan(DEMO_ROUTER_MOVE_WEIGHT);
-  });
-
-  it("the measured window crosses the bar in one direction only, and the doc says so", () => {
-    const m = RUNS.find((r) => r.regime === "measured")!;
-    const loopAhead = (m.breachHistory[FLOOR] as boolean[]).filter(Boolean).length;
-    const floorAhead = (m.breachHistory[LOOP] as boolean[]).filter(Boolean).length;
-    /* The USDe incentive is zero for the first 42 days of the window, so a
-       2.5x loop pays its borrow out of nothing and the floor clears the 3pp
-       bar on every one of them. The loop never clears it going the other way:
-       its best day is 1.7pp ahead. The return leg is shown by the regimes,
-       not by the measured history, and ROUTER_QUANT.md states that. */
-    expect(floorAhead).toBeGreaterThan(0);
-    expect(loopAhead).toBe(0);
   });
 
   it("the routed book is a convex combination of the two lanes on every single day", () => {
-    /* Routing moves capital; it never creates leverage. The book's gross rate
-       has to sit between the two lanes' rates every day, or the fold has
-       invented a return. */
     for (const r of [...RUNS, ...RUNS_SINCE]) {
       for (let i = 0; i < r.dailyBook.length; i += 1) {
         const lo = Math.min(r.dailyLoop[i] as number, r.dailyFloor[i] as number);
@@ -728,33 +597,30 @@ describe("the backtest: the mechanism over the measured window and three regimes
 
   it("a run with no moves is exactly the static 50/50 book, so friction is only ever charged on a move", () => {
     for (const r of [...RUNS, ...RUNS_SINCE]) {
-      if (r.moves.length > 0) continue;
+      if (r.moves > 0) continue;
       expect(r.frictionApy).toBe(0);
       expect(r.routedApy).toBeCloseTo(r.staticHalfApy, 12);
     }
   });
 
-  it("over the measured 90 days the routed book beats the lane the router left, in every regime", () => {
-    for (const r of RUNS) {
-      expect(r.routedApy).toBeGreaterThan(r.staticLoopApy);
+  it("every move it makes pays itself back inside the 90-day horizon", () => {
+    for (const r of [...RUNS, ...RUNS_SINCE]) {
+      for (const imp of r.improvements) {
+        expect(paybackMs(demoExitProfile(), imp) / DAY_MS).toBeLessThanOrEqual(PAYBACK_HORIZON_DAYS);
+      }
     }
   });
 
-  it("every move it makes pays itself back inside the 90-day horizon", () => {
-    /* The gate, verified rather than assumed. `paybackMs` is the owner and
-       the fold refuses a firing whose payback runs past the horizon, so no
-       recorded move may exceed it.
-
-       WHAT THIS DOES NOT SAY, and the doc says it instead: the horizon is 90
-       days and a replay window can be shorter. A move landing 3 days before a
-       47-day window closes is correct AND still unpaid when the replay stops,
-       so a routed return quoted over a window shorter than the payback is an
-       understatement of the mechanism, not a measurement of it. */
-    for (const r of [...RUNS, ...RUNS_SINCE]) {
-      for (const m of r.moves) {
-        const days = paybackMs(demoExitProfile(), m.improvement) / DAY_MS;
-        expect(days).toBeLessThanOrEqual(PAYBACK_HORIZON_DAYS);
-      }
+  it("the switch beats the lane it left in three regimes and LOSES in whipsaw, and that is the cost of a whole-book move", () => {
+    /* THE FINDING THE OLD HAND FOLD HID. Under 10pp band shifts the routed
+       book beat the lane it left in every regime. Under the switch the rail
+       rides the WHOLE book, so a violent square wave pays the friction twice
+       on the whole book and ends BELOW the lane it left. Nothing is broken:
+       it is what a whole-book move costs in a market that keeps changing its
+       mind, and the demo must not claim otherwise. */
+    for (const r of RUNS) {
+      if (r.regime === "whipsaw") expect(r.routedApy).toBeLessThan(r.staticLoopApy);
+      else expect(r.routedApy).toBeGreaterThan(r.staticLoopApy);
     }
   });
 });

@@ -406,7 +406,7 @@ export const ROUTER_MEASURED_ON: string = (() => {
  *
  * Exported because three owners need the same day and none of them may pick
  * its own: `routerPublishedToday` below, `floorRowToday` beside it, and
- * `demoMarketRates` in lib/demo/market.ts, which substitutes this day's two
+ * `loopRowForDay` in this module, which substitutes a day's two
  * loop rates into the demo row so the canvas and the router price one lane.
  */
 export function routerLastAlignedDay(): RouterHistoryAlignedRow | null {
@@ -460,25 +460,31 @@ export function routerPublishedToday(L: number = HERO_SEED_LEVERAGE): {
  * seeded record, `RackCanvas` for a publish) render the same three rows by
  * calling this rather than by spelling them twice.
  *
- * THE LABEL SAYS `measured` BECAUSE THE VALUE IS. It said `typed` for as long
- * as `lib/demo/market.ts` carried two literals, which was correct then and
- * became false the moment item 1 substituted the capture's own last aligned
- * day into that row: the page went on calling a measured rate typed. Two
- * decimals, because 4.75% and 5.09% are what was read and 1 dp prints them as
- * 4.8% and 5.1%, which is a rate nothing measured.
+ * THE LABEL SAYS `typed` BECAUSE THE VALUE IS (G3, 2026-09-07). It briefly
+ * said `measured`, for as long as `lib/demo/market.ts` substituted the
+ * capture's own last aligned day into the row. That substitution is reverted:
+ * the row's two rates are typed inputs again, captured before the router, and
+ * a parameters table that called them measured would be naming the wrong
+ * source for the number beside it.
  *
- * The date is `ROUTER_MEASURED_ON` and the provider is the capture's own
- * source entry. Neither is typed here.
+ * WHAT IS STILL MEASURED, AND STILL SAID: the third row. The capture exists,
+ * the router reads it day by day, and the date and provider are its own. So
+ * the rates read `typed` and the provenance row points at the measured series
+ * they are NOT drawn from, which is the two-labels ruling written into one
+ * three-row table.
+ *
+ * Two decimals, because the pair is a difference the reader is meant to be
+ * able to take: 1 dp collapses 4.40% and 3.50% into rates nothing stated.
  */
-export function measuredRateRows(
+export function typedRateRows(
   collateralYieldApy: number,
   borrowApyMarginal: number,
 ): { label: string; value: string }[] {
   return [
-    { label: "Collateral yield, measured", value: pct(collateralYieldApy, 2) },
-    { label: "Borrow rate, measured", value: pct(borrowApyMarginal, 2) },
+    { label: "Collateral yield, typed", value: pct(collateralYieldApy, 2) },
+    { label: "Borrow rate, typed", value: pct(borrowApyMarginal, 2) },
     {
-      label: "Rates measured",
+      label: "Measured series",
       value: `${ROUTER_MEASURED_ON} · ${ROUTER_HISTORY_SOURCES.loopReward.provider}`,
     },
   ];

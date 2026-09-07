@@ -32,7 +32,11 @@ import {
 import { routerReadout } from "@/components/vaults/AutomationsSection";
 import { RELOCATION_ACTION } from "@/components/vaults/ActivitySection";
 import {
-  DEMO_ROUTER_MOVE_WEIGHT,
+  FLOOR_PAIR_MAX_CONCENTRATION_PCT,
+  FLOOR_PAIR_MOVE_WEIGHT,
+  FLOOR_PAIR_TURNOVER_PCT_WEEK,
+} from "@/lib/canvas/floor-pair";
+import {
   DEMO_SUSTAIN_HOURS,
   DEMO_SUSTAIN_PINS_HOURLY,
   DEMO_UPGRADE_REARM,
@@ -229,8 +233,10 @@ const ROUTER_AUTOMATION: RouterAutomation = {
   thresholdApy: DEMO_UPGRADE_THRESHOLD,
   rearmApy: DEMO_UPGRADE_REARM,
   sustainHours: DEMO_SUSTAIN_HOURS,
-  moveWeight: DEMO_ROUTER_MOVE_WEIGHT,
-  maxConcentrationPct: 60,
+  /* The switch's own three numbers (G1), from their one owner. */
+  moveWeight: FLOOR_PAIR_MOVE_WEIGHT,
+  maxConcentrationPct: FLOOR_PAIR_MAX_CONCENTRATION_PCT,
+  turnoverBudgetPctWeek: FLOOR_PAIR_TURNOVER_PCT_WEEK,
   ruleSentence: "",
 };
 
@@ -245,12 +251,13 @@ describe("the router instrument prints the owners and nothing else", () => {
     expect(read.asOfText).toBe("Sep 7, 2026");
   });
 
-  it("the bar, the hysteresis and the clamped move come from their owners", () => {
+  it("the bar, the hysteresis and the whole-lane move come from their owners", () => {
     expect(read.barText).toBe(`${(DEMO_UPGRADE_THRESHOLD * 100).toFixed(2)}pp`);
     expect(read.rearmText).toBe(`${(DEMO_UPGRADE_REARM * 100).toFixed(2)}pp`);
-    // 12.5pp at the dials, 10.0pp after the 40% concentration floor.
-    expect(read.moveText).toBe("10.0pp");
-    expect(read.maxMove).toBeLessThan(DEMO_ROUTER_MOVE_WEIGHT);
+    /* THE WHOLE LANE, from an even split: 50.0pp, the same number the measured
+       replay's one decision records. ONE number for a move (item 8d). */
+    expect(read.moveText).toBe("50.0pp");
+    expect(read.maxMove).toBe(0.5);
   });
 
   it("the clock counts observations: one cell per hour, none filled today", () => {
@@ -303,9 +310,15 @@ describe("the router's copy carries the ban and the register", () => {
     "utf8",
   );
 
-  it("the reading's tail is `modeled` and never the page's live heartbeat", () => {
+  it("the reading's tail names its register AND its clock, never the live heartbeat", () => {
+    /* G3: two numbers on one page, each saying which question it answers. The
+       hero is `published at 2.50x, modeled`; this reading is the capture's
+       last day and says so. */
     expect(automations).toContain('className="vxe-modeled"');
-    expect(automations).toContain(">modeled<");
+    expect(automations).toContain("paying today, measured");
+    expect(
+      readFileSync(join(process.cwd(), "components/vaults/VaultDetail.tsx"), "utf8"),
+    ).toContain("published at ${lev.toFixed(2)}x, modeled");
     // One heartbeat per surface: `.vxe-live` belongs to the polled readings.
     const card = automations.slice(
       automations.indexOf("function RouterInstrument"),
@@ -317,18 +330,18 @@ describe("the router's copy carries the ban and the register", () => {
     expect(card).not.toContain("vxi-chip--armed");
   });
 
-  it("no rendered string claims a lane is relocated or emptied", () => {
+  it("the relocation verb is available now, and the ban is on the claims that are still false", () => {
+    /* THE BAN MOVED WITH THE MECHANISM (G1). `relocates` was banned because a
+       band shift cannot empty a lane; the switch does empty it, and the
+       measured replay leaves the loop at exactly zero. What stays banned is
+       the vaguer claim: a router that "moves the capital to" a better lane
+       whenever it finds one is the yield-follower this pair is not. */
     for (const src of [automations, activity]) {
-      for (const banned of [
-        "Capital relocated",
-        "relocates the capital",
-        "unwinds and relocates",
-        "moves the capital to",
-      ]) {
+      for (const banned of ["moves the capital to", "follows the yield"]) {
         expect(src).not.toContain(banned);
       }
     }
-    expect(RELOCATION_ACTION).toBe("Weight moved");
+    expect(RELOCATION_ACTION).toBe("Capital relocated");
   });
 
   it("the vault page's data face stays Geist Mono: the canvas's mono does not cross the seam", () => {

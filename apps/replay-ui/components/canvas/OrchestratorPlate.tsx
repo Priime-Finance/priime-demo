@@ -32,9 +32,7 @@ import {
   AllocationTrack,
   AllocShareInput,
   DestinationLine,
-  floorCaption,
   routerBadge,
-  TurnoverStrip,
   type ComposedRoute,
 } from "./dock/LanePanel";
 
@@ -51,7 +49,6 @@ export default function OrchestratorPlate({
   signals,
   bands,
   route,
-  turnoverCeiling,
   params,
   focused,
   snap,
@@ -68,9 +65,6 @@ export default function OrchestratorPlate({
   bands: Record<string, { minWeight: number; maxWeight: number }>;
   /** Where the router would send capital, out of these lanes. */
   route: ComposedRoute;
-  /** `turnoverBudgetPctWeek / 100`. A rack has never run, so nothing is spent
-   *  and nothing is in flight; the strip states the ceiling the dial set. */
-  turnoverCeiling: number;
   params: Record<string, ParamValue>;
   focused: boolean;
   /** The plate's arrival beat, held ~450ms by `markSnap` (design item 20). */
@@ -92,22 +86,9 @@ export default function OrchestratorPlate({
      dock's own badge turned out to be the literal `hm-bdg ok`: one machine
      was wearing amber here and an unearned green there, over the same lanes,
      at the same instant. */
-  const badge = routerBadge(signals);
+  const badge = routerBadge(signals, route);
   const quoting = badge.state === "quoting";
   const noQuote = badge.state === "gap";
-  const drying = badge.state === "drying";
-  /* THE FLOOR TICK'S CAPTION, the SAME string the dock renders. A mark on a
-     bar that nothing explains is a mark the reader has to guess at, and F.3
-     asks for the tick to be "labelled as what it is". Every lane carries the
-     same derived floor (it is a function of the lane count and the
-     concentration dial, not of the lane), so one caption states it once. */
-  const floorPct = (() => {
-    for (const s of signals) {
-      const b = bands[s.loopId];
-      if (b) return b.minWeight * 100;
-    }
-    return null;
-  })();
   return (
     <div
       /* `snap` is the plate's ARRIVAL, and it is the one plate the user does
@@ -153,20 +134,33 @@ export default function OrchestratorPlate({
           ) : null}
           <span className="hm-jack bus" data-jack="orchestrator:bus" />
           <div className="hm-scr">
+            {/* ONE STATE TAG AND ONE REGISTER TAG, and nothing else in the
+                badge row (item 9). The state says what the machine is doing;
+                `modeled` says what kind of number every figure under it is.
+                Two tags, three words, no sentence. */}
             <div className="hm-st">
               <span>Allocation</span>
-              <span
-                className={`hm-bdg${badge.state === "ok" ? " ok" : ""}`}
-                data-badge
-                data-badge-state={badge.state}
-              >
-                {badge.text}
+              <span style={{ display: "inline-flex", gap: 4 }}>
+                <span
+                  className={`hm-bdg${badge.state === "watching" ? " ok" : ""}`}
+                  data-badge
+                  data-badge-state={badge.state}
+                >
+                  {badge.text}
+                </span>
+                <span className="hm-bdg" data-badge data-badge-state="modeled">
+                  modeled
+                </span>
               </span>
             </div>
             <div className="hm-mid" style={{ alignItems: "stretch", gap: 7 }}>
               {signals.map((s) => (
                 <div key={s.loopId} className={`rk-orchrow${s.drying ? " dry" : ""}`}>
-                  <span>{s.label.length > 8 ? `${s.label.slice(0, 7)}…` : s.label}</span>
+                  {/* THE LANE'S OWN LABEL, not an ordinal. `USDC lending` is
+                      12 characters and the row has to hold it, because a bar
+                      labelled `LANE 2` names nothing a reader of this rack
+                      recognises. */}
+                  <span>{s.label.length > 13 ? `${s.label.slice(0, 12)}…` : s.label}</span>
                   {/* F.3 / F.5 — the shared track. The tick is the derived
                       floor `max(0, 1 − (N−1)·maxWeight)`, which restates a
                       bound `validateOrchestrator` already enforces, so drawing
@@ -176,8 +170,17 @@ export default function OrchestratorPlate({
                     /* A lane with no market is not a slot and carries no band.
                        Null draws no tick and no headroom; 0 and 1 would draw a
                        floor at nothing and a ceiling at everything. */
-                    floorPct={bands[s.loopId] ? bands[s.loopId].minWeight * 100 : null}
-                    maxPct={bands[s.loopId] ? bands[s.loopId].maxWeight * 100 : null}
+                    /* NULL WHEN THE BAND IS THE WHOLE BOOK (G1). A tick at 0%
+                       and headroom to 100% are marks that state no bound, and a
+                       mark that states no bound is one the reader has to
+                       decode for nothing. On any pair that is not a lane and
+                       its floor the shipped band comes back and so do both. */
+                    floorPct={
+                      bands[s.loopId] && bands[s.loopId].minWeight > 0 ? bands[s.loopId].minWeight * 100 : null
+                    }
+                    maxPct={
+                      bands[s.loopId] && bands[s.loopId].maxWeight < 1 ? bands[s.loopId].maxWeight * 100 : null
+                    }
                   />
                   <AllocShareInput
                     bps={s.allocationBps}
@@ -193,56 +196,23 @@ export default function OrchestratorPlate({
               <DestinationLine route={route} variant="plate" />
             </div>
             <div className="hm-sb">
-              {quoting
-                ? "quoting · holding"
-                : noQuote
-                  ? "quote gap · holding"
-                  : drying
-                    ? "drain modeled · no execution rail"
-                    : `governs ${loops.length} lane${loops.length === 1 ? "" : "s"}`}
+              {quoting ? "quoting" : noQuote ? "quote gap" : `governs ${loops.length} lane${loops.length === 1 ? "" : "s"}`}
             </div>
           </div>
           <div className="hm-acts">
-            {/* ── UNDER THE PLATE, WHICH IS WHERE F.6 PUTS THE WEEK STRIP AND
-                   WHERE THE FLOOR CAPTION HAD TO GO ────────────────────────
-                `.hm-scr` is 142px with `overflow:hidden` and
-                `justify-content:space-between`, so a screen that runs long
-                does not scroll and does not clip visibly: its flex children
-                shrink, and the LAST one goes first. Measured with both of
-                these inside it, the screen needed 182px and the status
-                sub-line — the one that says `no execution rail` — was
-                squeezed to a height of zero. A honesty line silently deleted
-                by a layout is worse than one nobody wrote.
+            {/* ── THE FLOOR CAPTION AND THE WEEK STRIP ARE GONE (item 9) ──
+                Both described bounds this pair no longer has. The floor
+                sentence said "the router does not drain past 40%", and under
+                the switch it drains to zero and rebuilds; the week strip drew
+                a 25% turnover ceiling the record does not publish for this
+                pair. Two clauses removed from a 150px component that the
+                founder read as "way too wordy".
 
-                So the two blocks that are ABOUT the plate rather than ON its
-                screen moved out to the plate's face, which has no height cap.
-                F.6's own words are "under the router plate, a week strip",
-                and the strip now sits directly above the dial that sets its
-                ceiling.
-
-                ⚠ EVERY LABEL ON THIS FACE SETS ITS OWN COLOUR. `.hm-hw` pins
-                ink to #141210 in both themes precisely because the canvas's
-                themed cream would otherwise cross the object boundary onto
-                the aluminium; `hm.css` calls the next inherited label "a
-                loaded gun". #6c6c68 is `.hm-sb`'s own value. */}
-            {floorPct === null ? null : (
-              <div
-                style={{
-                  fontFamily: "var(--fm)",
-                  fontSize: 8,
-                  letterSpacing: ".06em",
-                  lineHeight: 1.5,
-                  color: "#6c6c68",
-                  padding: "0 3px 6px",
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {floorCaption(floorPct)}
-              </div>
-            )}
-            <div style={{ padding: "0 3px 9px" }}>
-              <TurnoverStrip realized={0} inFlight={0} ceiling={turnoverCeiling} variant="plate" />
-            </div>
+                What replaced them is the three rows on the screen above, in
+                the plate's own grammar: label left, mono value right. The
+                budget still binds and the vault page's Parameters panel states
+                it as a row; a meter for it on the plate would be a fourth
+                object drawing one number. */}
             <div className="hm-al">{focused ? "Dials" : "Policy"}</div>
             {focused ? (
               <div className="pc" onClick={(e) => e.stopPropagation()}>
@@ -270,15 +240,15 @@ export default function OrchestratorPlate({
               </div>
             ) : (
               <div className="hm-keys">
-                {/* NOT `Follow yield` (design item 2, 2026-09-07). The quant
-                    measured the routing at +0.35pp on top of a second lane
-                    worth +2.19pp, over a pair whose normal spread is 0.10pp
-                    and behind a 3.00pp bar: that is a protection ratchet, and
-                    the lit key is the loudest claim this plate makes about
-                    itself. `data-key` is unchanged: it is an id, not chrome. */}
+                {/* `Best lane` (item 9). It was `Follow yield`, then `Hold the
+                    better lane`: four words on a key that has room for two,
+                    on a plate the founder read as way too wordy. The claim is
+                    unchanged and still the measured one, a protection ratchet
+                    rather than a yield follower. `data-key` is unchanged: it
+                    is an id, not chrome. */}
                 <div className="hm-key lit" data-key="follow">
                   <span className="hm-led" />
-                  Hold the better lane
+                  Best lane
                 </div>
                 <div
                   role="button"

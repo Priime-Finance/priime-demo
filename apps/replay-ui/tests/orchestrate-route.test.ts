@@ -25,15 +25,13 @@
 import { describe, expect, it } from "vitest";
 
 import { GET } from "@/app/api/canvas/orchestrate/route";
-import { canonicalRules, clampConcentrationPct, rulesHash } from "@/lib/canvas/orchestrator";
-import type { LoopSlot } from "@/lib/canvas/orchestrator/types";
-import { clampOrchDials, ORCH_DIAL_DEFAULTS } from "@/lib/canvas/param-schema";
+import { canonicalRules, rulesHash } from "@/lib/canvas/orchestrator";
+import { foldRouterScenario } from "@/lib/canvas/router-fold";
 import { sha256Hex } from "@/lib/canvas/scenario/hash";
 import {
   DEMO_ROUTER_BOOK_USD,
   DEMO_SUSTAIN_PINS_DAILY,
   DEMO_UPGRADE_THRESHOLD,
-  demoDeriveAllRouterRules,
 } from "@/lib/canvas/orchestrator/demo-rules";
 import {
   DEFAULT_REGIME,
@@ -148,23 +146,11 @@ describe("GET /api/canvas/orchestrate", () => {
      stops naming the same policy as the rest of the product, silently. This
      asserts the two on the rule set the fold actually builds. */
   it("the fold's synchronous rules hash IS the shipped rulesHash", async () => {
-    const slotCount = 2;
-    const dials = clampOrchDials(ORCH_DIAL_DEFAULTS);
-    const maxWeight = clampConcentrationPct(dials.maxConcentrationPct, slotCount) / 100;
-    const minWeight = Math.max(0, 1 - (slotCount - 1) * maxWeight);
-    const slots: LoopSlot[] = ["loop", "floor"].map((slotId) => ({
-      slotId,
-      venue: slotId === "loop" ? "morpho-blue-base" : "treasury-ausdc-base",
-      candidateId: slotId,
-      marketKey: slotId,
-      cls: "N1",
-      targetWeight: 0.5,
-      minWeight,
-      maxWeight,
-      screenedAtApy: null,
-      metrics: { funding: false, basis: false },
-    }));
-    const rules = demoDeriveAllRouterRules(dials, slots, DEMO_SUSTAIN_PINS_DAILY);
+    /* THE SLOT PAIR THE FOLD ACTUALLY BUILDS, taken off the fold rather than
+       rebuilt beside it: the switch's band and its whole-lane move weight are
+       part of the rule set, so a hand-built pair here would hash a policy the
+       route does not run. */
+    const rules = foldRouterScenario({ regime: "measured" }).cfg.rules;
     expect(sha256Hex(canonicalRules(rules))).toBe(await rulesHash(rules));
     expect(runs.get("measured")!.rulesHash).toBe(await rulesHash(rules));
   });
@@ -257,10 +243,11 @@ describe("GET /api/canvas/orchestrate", () => {
   });
 
   /**
-   * THE PIN AGAINST THE QUANT'S OWN FOLD. `docs/plans/ROUTER_QUANT.md` and
+   * THE PIN AGAINST THE QUANT'S OWN FOLD, which is now the SAME fold
+   * (`foldRouterScenario`). `docs/plans/ROUTER_QUANT.md` and
    * `tests/router-backtest.test.ts` measure ONE move over the measured 89
-   * days, on 2026-06-12, loop to floor, 10.0pp clamped from the rule's 12.5pp
-   * by the 40% concentration floor.
+   * days, on 2026-06-12, loop to floor, and under the switch it carries the
+   * WHOLE lane: 50.0pp out of an even split, leaving the loop at zero.
    */
   it("the measured regime moves exactly once, loop to floor, on the day the quant measured", () => {
     const run = runs.get("measured")!;
@@ -274,10 +261,12 @@ describe("GET /api/canvas/orchestrate", () => {
        calendar this replay has. */
     const tick = d?.scenarioRef.tick ?? -1;
     expect(ROUTER_HISTORY_ALIGNED[tick]?.date).toBe("2026-06-12");
-    /* 10.0pp, the band's clamp on the rule's own 12.5pp: the source lane
-       goes from its even split to the 40% floor and no further. */
+    /* 50.0pp: the whole lane. Between a lane and its floor the router
+       evacuates and rebuilds (G1), so the source ends at zero rather than at a
+       band floor. ONE number for a move, and this is it (item 8d). */
     const shifted = (d?.moved.weightBefore ?? 0) - (d?.moved.weightAfter ?? 0);
-    expect(Number((shifted * 100).toFixed(1))).toBe(10.0);
+    expect(Number((shifted * 100).toFixed(1))).toBe(50.0);
+    expect(d?.moved.weightAfter).toBe(0);
   });
 
   it("the whipsaw refuses more crossings than it takes, which is what the mechanism is for", () => {
@@ -298,32 +287,24 @@ describe("GET /api/canvas/orchestrate", () => {
     }
   });
 
-  it("the whipsaw is where the shipped evaluator is STRICTER than the quant's hand fold, and by how much", () => {
-    /* MEASURED, NOT ASSERTED AS AGREEMENT. `tests/router-backtest.test.ts`
-       walks the days itself and takes five moves on this regime. This route
-       folds `evaluateOrchestrator`, which also ranks a destination, gates a
-       firing on payback and locks the reverse edge until the last move pays
-       back. It reproduces the hand fold's first three moves date for date and
-       then refuses the fourth and fifth. Pinned at the gap's measured value
-       so neither side can move in silence; the reconciliation is a
-       cross-package question for the quant, not an edit this package may
-       make to an owner it does not own. */
+  it("the whipsaw takes two whole-lane moves and refuses four firings, each with its gate", () => {
+    /* THE SEAM IS CLOSED: `tests/router-backtest.test.ts` no longer walks the
+       days itself, it folds THIS function, so the two counts are one count by
+       construction rather than by agreement. What is measured here is the
+       shape of the refusal: under the switch a firing on an already-evacuated
+       lane has nothing to move and is refused as dust, and the way back is
+       held by the reverse-edge lock until the last move has paid for itself. */
     const w = runs.get("whipsaw")!;
-    expect(w.moves).toBe(3);
+    expect(w.moves).toBe(2);
     expect(w.firings).toBe(6);
-    expect(w.decisions.map((d) => d.scenarioRef.tick)).toEqual([1, 43, 55]);
-    expect(w.decisions.map((d) => ROUTER_HISTORY_ALIGNED[d.scenarioRef.tick]?.date)).toEqual([
+    expect(w.decisions.filter((d) => d.moved.destSlotId !== "pause").map((d) => ROUTER_HISTORY_ALIGNED[d.scenarioRef.tick]?.date)).toEqual([
       "2026-06-12",
       "2026-07-24",
-      "2026-08-05",
     ]);
-    /* The two the hand fold takes and this fold refuses, with the gate that
-       refused each: a count with no reason is a number nobody can act on. */
-    const refusedOn = w.refusals.map(
-      (r) => `${ROUTER_HISTORY_ALIGNED[r.tickIndex]?.date}:${r.code}`,
-    );
-    expect(refusedOn).toContain("2026-08-16:edge-lock");
-    expect(refusedOn).toContain("2026-08-28:weight-band");
+    const codes = new Set(w.refusals.map((r) => r.code));
+    expect(codes.has("edge-lock")).toBe(true);
+    expect(codes.has("dust")).toBe(true);
+    for (const r of w.refusals) expect(r.reason.length).toBeGreaterThan(0);
   });
 
   it("the bar and the patience the run enforces are the quant's owners, never a second table", () => {

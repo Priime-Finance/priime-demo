@@ -30,8 +30,16 @@ import {
   MIN_CAPACITY_USD,
   MIN_HEDGED_DEPOSIT_USD,
 } from "@/lib/model-constants";
-import { fmtCapacityUsd } from "../capacity";
-import { pct } from "../format";
+/* BOTH FROM `../format`, WHICH HAS NO IMPORTS AT ALL, and that is what makes
+   this file safe to enter first (F6). `fmtCapacityUsd` used to come from
+   `../capacity`, which reaches `./templates` -> `./graph-ops` ->
+   `./orchestrator` (index), whose module body calls `concentrationFloorPct`
+   back into this file: entering here first threw "Cannot access
+   'CONCENTRATION_BASE_FLOOR_PCT' before initialization" at LOAD time, so a
+   route whose module graph happened to reach this file first threw at runtime
+   rather than at build. `capacity.ts` re-exports the formatter, so no other
+   caller moved. `tests/rule-schema-entry.test.ts` imports this module alone. */
+import { fmtCapacityUsd, pct } from "../format";
 import {
   clampOrchDials,
   minDepositUsd,
@@ -961,7 +969,18 @@ export function sizeMove(args: {
   destMarginBands: HlMarginBandsDerived | null;
 }): MoveSizing {
   const raw = args.moveWeight * args.orchestratedTvlUsd;
-  const perTickCap = 0.25 * args.sourceEquityUsd; // R33
+  /* R33, AND THE ONE CASE IT MAY NOT SILENTLY SHRINK (G1, 2026-09-07).
+     The clamp is a quarter of the source's equity per tick, the W15 reserve
+     rail's own bound. Every rule inside R15 carries `moveWeight <= 0.25`
+     (`MOVE_WEIGHT_CAP`, enforced by `validateOrchestrator`), so `max` below is
+     the IDENTITY for all of them and no shipped derivation moves a cent.
+     A rule asking for more has cleared R15 by name — today that is the demo's
+     floor-pair evacuation, `lib/canvas/floor-pair.ts` — and capping it here
+     would size it down to a fraction of what the rule asked for while the
+     record stated the rule. This file's own doctrine is that a move the budget
+     cannot fund is REFUSED, never sized down; a move the rule asked for and the
+     band allows is not the place to start. */
+  const perTickCap = Math.max(MOVE_WEIGHT_CAP, args.moveWeight) * args.sourceEquityUsd; // R33
   const moveUsd = Math.min(raw, perTickCap);
   const floor = Math.max(
     args.destMarginBands ? minDepositUsd(args.destMarginBands) : 0,

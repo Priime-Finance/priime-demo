@@ -80,7 +80,6 @@ import {
   loadWithdrawals,
   recordModuleNames,
   riskGrade,
-  routerConcentrationBand,
   routerMaxMoveFrac,
   shareValueAt,
   VAULT_STAGE_LABEL,
@@ -461,6 +460,17 @@ export default function VaultDetail({ slug }: { slug: string }) {
     () => (ceiling ? capacityReading(ceiling, tvlUsd) : null),
     [ceiling, tvlUsd],
   );
+  /* Null on a record with no router: a single-lane record has one number on
+     the page and no second frame to distinguish itself from, so the extra line
+     would be noise. `targetLeverage` is the record's own applied leverage, the
+     same field the Dynamic leverage instrument prices its envelope at. */
+  const heroRegister = useMemo(() => {
+    const r = vault?.automations?.router ?? null;
+    if (!r || r.lanes.length < 2) return null;
+    const lev = vault?.automations?.leverage?.targetLeverage ?? null;
+    return lev === null ? "published on this record, modeled" : `published at ${lev.toFixed(2)}x, modeled`;
+  }, [vault]);
+
   const strikes = useMemo(() => (attested ? heroStrikes() : []), [attested]);
   const quorumLabel = strikes[0]?.quorum.thresholdLabel ?? null;
 
@@ -564,18 +574,19 @@ export default function VaultDetail({ slug }: { slug: string }) {
   const routerPanel = useMemo(() => {
     const r = vault?.automations?.router ?? null;
     if (!r || r.lanes.length < 2) return null;
-    const band = routerConcentrationBand(r);
     const maxMove = routerMaxMoveFrac(r);
     const src = ROUTER_HISTORY_SOURCES.aaveUsdcSupply;
     const rows: ParamRow[] = [
       { label: "Move bar", value: `${(r.thresholdApy * 100).toFixed(2)}pp` },
       { label: "Sustain", value: `${r.sustainHours}h` },
       { label: "Re-arm", value: `${(r.rearmApy * 100).toFixed(2)}pp` },
-      { label: "Max move per decision", value: `${(maxMove * 100).toFixed(1)}pp` },
-      {
-        label: "Concentration band",
-        value: `${(band.min * 100).toFixed(0)}% to ${(band.max * 100).toFixed(0)}%`,
-      },
+      /* THE WHOLE LANE (G1), stated as the size it is from the even split.
+         `routerConcentrationBand` is still the owner of the band and the band
+         is now [0, 1], which is why the row that printed it is gone: a row
+         reading `0% to 100%` is a control with nothing in it. What replaces it
+         is the budget, which is the bound that still binds. */
+      { label: "Move size", value: `the whole lane, ${(maxMove * 100).toFixed(1)}pp from an even split` },
+      { label: "Moves", value: `${Math.round(r.turnoverBudgetPctWeek / 100)} per week` },
       {
         label: "Floor rate source",
         value: `${src.label}, daily · ${src.provider} ${src.pool.slice(0, 8)} · read ${routerDayLabel(
@@ -693,6 +704,13 @@ export default function VaultDetail({ slug }: { slug: string }) {
           <i>Modeled APY</i>
           <b className="apy">{apyOk ? fmtPct(apyShown) : "—"}</b>
           <small>{apyOk ? apyCaption() : "composition never priced"}</small>
+          {/* THE REGISTER OF THIS NUMBER, on a routed record (G3). The router
+              instrument further down prints the loop's rate for the latest
+              captured day and tags it `paying today, measured <date>`. Two
+              numbers on one page answering two questions, each saying which:
+              this one is the record's own, published at the leverage it was
+              published at, and it is modeled. */}
+          {apyOk && heroRegister ? <small>{heroRegister}</small> : null}
           {forfeit ? <small>{collarForfeitLine(forfeit)}</small> : null}
         </div>
         {attested ? (

@@ -6,22 +6,22 @@
  * assertions pin what that owner says at the three leverages the demo walks
  * (the seed landing 2.50x, 3.00x, and the 3.25x ceiling).
  *
- * ══ THE ROW'S RATES ARE MEASURED NOW (router lane WP-1, design item 1) ═════
- * The row carried `0.044` / `0.035` as literals and published 4.3% at the seed
- * landing; it reads the capture's last aligned day (`demoMarketRates`) and
- * publishes 3.08%. The pins below stopped being typed constants at the same
- * time: they are asserted against `routerPublishedToday`, the owner the router
- * instrument reads, so the canvas and the router can never open two frames on
- * one lane again.
+ * ══ THE ROW'S RATES ARE TYPED INPUTS (G3, 2026-09-07) ════════════════════
+ * They were briefly the capture's last aligned day, which published 3.08% at
+ * the seed landing and made leverage SUBTRACT on this row. That is reverted:
+ * `0.044` / `0.035`, the pair captured before the router, and the row publishes
+ * 4.3% at 2.50x again. The MEASURED series is `router-history.ts` and the
+ * router reads it day by day; the two numbers answer different questions and
+ * every surface labels which one it is printing (G3), so nothing is welded and
+ * nothing is re-typed to match.
  *
  * The published series on this row, all four stops, for a reader:
- *   1.00x  composed 4.35%  published 3.48%
- *   2.50x  composed 3.84%  published 3.08%
- *   3.00x  composed 3.68%  published 2.94%
- *   3.25x  composed 3.59%  published 2.87%
- * It DESCENDS in leverage, and that is the finding, not a defect: the measured
- * marginal borrow (5.0869%) is above the measured collateral yield (4.75%), so
- * every extra turn models less yield. See the install-chain test below.
+ *   1.00x  composed 4.00%  published 3.20%
+ *   2.50x  composed 5.35%  published 4.28%
+ *   3.00x  composed 5.80%  published 4.64%
+ *   3.25x  composed 6.02%  published 4.82%
+ * It RISES in leverage, which is why `Install defaults` seats Dynamic leverage
+ * and why the demo has an opening move at all. See the install-chain test.
  */
 import { describe, expect, it } from "vitest";
 
@@ -45,25 +45,18 @@ describe("the demo row", () => {
     expect(pressClass({ ...row, launchable: true })).toBe("launch");
   });
 
-  /* ⚠ THE CONSEQUENCE OF THE MEASURED PAIR, PINNED SO IT CANNOT PASS UNSEEN.
-     -----------------------------------------------------------------------
-     This test used to assert `defaultInstallChain(row)` equals
-     `["safety-buffer", "auto-compound"]`, and lib/demo/market.ts's own
-     docblock says the row is scan-shaped precisely so that `Install defaults`
-     seats those two. With the measured rates the ghost-bay ruling withholds
-     the leverage module: `leverageModuleInstalls` asks whether an extra turn
-     of leverage MODELS MORE YIELD, and on borrow 5.0869% against yield 4.75%
-     it does not. So the shelf offers Dynamic leverage under `Add anyway` with
-     the two rates in its own reason line, and the builder seats it in one
-     press; nothing is hidden and nothing is unreachable, but the DEFAULT
-     composition is no longer levered.
-     This is a founder-visible change to the demo's opening move and it is
-     recorded in WP-1's report, not smoothed over here. */
-  it("withholds the leverage module by default, because the measured borrow is above the measured yield", () => {
+  /* THE DEMO'S OPENING MOVE, PINNED (G3, item 8a). `Install defaults` seats
+     Dynamic leverage and Auto-compound, which is the one live workflow the
+     founder signed off. It is a property of the ROW: `leverageModuleInstalls`
+     asks whether an extra turn models more yield, and on a typed 4.4% yield
+     against a typed 3.5% borrow it does. Substituting the capture's last day
+     (4.75% against 5.0869%) inverted that and emptied the chain, which is
+     exactly why the substitution was reverted. */
+  it("seats Dynamic leverage on Install defaults, because the typed yield is above the typed borrow", () => {
     const e = row.economics!;
-    expect(e.borrowApyMarginal).toBeGreaterThan(e.collateralYieldApy);
-    expect(leverageModuleInstalls(row)).toBe(false);
-    expect(defaultInstallChain(row)).toEqual([]);
+    expect(e.collateralYieldApy).toBeGreaterThan(e.borrowApyMarginal);
+    expect(leverageModuleInstalls(row)).toBe(true);
+    expect(defaultInstallChain(row)).toEqual(["safety-buffer", "auto-compound"]);
   });
 
   it("states its own number only through the reprice owner at its ceiling", () => {
@@ -77,9 +70,9 @@ describe("the demo row", () => {
 
 describe("publishedNetApy on the demo row", () => {
   it.each([
-    [2.5, 0.0308],
-    [3.0, 0.0294],
-    [3.25, 0.0287],
+    [2.5, 0.0428],
+    [3.0, 0.0464],
+    [3.25, 0.0482],
   ])("lands at the fee-inside number at %sx", (L, expected) => {
     const priced = repriceAtLeverage(row, L);
     const published = publishedNetApy(priced, false);
@@ -91,18 +84,25 @@ describe("publishedNetApy on the demo row", () => {
     expect(published! / venue!).toBeCloseTo(0.8, 10);
   });
 
-  it("descends in leverage on the measured pair, which is why the dial is withheld", () => {
+  it("rises in leverage on the typed pair, which is why the dial is offered", () => {
     const at = (L: number) => publishedNetApy(repriceAtLeverage(row, L), false)!;
-    expect(at(1)).toBeGreaterThan(at(2.5));
-    expect(at(2.5)).toBeGreaterThan(at(3));
-    expect(at(3)).toBeGreaterThan(at(3.25));
+    expect(at(1)).toBeLessThan(at(2.5));
+    expect(at(2.5)).toBeLessThan(at(3));
+    expect(at(3)).toBeLessThan(at(3.25));
   });
 
-  it("prices the seed landing at the ROUTER's own loop number, to the last digit", () => {
-    /* THE WELD (design item 1). Not a typed constant: the router instrument,
-       the run panel, the published record and this row all read one number. */
-    const published = publishedNetApy(repriceAtLeverage(row, HERO_SEED_LEVERAGE), false);
-    expect(published).toBe(routerPublishedToday()!.loop);
+  it("is NOT the router's own loop number, and each says which question it answers", () => {
+    /* G3, and it is the whole point of two labels. The hero prints the record's
+       own number: the typed row at the stored leverage, `modeled`. The router
+       instrument prints the loop's rate for the latest captured day,
+       `measured` with that date. Neither is re-typed to match the other, and a
+       test that asserted they were equal was asserting the weld this ruling
+       removed. */
+    const published = publishedNetApy(repriceAtLeverage(row, HERO_SEED_LEVERAGE), false)!;
+    const measured = routerPublishedToday()!.loop!;
+    expect(published).toBeCloseTo(0.0428, 4);
+    expect(measured).toBeCloseTo(0.0308, 4);
+    expect(published).not.toBe(measured);
   });
 });
 

@@ -869,13 +869,12 @@ export default function DiscoverPanel({
         </div>
 
         {/* ONE register line (A.3 #31) OVER THE TWO LOOP SECTIONS. The loop
-            row's two rates are measured now, not typed (`demoMarketRates`), so
-            the clause that called them typed inputs stopped being true; the
-            lending reserve carries its own line on its own head, because it
-            has no leverage and no carry to describe. */}
+            row's two rates are TYPED INPUTS again (G3), so this says typed;
+            the lending reserve carries its own line on its own head, because
+            its rate IS measured and it has no leverage and no carry. */}
         <div className="mt-status">
-          Modeled from rates measured {ROUTER_MEASURED_ON}, at the leverage this pick builds
-          at. The carry is incentive-paid and the scan does not credit it.
+          Modeled from typed rates, at the leverage this pick builds at. The carry is
+          incentive-paid and the scan does not credit it.
         </div>
 
         {error ? <div className="mt-empty">{error}</div> : null}

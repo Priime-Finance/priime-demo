@@ -53,12 +53,16 @@
  * paragraphs describing.
  */
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type { LoopGraph, LoopId, ParamValue, PortfolioGraph } from "@/lib/canvas/types";
 import { laneFamily, nodeFor } from "@/lib/canvas/graph-ops";
 import { pricingParamsFor } from "@/lib/canvas/pricing-params";
 import { fmtCapacityUsd, vaultCapacity } from "@/lib/canvas/capacity";
+import {
+  demoDeriveAllRouterRules,
+  demoRouterRules,
+} from "@/lib/canvas/orchestrator/demo-rules";
 import { blockStamp, MINUS, pct, pp, ppMag, usd } from "@/lib/canvas/format";
 import { LiveNumber } from "@/components/atoms/LiveNumber";
 import {
@@ -68,9 +72,7 @@ import {
   exitProfileFor,
   orchRuleTable,
   orchRuleScopeLine,
-  deriveAllOrchRules,
   deriveLaneSignals,
-  deriveOrchRules,
   dialsFromParams,
   orchDialDefs,
   ORCH_HONESTY_LINE,
@@ -388,18 +390,34 @@ function SignedApy({
  * while the next quote loads.
  */
 export interface RouterBadge {
-  state: "quoting" | "gap" | "drying" | "ok";
+  state: "quoting" | "gap" | "drying" | "armed" | "watching";
   text: string;
 }
 
-export function routerBadge(signals: readonly LaneSignal[]): RouterBadge {
+/**
+ * THE PLATE'S ONE STATE TAG (item 9), and it names a STATE rather than a
+ * policy.
+ *
+ * It used to fall through to `ORCHESTRATOR_DEF.policyName`, so the badge slot
+ * on a running machine printed a slogan. The three states a reader of this
+ * plate actually needs are: is the machine watching, is a move armed, and has
+ * it moved. The first two are answerable from the composed route (`clears` is
+ * the improvement against the bar); `moved` belongs to a run and the run panel
+ * states it, so it is not manufactured here.
+ *
+ * `drying` survives as a state but no longer reaches these two lanes: a lane
+ * is drying when its gate fails or when it falls under the screen it was
+ * ADMITTED through, and neither demo lane was screened (item 8b).
+ */
+export function routerBadge(signals: readonly LaneSignal[], route?: ComposedRoute): RouterBadge {
   const quoting = signals.some((s) => s.quoting === true);
   const noQuote = signals.some((s) => s.noQuote);
   const drying = signals.some((s) => s.drying);
-  if (quoting) return { state: "quoting", text: "QUOTING" };
-  if (noQuote) return { state: "gap", text: "QUOTE GAP" };
-  if (drying) return { state: "drying", text: "DRYING" };
-  return { state: "ok", text: ORCHESTRATOR_DEF.policyName };
+  if (quoting) return { state: "quoting", text: "quoting" };
+  if (noQuote) return { state: "gap", text: "quote gap" };
+  if (drying) return { state: "drying", text: "drying" };
+  if (route?.clears === true) return { state: "armed", text: "armed" };
+  return { state: "watching", text: "watching" };
 }
 
 // ── The composed portfolio's own destination ──────────────────────────────
@@ -742,21 +760,82 @@ export function AllocationTrack({
 }
 
 /** The floor tick's own caption, so a mark on a bar is never unexplained.
- *  One string, both placements. */
+ *  One string, both placements.
+ *
+ *  ⚠ IT DOES NOT RENDER ON THE FLOOR PAIR, and that is the point of G1: the
+ *  band there is [0, 1] and there is no floor to caption. The function stays
+ *  because a three-lane rack, or any pair that is not a lane and its floor,
+ *  keeps the shipped band and still needs its tick explained. */
 export function floorCaption(floorPct: number): string {
   return `floor ${pct(floorPct / 100, 0)} of the book, the router does not drain past it`;
 }
 
+// ── THE ROUTER'S ROWS. Label left, mono value right, both placements. ──────
+
+/**
+ * WHY THIS IS ROWS AND NOT SENTENCES (the founder's second screenshot, item 9).
+ *
+ * The plate is a 150px screen on a piece of hardware and it was carrying three
+ * clauses with commas in them: a floor sentence, an improvement-against-a-bar
+ * sentence, and a cost sentence with a payback in days. "Way too wordy for a
+ * component" is the ruling, and the fix is the plate's own screen grammar,
+ * which every other module plate already uses: a label on the left, a mono
+ * value on the right, one tag in the badge row.
+ *
+ * Both placements read ONE `ComposedRoute`, so they still cannot describe two
+ * machines; the panel simply has room for two more rows than the plate.
+ */
+export interface RouterRow {
+  k: string;
+  v: string;
+}
+
+export function routerRows(route: ComposedRoute, variant: "plate" | "panel"): RouterRow[] {
+  if (route.refused > 0) return [{ k: "Ranking", v: `${route.refused} slots outside` }];
+  if (!route.sourceSlotId || route.destSlotId === PAUSE_DESTINATION) {
+    return [{ k: "Better", v: "no peer" }];
+  }
+  const rows: RouterRow[] = [
+    /* `none` WHEN THE GAP IS INSIDE THE BAR, because a lane that is ahead by
+       less than the bar is not better in the only sense this machine acts on.
+       The signed improvement is still printed when it clears. */
+    { k: "Better", v: route.clears ? `${route.destLabel ?? ""} ${pp(route.improvement)}` : "none" },
+    { k: "Bar", v: ppMag(route.bar) },
+    /* `holds` is the composed rack's honest state: no run has happened, so no
+       sustain window is filling and no move has a date. The run panel below
+       states what the replay did. */
+    { k: "Rule", v: "holds" },
+  ];
+  if (variant === "panel") {
+    rows.push({
+      k: "Move cost",
+      v:
+        route.paybackDays === null
+          ? `${pct((route.oneShotFrac ?? 0) + (route.windowCost ?? 0), 2)} of the capital`
+          : `${pct((route.oneShotFrac ?? 0) + (route.windowCost ?? 0), 2)} of the capital, back in ${Math.round(route.paybackDays)} days`,
+    });
+  }
+  return rows;
+}
+
+/** The payback lock, as its own line. Not a clause of the rule: it is the
+ *  condition on the WAY BACK, and `lockReverseEdge` holds that edge until the
+ *  last move has earned its own friction. */
+export const ROUTER_PAYBACK_LINE = "the way back waits until the move has paid for itself";
+
 // ── The destination, drawn. Both router placements render THIS. ────────────
 
 /**
- * Where the router would send capital, and what the move has to beat.
+ * Where the router would send capital, and what the move has to beat, AS ROWS.
  *
  * `variant` is the only thing that differs between the two placements: the
- * plate has a 150px screen and the dock has 319px, so the plate draws the
- * pair and the bar while the dock draws the pair, the bar, the cost and the
- * runner-up. Both read ONE `ComposedRoute`, so they cannot describe two
- * machines.
+ * plate has a 150px screen and draws three rows; the dock has 319px and adds
+ * the move cost and the payback lock's own line. Both read ONE `ComposedRoute`
+ * through `routerRows`, so they cannot describe two machines.
+ *
+ * THE UNIT LAW HOLDS INSIDE `routerRows`: an improvement and a bar are rate
+ * DIFFERENCES and wear `pp`; a cost is a fraction of the capital moved and
+ * wears `pct`. The improvement is signed, the bar is a magnitude.
  */
 export function DestinationLine({
   route,
@@ -766,63 +845,31 @@ export function DestinationLine({
   variant: "plate" | "panel";
 }) {
   const plate = variant === "plate";
-  const mono: React.CSSProperties = {
+  const rows = routerRows(route, variant);
+  const label: CSSProperties = {
     fontFamily: "var(--fm)",
     fontSize: plate ? 8 : 9,
     letterSpacing: ".06em",
     color: plate ? HW.label : "var(--bc-muted)",
     lineHeight: 1.5,
-    overflowWrap: "anywhere",
   };
-  if (route.refused > 0) {
-    return (
-      <div style={mono}>
-        {`${route.refused} candidate slots outside this portfolio, the whole ranking is refused`}
-      </div>
-    );
-  }
-  if (!route.sourceSlotId || route.destSlotId === PAUSE_DESTINATION) {
-    return <div style={mono}>no peer can receive, capital stays where it is</div>;
-  }
-  const strong: React.CSSProperties = {
+  const value: CSSProperties = {
+    ...label,
     color: plate ? HW.ink : "var(--bc-ink)",
     fontWeight: 600,
+    textAlign: "right",
+    overflowWrap: "anywhere",
   };
   return (
-    <div style={mono}>
-      <div>
-        <span style={strong}>{route.sourceLabel}</span>
-        {" → "}
-        <span style={strong}>{route.destLabel}</span>
-      </div>
-      {/* THE UNIT LAW, BOTH HALVES. An improvement and the bar it has to
-          clear are rate DIFFERENCES, so they wear `pp` and never `%`; the cost
-          is a fraction of the capital moved, which is what `pct` is for. And
-          the improvement is SIGNED while the bar is a MAGNITUDE: the word
-          `bar` already states which side of it a move has to be on, so it
-          takes `ppMag`, the after-a-verb form. Three formatters, three owners,
-          none of them spelled here. */}
-      <div>
-        {route.clears
-          ? `${pp(route.improvement)} on the move, over the ${ppMag(route.bar)} bar`
-          : `${pp(route.improvement)} on the move, under the ${ppMag(route.bar)} bar, capital holds`}
-      </div>
+    <div style={{ display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: plate ? "1px 8px" : "2px 10px" }}>
+      {rows.map((r) => (
+        <Fragment key={r.k}>
+          <span style={label}>{r.k}</span>
+          <span style={value}>{r.v}</span>
+        </Fragment>
+      ))}
       {plate ? null : (
-        <div>
-          {`the move costs ${pct((route.oneShotFrac ?? 0) + (route.windowCost ?? 0), 2)} of the capital moved`}
-          {route.paybackDays === null
-            ? ", so it never pays back"
-            : `, back in ${Math.round(route.paybackDays)} days`}
-        </div>
-      )}
-      {/* THE RUNNER-UP RENDERS ONLY WHEN ONE WAS MEASURED. At two lanes there
-          is exactly one peer and the ranking's honest answer is
-          `{reason:"no legal peer"}`; printing that under a destination the
-          reader can already see would state an absence as a finding. */}
-      {plate || !route.alternative || !("slotId" in route.alternative) ? null : (
-        <div>
-          {`runner up ${route.alternative.slotId}, lost by ${ppMag(route.alternative.lostBy)}`}
-        </div>
+        <span style={{ ...label, gridColumn: "1 / -1", marginTop: 2 }}>{ROUTER_PAYBACK_LINE}</span>
       )}
     </div>
   );
@@ -1978,7 +2025,14 @@ export function PortfolioVariant({
 
   const dials = useMemo(() => dialsFromParams(portfolio.orchestrator.params), [portfolio.orchestrator.params]);
   const slots = useMemo(() => slotsFromPortfolio(portfolio), [portfolio]);
-  const rules = useMemo(() => deriveAllOrchRules(dials, slots), [dials, slots]);
+  /* THE RULES THIS VAULT ACTUALLY RUNS (item 8d). `deriveAllOrchRules` is the
+     shipped derivation and it prints the shipped move cap, so this table said
+     "at most 13% of the book per move" three lines under a run panel whose one
+     decision moved 50.0pp. `demoDeriveAllRouterRules` is the same pure
+     function with the founder's 48 hours, the derived bar and, on the floor
+     pair, the whole-lane move: the table now describes the machine the panel
+     below it draws. ONE number for a move, on every surface. */
+  const rules = useMemo(() => demoDeriveAllRouterRules(dials, slots), [dials, slots]);
 
   /* D5 — the table renders the DE-DUPLICATED UNION, with lane labels so a
      scoped row can name the lane the user recognises. */
@@ -1992,15 +2046,15 @@ export function PortfolioVariant({
   );
 
   /* B.6 item 5 — the sustain count PER SLOT PER METRIC, so a row can print its
-     patience in the source's own unit. `deriveOrchRules` is the same pure
-     function `deriveAllOrchRules` flat-maps, called with the same sorted peer
+     patience in the source's own unit. `demoRouterRules` is the same pure
+     function `demoDeriveAllRouterRules` flat-maps, called with the same peer
      array, so this is one owner asked a narrower question rather than a second
      derivation of the rule set. */
   const sustainOf = useMemo(() => {
     const m = new Map<string, number>();
     const sorted = [...slots].sort((a, b) => a.slotId.localeCompare(b.slotId));
     for (const s of sorted) {
-      for (const r of deriveOrchRules(dials, s, sorted)) m.set(`${s.slotId}:${r.metric}`, r.sustainPins);
+      for (const r of demoRouterRules(dials, s, sorted)) m.set(`${s.slotId}:${r.metric}`, r.sustainPins);
     }
     return m;
   }, [dials, slots]);
@@ -2062,11 +2116,19 @@ export function PortfolioVariant({
                to build the plate's copy of these inputs. */
             hasMarket: !!pricingParamsFor(l.loop).candidateId,
             repricing: l.repricing,
+            /* THE SLOT'S OWN SCREEN (item 8b). `bySlot` is built from
+               `slotsFromPortfolio`, the same builder the rule table reads, so
+               the amber on this head and the `apy-floor` row in the table
+               below can never answer differently. */
+            screenedAtApy: bySlot.get(l.loop.id)?.screenedAtApy ?? null,
           })),
           alloc,
         ),
+        /* THE SAME ROUTE THE ROWS READ, so the head's state tag and the
+           Destination block can never disagree about whether a move is armed. */
+        route,
       ),
-    [lanes, alloc],
+    [lanes, alloc, route, bySlot],
   );
 
   return (
@@ -2087,11 +2149,11 @@ export function PortfolioVariant({
             this work package does not own cannot be given the selector.
             Cross-package request filed against `build.css:805`. */}
         <span
-          className={`hm-bdg${badge.state === "ok" ? " ok" : ""}`}
+          className={`hm-bdg${badge.state === "watching" ? " ok" : ""}`}
           data-badge
           data-badge-state={badge.state}
           style={
-            badge.state === "ok"
+            badge.state === "watching"
               ? undefined
               : { color: "var(--bc-ink)", borderColor: "var(--bc-line-strong)" }
           }
@@ -2129,7 +2191,12 @@ export function PortfolioVariant({
           );
         })}
       </div>
-      {slots.length > 0 ? (
+      {/* THE FLOOR SENTENCE ONLY WHEN THERE IS A FLOOR (item 9). On the floor
+          pair the band is [0, 1] and the router drains to zero and rebuilds,
+          so a sentence promising it does not drain past 40% would describe a
+          machine this vault does not have. Any other composition keeps the
+          shipped band and keeps its caption. */}
+      {slots.length > 0 && (slots[0].minWeight ?? 0) > 0 ? (
         <div className="dock-orch-status" style={{ marginTop: 4 }}>
           {floorCaption((slots[0].minWeight ?? 0) * 100)}
         </div>
@@ -2151,8 +2218,10 @@ export function PortfolioVariant({
         ) : null}
       </div>
 
-      {/* THE DESTINATION, DRAWN. This is the object the contract requires on
-          both router placements, and both read one `ComposedRoute`. */}
+      {/* THE DESTINATION, DRAWN AS ROWS. Same object, same derivation and the
+          same grammar as the plate: label left, mono value right. It carried
+          four sentences with commas in them and the founder read the pair of
+          surfaces as one component that talks too much. */}
       <div style={{ marginTop: 10 }}>
         <div
           style={{
@@ -2167,18 +2236,6 @@ export function PortfolioVariant({
           Destination
         </div>
         <DestinationLine route={route} variant="panel" />
-      </div>
-
-      {/* F.6 — the week strip. On a rack that has never run, everything is
-          remaining, and the strip is how the turnover dial stops being a
-          number with nothing behind it. */}
-      <div style={{ marginTop: 10 }}>
-        <TurnoverStrip
-          realized={0}
-          inFlight={0}
-          ceiling={dials.turnoverBudgetPctWeek / 100}
-          variant="panel"
-        />
       </div>
 
       <div className="pc dock-orch-dials">
@@ -2197,6 +2254,9 @@ export function PortfolioVariant({
       </div>
       {rulesOpen ? (
         <div className="dock-rules">
+          {/* `Best lane · N rules across 2 loops` (item 9). The policy name is
+              the plate key's own two words, so one machine has one name on
+              both surfaces. */}
           <div className="rt-policy">
             {ORCHESTRATOR_DEF.policyName} · {orchRuleScopeLine(table)}
           </div>

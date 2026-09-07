@@ -32,6 +32,14 @@ import { marketKeyOf } from "../ids";
    two would drift the moment a scanner changes its id prefix — which is the
    drift the whole of WP-6 exists to close between the two slot builders. */
 import { fundingClassCandidateId } from "../templates";
+/* A LEAF (its only import is `lib/demo-scope.ts`, which imports nothing), so
+   it cannot re-open the initialization cycle this directory already carries. */
+import {
+  FLOOR_PAIR_MAX_WEIGHT,
+  FLOOR_PAIR_MIN_WEIGHT,
+  isDemoFloorPair,
+  isDemoScopedMarket,
+} from "../floor-pair";
 import {
   CONCENTRATION_MAX_PCT,
   CONCENTRATION_STEP_PCT,
@@ -97,7 +105,8 @@ export {
    own module line is written from this field (`RackCanvas.tsx`), so a routed
    vault published the sentence onto its own page.
 
-   `policyName` said "FOLLOW THE YIELD" and it renders twice in the dock's
+   `policyName` said "FOLLOW THE YIELD", then "HOLD THE BETTER LANE", and it
+   renders twice in the dock's
    router panel, which only mounts at two lanes and so was invisible when the
    plate's lit key was corrected. The quant measured the routing at +0.35pp on
    top of a second lane worth +2.19pp, over a pair whose normal spread is
@@ -113,7 +122,11 @@ export const ORCHESTRATOR_DEF = {
   description:
     "Watches every loop's modeled economics on the same block-pinned quotes the plates use and derives the full reallocation rule set from three dials. Moves are capped per firing, never touch a loop mid-emergency, and in this version are modeled only: no execution rail exists yet.",
   /** Default policy name shown on the plate badge. */
-  policyName: "HOLD THE BETTER LANE",
+  /* `Best lane` (item 9, 2026-09-07). Four words became two, on a key that
+     has room for two and on a policy line that already carries the rule count.
+     Sentence case, because the badge slot it used to share with QUOTING and
+     DRYING is now a STATE tag (armed / watching) and this is a name. */
+  policyName: "Best lane",
 } as const;
 
 /** The three dials (R10–R13), rendered through the standard Control idiom. */
@@ -446,6 +459,15 @@ export interface LaneSignalInput {
   hasMarket: boolean;
   /** A reprice is in flight for this lane. */
   repricing?: boolean;
+  /**
+   * THE SCREEN THIS LANE WAS ADMITTED THROUGH, or null (item 8b).
+   *
+   * `slotsFromPortfolio` derives it through `screenedAtApyOf`; the caller
+   * passes the slot's own field rather than re-asking, so the plate's amber
+   * and the rule table's `apy-floor` row answer one question. Absent is read
+   * as null, which is the honest default for a lane nobody screened.
+   */
+  screenedAtApy?: number | null;
 }
 
 /**
@@ -469,10 +491,22 @@ export function deriveLaneSignals(
   );
   return inputs.map((i) => {
     const quoting = i.repricing === true;
+    /* ⚠ `ECON_FLOOR_APY` IS NOT A UNIVERSAL FLOOR (item 8b). It is the
+       levered-loop SCAN gate, and this predicate applied it to every lane,
+       so an UNSCREENED lane whose modeled APY sat under 8% was drawn amber
+       and the plate said DRYING over a lane nothing had ever screened. Both
+       demo lanes are in that position: the loop market is in the scan's
+       `ineligible` list and the treasury floor is unlevered, so neither
+       carries a screen, and the honest answer for both is that they are not
+       drying. A lane is drying when its GATE fails, or when it falls under
+       the screen it was ADMITTED through. Same rule `screenedAtApyOf` and
+       `deriveOrchRules` already use to decide whether `apy-floor` exists at
+       all, asked here in the same terms. */
+    const screen = i.screenedAtApy ?? null;
     const drying =
       i.hasMarket &&
       (i.eligible === false ||
-        (typeof i.netApy === "number" && i.netApy < ECON_FLOOR_APY));
+        (screen !== null && typeof i.netApy === "number" && i.netApy < screen));
     return {
       loopId: i.loopId,
       label: i.label,
@@ -596,7 +630,23 @@ function statedNumber(v: ParamValue | undefined): number | null {
  * (`addModule` -> `defaultParams`), so the two readings only ever differ on a
  * hand-built graph.
  */
-function screenedAtApyOf(loop: LoopGraph): number | null {
+function screenedAtApyOf(loop: LoopGraph, candidateId: string): number | null {
+  /* ⚠ LIVE BY REGISTER IS NOT THE SAME AS SCREENED (item 8c). The demo's two
+     markets reach the dock through the register, not through a scan: the loop
+     market is in the scan snapshot's `ineligible` list (it pays its carry in
+     incentives, which the v1 gate does not credit) and the treasury floor is a
+     hand-authored issuer row. Neither was ever ranked against `ECON_FLOOR_APY`,
+     so neither has a screen to fall below, and handing one a screen it was
+     never admitted through leaves `apy-floor` permanently breaching: the dock
+     printed `YIELD DRIES · net APY below 8%` over a market the scan never
+     screened, and `evaluate.ts`'s `evacuationBreaching` would then disqualify
+     that lane as a DESTINATION, silently deleting the founder's return leg.
+
+     The route's own fold already builds both slots with `screenedAtApy: null`
+     (F5). This is the canvas agreeing with it, from the one owner of which
+     markets those are (`lib/canvas/floor-pair.ts`, over `lib/demo-scope.ts`),
+     imported rather than retyped. */
+  if (isDemoScopedMarket(candidateId)) return null;
   const buffer = moduleParams(loop, "safety-buffer");
   if (!buffer) return null;
   const leverage = statedNumber(buffer.targetLeverage);
@@ -681,8 +731,16 @@ export function slotsFromPortfolio(p: PortfolioGraph): LoopSlot[] {
   const pinned = p.loops
     .map((loop) => ({ loop, sp: sourceParams(loop) }))
     .filter(({ sp }) => String(sp.candidateId ?? "") !== "");
-  const maxWeight = clampConcentrationPct(dials.maxConcentrationPct, pinned.length) / 100;
-  const minWeight = derivedMinWeight(pinned.length, maxWeight);
+  /* THE SWITCH'S BAND, ON THE CANVAS TOO (G1). The route folds this pair with
+     `minWeight` 0 and `maxWeight` 1, and the published record carries the same
+     ceiling; a plate drawing a 40% floor tick over a machine that evacuates
+     would be the second machine this whole seam exists to prevent. Any other
+     composition keeps the dial's own clamped band. */
+  const floorPair = isDemoFloorPair(pinned.map(({ sp }) => String(sp.candidateId ?? "")));
+  const maxWeight = floorPair
+    ? FLOOR_PAIR_MAX_WEIGHT
+    : clampConcentrationPct(dials.maxConcentrationPct, pinned.length) / 100;
+  const minWeight = floorPair ? FLOOR_PAIR_MIN_WEIGHT : derivedMinWeight(pinned.length, maxWeight);
   return pinned.map(({ loop, sp }) => {
     const candidateId = String(sp.candidateId ?? "");
     return {
@@ -694,7 +752,7 @@ export function slotsFromPortfolio(p: PortfolioGraph): LoopSlot[] {
       targetWeight: (p.orchestrator.allocationsBps[loop.id] ?? 0) / 10000,
       minWeight,
       maxWeight,
-      screenedAtApy: screenedAtApyOf(loop),
+      screenedAtApy: screenedAtApyOf(loop, candidateId),
       metrics: metricsOf(sp, candidateId),
     };
   });

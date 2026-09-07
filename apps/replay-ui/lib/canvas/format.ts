@@ -265,3 +265,44 @@ export function scanRef(
   if (!finite(leverage) || leverage <= 0) return pct(apr);
   return `${pct(apr)} at ${lev(leverage)}`;
 }
+
+/**
+ * The ONE usd-magnitude formatter in the feature. Always FLOORS, so the
+ * printed figure never exceeds the modeled one. Three digits, because the
+ * inputs are a book-depth snapshot and a borrow-liquidity read that move
+ * minute to minute and nothing past three digits is real — but two
+ * significant figures is too blunt ($8K vs $8.4K is the difference between a
+ * market being assessable and not). Uppercase K/M/B, matching every other
+ * money string on the canvas.
+ *
+ * HANDOFF — CLOSED (2026-08-22). The two component-side copies this note
+ * named both rounded UPWARD, printing a capacity larger than the one the
+ * model will honour. Both are now thin dispatches onto this export and hold
+ * no arithmetic of their own:
+ *   · `components/canvas/CopilotPanel.tsx` (`capFmt`) — null-guard only.
+ *   · `components/vaults/PortfolioView.tsx` (`chartUsd`) — magnitude bands
+ *     here, exact sub-$100K to `store.ts` `fmtUsdFull`.
+ * With `store.ts` `fmtUsd` and `funding-demo.ts` `fmtUsd` being aliases of
+ * this same function object, this is the ONLY usd-magnitude arithmetic in
+ * the codebase. Keep it that way: a second one always disagrees, and on a
+ * capacity it disagrees in the direction that promises room we do not have.
+ */
+export function fmtCapacityUsd(v: number | null | undefined): string {
+  if (typeof v !== "number" || !Number.isFinite(v)) return "—";
+  /* SIGNED VALUES GO THROUGH THE U+2212 OWNER (cleanup 2026-08-24). This is
+     `fmtUsd` for the whole vault surface, and a negative handed to it (a
+     modeled loss, a transient countup value) fell through every magnitude
+     band into the bottom template and printed "$-2467" — an ASCII hyphen
+     inside the one money run, the exact glyph the format contract bans.
+     The ratified minus leads the `$`, mirroring `fmtUsdFull`/`format.usd`;
+     a magnitude that floors to zero carries no sign. */
+  if (v < 0) {
+    const body = fmtCapacityUsd(-v);
+    return body === "$0" ? body : `${MINUS}${body}`;
+  }
+  const f = (n: number, u: string) => `$${n >= 100 ? Math.floor(n) : Math.floor(n * 10) / 10}${u}`;
+  if (v >= 1e9) return f(v / 1e9, "B");
+  if (v >= 1e6) return f(v / 1e6, "M");
+  if (v >= 1e3) return f(v / 1e3, "K");
+  return `$${Math.floor(v)}`;
+}

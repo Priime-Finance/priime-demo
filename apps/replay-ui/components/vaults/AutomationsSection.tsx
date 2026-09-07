@@ -344,6 +344,9 @@ export interface RouterReadout {
    *  first lane is not called `loop` must not be described as if it were. */
   loopLabel: string;
   asOfText: string;
+  /** The one line the reading states, both lanes, with the measured date on
+   *  the lane whose number came from the capture. */
+  readingLine: string;
   /** The bar, the hysteresis and the CLAMPED move, as the foot prints them. */
   barText: string;
   rearmText: string;
@@ -383,8 +386,10 @@ export function routerReadout(r: RouterAutomation): RouterReadout {
      is the fallback: neither is ever averaged with the other. */
   const gap = loopApy !== null && floorApy !== null ? loopApy - floorApy : replay.gapApy;
 
-  /* The clamped move, through the ONE owner in the store, which is the same
-     call the rule sentence and the Parameters row make. */
+  /* The move, through the ONE owner in the store, which is the same call the
+     Parameters row makes. Under the switch it is the whole lane, so the
+     instrument states it as a word rather than as a size (item 8d): one
+     number for a move, and the cascade says `all`. */
   const maxMove = routerMaxMoveFrac(r);
 
   // The band's axis: the bar either side plus half a bar of headroom, so both
@@ -418,6 +423,13 @@ export function routerReadout(r: RouterAutomation): RouterReadout {
     rearmText: ppMagnitude(r.rearmApy),
     moveText: ppMagnitude(maxMove, 1),
     maxMove,
+    /* THE MEASURED PAIR, AS THE READING LINE STATES IT (G3). The loop's rate
+       is the latest captured day and it says so with its date; the hero on the
+       same page prints the record's own published number at the stored
+       leverage and says THAT. Neither is re-typed to match the other. */
+    readingLine:
+      `${loopLane?.label ?? "loop"} ${pct(loopApy, 2)} (measured ${routerDayLabel(replay.asOfDate)}) ` +
+      `against ${floorLane?.label ?? "lending lane"} ${pct(floorApy, 2)}`,
     cells,
     filled,
     clockLabel: `${filled} of ${cells} hours behind`,
@@ -460,7 +472,6 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
   const capLoop = loopLabel.charAt(0).toUpperCase() + loopLabel.slice(1);
   const gap = read.gap;
   const needle = read.needlePct;
-  const move = read.moveText;
   const bar = read.barText;
 
   return (
@@ -469,18 +480,23 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
         <div>
           <span className="vxi-kick">{chain} · Capital routing</span>
           <h3 className="vxi-title">Capital router</h3>
-          <p className="vxi-role">{moduleDepositorLine(ROUTER_MODULE) ?? ""}</p>
+          {/* THE RECORD'S OWN RULE SENTENCE, not a second one from the module
+              vocabulary. `routerRuleSentence` is the owner, the review sheet
+              published it, and the Parameters panel below prints the same
+              string: one rule, one spelling, in the founder's words. */}
+          <p className="vxi-role">{r.ruleSentence}</p>
         </div>
         {read.clockFull ? <Chip tone="watch" label="Armed" /> : <ArmedChip vault={vault} />}
       </div>
       <div className="vxi-body">
         <div className="vxe-read">
           <b>{read.gapText}</b>
-          <span>
-            {loopLabel} {read.loopText} against {floorLabel} {read.floorText}, on rates measured{" "}
-            {read.asOfText}
-          </span>
-          <i className="vxe-modeled">modeled</i>
+          <span>{read.readingLine}</span>
+          {/* THE REGISTER OF THIS NUMBER, AND IT IS NOT THE HERO'S (G3). The
+              hero prints the record's published number at the stored leverage
+              and tags it `published at 2.50x, modeled`; this reads the capture
+              and tags itself with the day it read. */}
+          <i className="vxe-modeled">paying today, measured</i>
         </div>
         <div className="vxk">
           <div className="vxk-cells" aria-hidden>
@@ -536,7 +552,7 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
                 {bar} for {r.sustainHours}h
               </b>
               <span className="vxc-arr">→</span>
-              <span className="vxc-act">Move {move} to the {floorLabel}</span>
+              <span className="vxc-act">Move all to {floorLabel}</span>
             </div>
             <div className={`vxc-row${lit === 1 ? " vxc-row--on" : ""}`} style={{ "--i": 1 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--tgt" />
@@ -552,7 +568,7 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
                 {bar} for {r.sustainHours}h
               </b>
               <span className="vxc-arr">→</span>
-              <span className="vxc-act">Move {move} to the {loopLabel}</span>
+              <span className="vxc-act">Rebuild the {loopLabel}</span>
             </div>
             <div className={`vxc-row${lit === 3 ? " vxc-row--on" : ""}`} style={{ "--i": 3 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--em" />
@@ -562,6 +578,11 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
               <span className="vxc-act">Refuse</span>
             </div>
           </div>
+          {/* THE PAYBACK LOCK, ITS OWN LINE. It is not a clause of the rule
+              sentence and it is not one of the four cascade rows: it is the
+              condition on the WAY BACK, and `lockReverseEdge` holds that edge
+              until the last move has earned its own friction. */}
+          <div className="vxc-note">the way back waits until the move has paid for itself</div>
         </div>
       </div>
       <div className="vxi-foot">
@@ -573,9 +594,6 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
         </span>
         <span>
           Re-arm · <b>{read.rearmText}</b>
-        </span>
-        <span>
-          Max move · <b>{move}</b>
         </span>
         {read.allocationText === null ? null : (
           <span>

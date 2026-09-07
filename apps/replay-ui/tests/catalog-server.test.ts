@@ -66,22 +66,25 @@ describe("demoVenues", () => {
     });
   });
 
-  /* ── THE WELD (design item 1) ────────────────────────────────────────────
-     The whole package rests on the canvas and the router pricing ONE pair of
-     lanes. Both sides are recomputed here through their own owners and
-     asserted equal at full precision, so a second frame cannot open in
-     silence the way the typed 0.044 / 0.035 pair did. */
-  describe("the canvas and the router price one vault", () => {
+  /* ── TWO NUMBERS, TWO LABELS (G3) ────────────────────────────────────────
+     The canvas prices the TYPED row at the leverage the pick builds at; the
+     router prices the MEASURED day. They are not equal and neither is
+     re-typed to match: each surface says which question its number answers.
+     Both sides are recomputed here through their own owners so a surface that
+     starts printing one under the other's label fails here. */
+  describe("the canvas and the router each print their own number", () => {
     const today = routerPublishedToday()!;
 
-    it("prices the loop lane at the router's own loop number", () => {
+    it("prices the loop lane from the typed row, at the leverage the pick builds at", () => {
       const canvas = publishedNetApy(
         repriceAtLeverage(demoMarketCandidate(), HERO_SEED_LEVERAGE),
         false,
       );
-      expect(canvas).toBe(today.loop);
       // The dock ladder's last rung, at the precision the canvas prints.
-      expect(`${((canvas ?? 0) * 100).toFixed(1)}%`).toBe("3.1%");
+      expect(`${((canvas ?? 0) * 100).toFixed(1)}%`).toBe("4.3%");
+      // And it is NOT the measured day: 4.28% modeled against 3.08% measured.
+      expect(canvas).not.toBe(today.loop);
+      expect(`${((today.loop ?? 0) * 100).toFixed(1)}%`).toBe("3.1%");
     });
 
     it("prices the floor lane at the router's own floor number", () => {

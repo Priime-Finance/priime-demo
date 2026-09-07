@@ -338,34 +338,33 @@ describe("copilot route", () => {
     expect(payload.loops).toHaveLength(1);
     expect(payload.loops[0]!.candidateId).toBe(HERO_MARKET_ID);
     expect(payload.loops[0]!.hedge).toBe(false);
-    /* THE SEAT FOLLOWS THE MODULE RULING, and on this market the ruling
-       WITHHOLDS the dial: the row's measured borrow (5.0869%) costs more at
-       the margin than its measured collateral yield (4.75%), so
-       `leverageModuleInstalls` is false, published APY descends in leverage,
-       and there is no ceiling to clamp a request to. The lane therefore
-       carries NO `seatBounds` and sits at the product minimum, priced in the
-       PRODUCT frame (`vaultApy`, the fee inside).
+    /* THE SEAT FOLLOWS THE MODULE RULING, and on the typed row (G3, item 8a)
+       the ruling OFFERS the dial: 4.4% of collateral yield against a 3.5%
+       marginal borrow means an extra turn models more yield, so
+       `leverageModuleInstalls` is true, the lane carries the market's own
+       seat bounds, and a request above the ceiling is clamped to it rather
+       than dropped to the product minimum.
 
-       The 5x the model asked for is not silently dropped: the card carries
-       the correction AND its reason as a note, which is the postcondition
-       that matters here. Asserted through the ruling itself rather than
-       against a literal, so the day the two rates cross back this test
-       follows the product instead of pinning a frame it has left. */
+       The 5x the model asked for is not silently dropped: the card carries the
+       correction AND its reason as a note, which is the postcondition that
+       matters here. Asserted through the ruling itself rather than against a
+       literal, so the day the two rates cross this test follows the product
+       instead of pinning a frame it has left. */
     const lane = payload.loops[0]!.lane;
-    expect(leverageModuleInstalls(demoMarketCandidate())).toBe(false);
-    expect(lane.seatBounds).toBeNull();
-    expect(lane.leverageSubtracts).toBe(true);
-    expect(payload.loops[0]!.leverage).toBe(PRODUCT_MIN_LEVERAGE);
+    expect(leverageModuleInstalls(demoMarketCandidate())).toBe(true);
+    expect(lane.seatBounds).not.toBeNull();
+    expect(lane.leverageSubtracts).toBe(false);
+    expect(payload.loops[0]!.leverage).toBe(lane.seatBounds!.max);
     expect(payload.loops[0]!.leverage).toBeLessThan(5);
+    expect(payload.loops[0]!.leverage).toBeGreaterThan(PRODUCT_MIN_LEVERAGE);
     expect(lane.seatedLeverage).toBe(payload.loops[0]!.leverage);
     expect(typeof lane.vaultApy).toBe("number");
     expect(lane.vaultApy!).toBeGreaterThan(0);
+    /* The correction is carried, in whatever words the note owner writes it:
+       the postcondition is that the card SAYS the ask was moved, not the
+       phrasing, which lives in `lib/canvas/copilot`. */
     expect(payload.notes.length).toBeGreaterThan(0);
-    expect(
-      payload.notes.some(
-        (n) => n.includes("set to 1.00x") && n.includes("borrowing costs more at the margin"),
-      ),
-    ).toBe(true);
+    expect(payload.notes.join(" ")).toContain("5.00x");
   });
 
   it("S3. explain_market on the live id emits explain; on any other id, the coming-soon reason", async () => {

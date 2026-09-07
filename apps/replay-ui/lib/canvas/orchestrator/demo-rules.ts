@@ -13,9 +13,45 @@
  * lanes derive the same rule and lane A's `better_elsewhere` moving to B is
  * lane B's rule read from the other end.
  *
- * This module wraps `deriveOrchRules` and overrides exactly three fields on
- * the `:upgrade` rule: `sustainPins`, `threshold` and `rearmLevel`. Nothing
- * else is touched and no second rule table exists.
+ * This module wraps `deriveOrchRules` and overrides four fields on the
+ * `:upgrade` rule: `sustainPins`, `threshold`, `rearmLevel` and, on the floor
+ * pair, `moveWeight`. Nothing else is touched and no second rule table exists.
+ *
+ * ══ THIS IS A DEVIATION FROM THE LIVE ROUTER, AND HERE IS WHY (G1) ════════
+ *
+ * The live router SHIFTS allocation inside a concentration band. Between a
+ * lane and its floor the founder asked for something else: "unwinds the
+ * recursive loop position and relocates the capital", and "rebuilds the loop".
+ * Measured, the shipped machine cannot do that at any legal dial: at two lanes
+ * `minWeight = max(0, 1 - (N - 1) * maxWeight)` is 40%, so a book seated 50/50
+ * shifts at most 10pp, and the 80% ceiling only widens the band to [20%, 80%].
+ * A 40/60 band is not an evacuation, and leaving 40% of the book in a lane
+ * that published minus eleven percent for six weeks is not the product he
+ * asked for.
+ *
+ * So on the FLOOR PAIR ONLY (`lib/canvas/floor-pair.ts`, which owns the four
+ * numbers and the predicate) one firing carries the whole lane weight and the
+ * pair's band is [0, 1]. Two invariants have to give way for that, and each is
+ * cleared BY NAME with its reason in `validateDemoRouter` below:
+ *
+ *   per-tick-and-budget-caps   R15's [0.05, 0.25] move cap, on the `:upgrade`
+ *                              rule of a floor-pair lane and on nothing else.
+ *   dial-range                 the concentration dial at 100, outside its own
+ *                              [35, 80], so the published ceiling and the
+ *                              slots' band state ONE policy.
+ *
+ * Everything else is enforced unchanged: R25's sustain (the founder's 48
+ * hours), R28's 2pp hysteresis gap, R29's cooldown floor, R30's anti-cycle
+ * lock and its payback extension, R23's weight sum, R36's class coherence and
+ * R38's derived-only rule (re-checked against this module's own derivation).
+ * The switch is patient, hysteretic, and refuses to come straight back.
+ *
+ * ONE MORE OWNER MOVED, and it is named here because it is the same ruling:
+ * `sizeMove`'s R33 per-tick clamp is `0.25 x source equity`, which would have
+ * quietly sized a whole-lane move down to 12.5pp. The evaluator's own doctrine
+ * is that a move is REFUSED, never silently sized down, so the clamp now reads
+ * `max(0.25, moveWeight) x source equity`: the identity for every rule inside
+ * R15, and the rule's own ask for one that has cleared R15 by name.
  *
  * ── 48 HOURS IN PINS, ON BOTH CADENCES ───────────────────────────────────
  * A sustain window counts OBSERVATIONS, not hours (types.ts: "a sustain
@@ -120,19 +156,22 @@
  * invariant, R28 and R25 included, is enforced unchanged.
  */
 
-/* ⚠ THIS IMPORT IS FIRST AND THAT IS LOAD-BEARING, NOT A STYLE CHOICE.
-   `rule-schema` imports `../capacity`, which imports `./templates`, which
-   imports `./graph-ops`, which imports `./orchestrator` (index) whose module
-   body CALLS `concentrationFloorPct` from `rule-schema` at line 120. Entering
-   `rule-schema` first therefore throws
-   "Cannot access 'CONCENTRATION_BASE_FLOOR_PCT' before initialization" at load
-   time. Verified 2026-09-07: a test file whose only import is `rule-schema`
-   fails to load, and the same file with `templates` imported first passes.
-   Loading `templates` first walks the cycle in the order the app already
-   walks it. Reported as a cross-package finding; the fix belongs in
-   `rule-schema`/`orchestrator/index`, which this package does not own. */
+/* THIS IMPORT USED TO BE FIRST AND LOAD-BEARING. It is neither any more.
+   F6 was real: `rule-schema` imported `../capacity`, which reaches
+   `./templates` -> `./graph-ops` -> `./orchestrator` (index), whose module
+   body calls `concentrationFloorPct` back into `rule-schema`, so entering
+   `rule-schema` first threw "Cannot access 'CONCENTRATION_BASE_FLOOR_PCT'
+   before initialization" at load time. It is FIXED AT ITS OWNER: `capacity`'s
+   `fmtCapacityUsd` moved to `lib/canvas/format.ts` (a module with no imports
+   at all) and `capacity.ts` re-exports it, so `rule-schema` now imports
+   nothing but leaves and can be entered first. `tests/rule-schema-entry.test.ts`
+   imports it alone and fails if the cycle comes back. */
 import { DN_LP_MODEL } from "@/lib/canvas/templates";
 
+import {
+  FLOOR_PAIR_MOVE_WEIGHT,
+  isDemoFloorPair,
+} from "@/lib/canvas/floor-pair";
 import { deriveMoveWeight, deriveOrchRules, upgradeThreshold, validateOrchestrator } from "./rule-schema";
 import type { ExitProfile, LoopSlot, OrchRule, OrchViolation, OrchestratorConfig } from "./types";
 import { ORCH_DIAL_DEFAULTS, type OrchestratorDials } from "@/lib/canvas/param-schema";
@@ -154,10 +193,28 @@ export const DEMO_MOVE_GAS_USD_PER_ACTION = DN_LP_MODEL.gasPerRecenterUsd;
  *  Aave withdraw, one swap, Morpho supply, Morpho borrow: four either way. */
 export const DEMO_MOVE_GAS_ACTIONS = 4;
 
-/** What one firing moves at the default dials, as a fraction of the book. */
+/**
+ * THE NOTIONAL THE FRICTION WAS MEASURED AT, and under the switch it is no
+ * longer the size of a move.
+ *
+ * `deriveMoveWeight(ORCH_DIAL_DEFAULTS)` is 0.125, so the shipped machine's
+ * firing carries $3,125 of the modeled book, and that is the size the
+ * KyberSwap quote below was taken at. A floor-pair firing now carries the
+ * whole lane, $12,500 off a book seated 50/50, and the quote was NOT re-taken
+ * at that size, so the swap leg is quoted at the size it was measured at.
+ *
+ * The direction of the error is stated rather than assumed. Gas is a fixed
+ * dollar cost, so a SMALLER denominator makes the gas leg a LARGER fraction:
+ * 6.4 bps here against 1.6 bps at the whole-lane size. The friction below is
+ * therefore an upper bound on the switch's gas, and the bar derived from it is
+ * conservative. Re-quoting the swap at $31,250 of USDe would move the swap leg
+ * by an unmeasured amount in an unknown direction, and inventing that number
+ * is the one thing this module refuses to do.
+ */
 export const DEMO_ROUTER_MOVE_WEIGHT = deriveMoveWeight(ORCH_DIAL_DEFAULTS);
 
-/** The dollars one firing carries, at the modeled book. */
+/** The dollars the quote was taken at: the shipped move weight on the modeled
+ *  book. See the block above for why it is not the size of a switch. */
 export const DEMO_ROUTER_MOVED_USD = DEMO_ROUTER_BOOK_USD * DEMO_ROUTER_MOVE_WEIGHT;
 
 /** The collateral a move sells or buys: `L` times the capital moved. */
@@ -200,11 +257,62 @@ export function demoExitProfile(): ExitProfile {
   return { oneShotFrac: DEMO_MOVE_FRICTION_FRAC_ONE_WAY, settleSeqs: 0, windowCost: 0 };
 }
 
-/** The improvement a move must clear, through the `upgradeThreshold` owner. */
-export const DEMO_UPGRADE_THRESHOLD = upgradeThreshold(demoExitProfile());
+/**
+ * THE RAW BREAK-EVEN, one way, before the register floor: the bar at which a
+ * single move pays its own friction back inside the 90-day horizon.
+ * `upgradeThreshold` floors its answer at 3%, so the raw number is computed
+ * here from its own arithmetic and the two are compared rather than confused.
+ */
+export const DEMO_BAR_ONE_WAY_BREAKEVEN = Number(
+  ((DEMO_MOVE_FRICTION_FRAC_ONE_WAY * 365) / 90).toFixed(5),
+);
 
-/** R28's floor met exactly: the safe side is 2pp inside the bar, both ways. */
-export const DEMO_UPGRADE_REARM = Number((DEMO_UPGRADE_THRESHOLD - 0.02).toFixed(6));
+/** The ROUND-TRIP break-even: a move and its return, both paid inside one
+ *  horizon. Twice the one-way bar, and the honest bar for a mechanism whose
+ *  own hysteresis is symmetric. */
+export const DEMO_BAR_ROUND_TRIP_BREAKEVEN = Number((2 * DEMO_BAR_ONE_WAY_BREAKEVEN).toFixed(5));
+
+/** The register floor, through the shipped owner: never advertise a bar under
+ *  3pp. `UPGRADE_THRESHOLD_FLOOR` itself is not edited. */
+export const DEMO_BAR_REGISTER_FLOOR = upgradeThreshold(demoExitProfile());
+
+/**
+ * ══ THE BAR THAT SHIPS, RE-MEASURED UNDER THE SWITCH (G2) ════════════════
+ *
+ * F4 measured the three candidates under 10pp band shifts and the register
+ * floor won. Under a full switch the friction rides the WHOLE book and the
+ * spread is earned on the whole book, so the ranking had to be re-taken. It
+ * was, at all three bars, over the measured window and the since-incentive
+ * window, in every regime, folded through the shipped `evaluateOrchestrator`
+ * (`tests/router-backtest.test.ts`, table in docs/plans/ROUTER_QUANT.md,
+ * section "under the switch", 2026-09-07).
+ *
+ * The since-incentive window is the one this vault could have existed in, and
+ * it is the one G2 rules by. Measured there, the two lower bars each take one
+ * whole-book move that the 47-day window is too short to pay back, and both
+ * land under the 3.0pp bar's book. The 3.0pp bar therefore ships again, now on
+ * a switch measurement rather than a band-shift one, and it is still COMPUTED
+ * (`upgradeThreshold`) rather than typed, so it moves if the friction does.
+ *
+ * `UPGRADE_THRESHOLD_FLOOR` is not edited and this constant does not sit under
+ * it. The two lower bars stay exported, by name, because the sensitivity is
+ * the argument and a deleted candidate is an argument nobody can check.
+ */
+export const DEMO_UPGRADE_THRESHOLD = DEMO_BAR_REGISTER_FLOOR;
+
+/**
+ * R28's floor met exactly: the safe side is 2pp inside the bar, both ways.
+ *
+ * A bar UNDER 2pp puts the re-arm below zero, which is legal, is still the
+ * 2pp gap the invariant asks for, and means the lane has to be ahead before
+ * the rule re-arms. It is exported as a function so the sensitivity folds
+ * derive their re-arm the same way the shipped one does.
+ */
+export function demoRearmFor(bar: number): number {
+  return Number((bar - 0.02).toFixed(6));
+}
+
+export const DEMO_UPGRADE_REARM = demoRearmFor(DEMO_UPGRADE_THRESHOLD);
 
 /** The founder's window, in hours. Fixed by ruling; the margin is derived. */
 export const DEMO_SUSTAIN_HOURS = 48;
@@ -232,12 +340,32 @@ export function demoRouterRules(
   slot: LoopSlot,
   peers: readonly LoopSlot[] = [],
   sustainPins: number = DEMO_SUSTAIN_PINS_DAILY,
+  bar: number = DEMO_UPGRADE_THRESHOLD,
 ): OrchRule[] {
+  /* THE SWITCH APPLIES TO BOTH ENDS OF THE PAIR. On the loop lane the peer IS
+     the floor; on the floor lane the same mechanism is read from the other end
+     (plan R2: lane A's rule moves to B, lane B's rule moves back to A), and the
+     founder's sentence asks for the rebuild to be as whole as the evacuation.
+     A lane whose portfolio is not this pair keeps the shipped move weight. */
+  const wholeLane = isFloorPairSlot(slot, peers);
   return deriveOrchRules(dials, slot, peers).map((r) =>
     r.metric === "better_elsewhere"
-      ? { ...r, sustainPins, threshold: DEMO_UPGRADE_THRESHOLD, rearmLevel: DEMO_UPGRADE_REARM }
+      ? {
+          ...r,
+          sustainPins,
+          threshold: bar,
+          rearmLevel: demoRearmFor(bar),
+          ...(wholeLane ? { moveWeight: FLOOR_PAIR_MOVE_WEIGHT } : {}),
+        }
       : r,
   );
+}
+
+/** Is this slot one half of the demo's floor pair? Pure, and a function of the
+ *  same three arguments R38 re-derives from. */
+export function isFloorPairSlot(slot: LoopSlot, peers: readonly LoopSlot[]): boolean {
+  const ids = [slot.candidateId, ...peers.filter((p) => p.slotId !== slot.slotId).map((p) => p.candidateId)];
+  return isDemoFloorPair([...new Set(ids)]);
 }
 
 /** Every lane's rules, in the deterministic order `deriveAllOrchRules` uses. */
@@ -245,22 +373,73 @@ export function demoDeriveAllRouterRules(
   dials: OrchestratorDials,
   slots: readonly LoopSlot[],
   sustainPins: number = DEMO_SUSTAIN_PINS_DAILY,
+  bar: number = DEMO_UPGRADE_THRESHOLD,
 ): OrchRule[] {
   const sorted = [...slots].sort((a, b) => a.slotId.localeCompare(b.slotId));
-  return sorted.flatMap((s) => demoRouterRules(dials, s, sorted, sustainPins));
+  return sorted.flatMap((s) => demoRouterRules(dials, s, sorted, sustainPins, bar));
 }
 
 /**
+ * WHAT THE SWITCH RELAXES, BY NAME, WITH THE REASON. Nothing else is cleared.
+ *
+ * Exported so a test can assert the list rather than trust the filter, and so
+ * a reader of the module can see the whole deviation in one object.
+ */
+export const DEMO_ROUTER_RELAXATIONS = [
+  {
+    invariant: "per-tick-and-budget-caps",
+    rule: "R15 move cap",
+    scope: "the `:upgrade` rule of a floor-pair lane, and no other rule",
+    reason:
+      "one firing carries the whole lane, because between a lane and its floor the router evacuates and rebuilds rather than shifting inside a band",
+  },
+  {
+    invariant: "dial-range",
+    rule: "the concentration floor and ceiling",
+    scope: "maxConcentrationPct on a two-lane floor pair, and no other dial",
+    reason:
+      "the pair's band is [0, 1], and the published ceiling has to state the same policy the slots carry",
+  },
+] as const;
+
+/**
  * The full validator, with R38 re-checked against the demo's own derivation
- * rather than waived. Returns [] on a clean config.
+ * rather than waived, and the switch's two relaxations cleared by name.
+ * Returns [] on a clean config.
  */
 export function validateDemoRouter(
   cfg: OrchestratorConfig,
   sustainPins: number = DEMO_SUSTAIN_PINS_DAILY,
+  bar: number = DEMO_UPGRADE_THRESHOLD,
 ): OrchViolation[] {
   const violations = validateOrchestrator(cfg);
-  const expected = JSON.stringify(demoDeriveAllRouterRules(cfg.dials, cfg.loops, sustainPins));
+  const expected = JSON.stringify(demoDeriveAllRouterRules(cfg.dials, cfg.loops, sustainPins, bar));
   const actual = JSON.stringify([...cfg.rules].sort((a, b) => a.ruleId.localeCompare(b.ruleId)));
+  /* R38 IS RE-CHECKED, NOT WAIVED: the rule set has to be re-derivable from
+     (dials, slots) through this module's own pure function before anything is
+     cleared. A tampered draft keeps every violation it earned, including this
+     one. */
   if (expected !== actual) return violations;
-  return violations.filter((v) => v.invariant !== "derived-only");
+
+  /* The pair the switch is declared for. A config that is not this pair gets
+     no relaxation at all, so a third lane or a different market puts the
+     shipped invariants straight back. */
+  const pair = isDemoFloorPair(cfg.loops.map((l) => l.candidateId));
+  const wholeLaneRuleIds = new Set(
+    cfg.rules.filter((r) => r.metric === "better_elsewhere" && r.moveWeight === FLOOR_PAIR_MOVE_WEIGHT).map((r) => r.ruleId),
+  );
+  return violations.filter((v) => {
+    if (v.invariant === "derived-only") return false;
+    if (!pair) return true;
+    if (
+      v.invariant === "per-tick-and-budget-caps" &&
+      [...wholeLaneRuleIds].some((id) => v.detail.startsWith(`${id}:`))
+    ) {
+      return false; // R15 move cap, cleared: see DEMO_ROUTER_RELAXATIONS[0]
+    }
+    if (v.invariant === "dial-range" && v.detail.startsWith("maxConcentrationPct ")) {
+      return false; // the concentration band, cleared: see DEMO_ROUTER_RELAXATIONS[1]
+    }
+    return true;
+  });
 }
