@@ -2358,8 +2358,8 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                      all one family keeps the sentence it has always had, so
                      nothing moves on a record that was already true. */
                   mixedFamily
-                  ? `${lanes.length} lanes, ${familiesPhrase}, with the router holding the better lane inside the published concentration cap.`
-                  : `${lanes.length} loops with the router holding the better lane inside the published concentration cap.`,
+                  ? `${lanes.length} lanes, ${familiesPhrase}, with the router moving the whole book to the better lane on the 48-hour rule.`
+                  : `${lanes.length} loops with the router moving the whole book to the better lane on the 48-hour rule.`,
             };
     return {
       ...record,

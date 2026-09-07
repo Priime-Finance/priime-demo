@@ -692,7 +692,7 @@ describe("the router vocabulary names one machine once", () => {
     expect(entry).toBeDefined();
     expect(moduleDepositorLine("yield router")).toBe(entry!.depositorLine);
     expect(entry!.depositorLine).toBe(
-      "Moves capital between the vault's positions inside the published concentration cap.",
+      "Moves the whole book to the better lane once it has led by the bar for 48 hours.",
     );
   });
 

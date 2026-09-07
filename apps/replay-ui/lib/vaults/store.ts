@@ -1810,7 +1810,7 @@ const EXTRA_VOCAB: ModuleVocabEntry[] = [
   },
   {
     name: "Capital router",
-    depositorLine: "Moves capital between the vault's positions inside the published concentration cap.",
+    depositorLine: "Moves the whole book to the better lane once it has led by the bar for 48 hours.",
   },
 ];
 

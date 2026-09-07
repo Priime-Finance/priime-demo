@@ -32,7 +32,7 @@ const EM_DASH = "—";
 
 /** The D.1 bytes as ratified. A change here is a deliberate prompt edit.
  *  Moved 2026-09-07 by WP-4: the register went from one live workflow to two. */
-const PROMPT_SHA256 = "90a7be3229e867f5f2c2dd7cc532ded9361b88004a4e45a578dc4672b98cc686";
+const PROMPT_SHA256 = "540b6383d1d5a307cc5e2cb28d47f5fc9b00675b8018cfbcdda765424cf3de31";
 
 describe("D.1 the system prompt", () => {
   it("is the ratified bytes", () => {
@@ -79,7 +79,7 @@ describe("D.1 the system prompt", () => {
       "Never claim automated rebalancing, automated reallocation, or any execution capability the context does not mark as real",
     );
     expect(P).toContain(
-      "never say it relocates or unwinds a lane: it shifts weight between lanes inside the published concentration cap",
+      "it moves the whole book to the better lane once that lane has led by the published bar for the published window, every move modeled and none executed",
     );
     expect(P).toContain("3. One loop market and one lending reserve are live.");
     /* The quant's honest register, quoted from its owner so the model

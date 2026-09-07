@@ -186,7 +186,7 @@ describe("the router is not advertised as a yield follower (item 2)", () => {
     expect(plate).not.toMatch(/^\s+Follow yield$/m);
     const rack = read("components/canvas/RackCanvas.tsx");
     expect(rack).not.toContain("following modeled yield");
-    expect(rack.match(/router holding the better lane inside the published concentration cap/g)).toHaveLength(2);
+    expect(rack.match(/router moving the whole book to the better lane on the 48-hour rule/g)).toHaveLength(2);
   });
 });
 

@@ -492,7 +492,6 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
      dock's bars read the same function. */
   const capFloor = openingCase(floorLabel);
   const capLoop = openingCase(loopLabel);
-  const gap = read.gap;
   const needle = read.needlePct;
   const bar = read.barText;
 
@@ -532,15 +531,14 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
         <div className="vxe-wrap">
           <div className="vxe-bar" aria-hidden>
             <span className="vxe-z vxe-z--del" style={{ flexGrow: zMove }} />
-            <span className="vxe-z vxe-z--up" style={{ flexGrow: zRearm }} />
-            <span className="vxe-z vxe-z--tgt" style={{ flexGrow: zHold }} />
+            <span className="vxe-z vxe-z--tgt" style={{ flexGrow: zRearm + zHold }} />
             <span className="vxe-z vxe-z--del" style={{ flexGrow: zMove }} />
           </div>
           <span className="vxe-needle" style={{ left: `${needle}%` }} aria-hidden />
         </div>
         <div
           className="vxe-labels"
-          style={{ gridTemplateColumns: `${zMove}fr ${zRearm}fr ${zHold}fr ${zMove}fr` }}
+          style={{ gridTemplateColumns: `${zMove}fr ${zRearm + zHold}fr ${zMove}fr` }}
         >
           {/* THE BAND'S STOPS SAY WHAT HAPPENS AT THEM, in the cascade's own
               words: `Move to the USDC lending` is what an article welded to a
@@ -553,13 +551,13 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
               {ppMagnitude(r.thresholdApy)}
             </b>
           </div>
-          <div className="vxe-lab vxe-lab--up">
-            <i>Re-arm</i>
-            <b>{read.rearmText}</b>
-          </div>
+          {/* ONE HOLD ZONE (founder's de-slop, 2026-09-07 night). A switch has
+              three states, so the band draws three: the re-arm stop is a
+              reading inside the hold zone, not a zone of its own, and the
+              live gap already prints as the card's hero number above. */}
           <div className="vxe-lab vxe-lab--tgt">
-            <i>{capLoop} {gap >= 0 ? "leads" : "trails"}</i>
-            <b>{read.gapText}</b>
+            <i>Hold · re-arms at</i>
+            <b>{read.rearmText}</b>
           </div>
           <div className="vxe-lab vxe-lab--del">
             <i>Rebuild the {loopLabel}</i>

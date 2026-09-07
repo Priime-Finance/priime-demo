@@ -2246,10 +2246,9 @@ export function PortfolioVariant({
         </div>
       ) : null}
       <div className="dock-orch-status">
-        {`governs ${portfolio.loops.length} lane${portfolio.loops.length === 1 ? "" : "s"}`}
         {capStr !== null ? (
           <>
-            {" · capacity "}
+            {"capacity "}
             <LiveNumber value={capStr}>
               <b>{capStr}</b>
             </LiveNumber>
