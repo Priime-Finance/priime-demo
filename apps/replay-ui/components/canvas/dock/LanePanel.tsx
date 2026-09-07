@@ -68,7 +68,6 @@ import { LiveNumber } from "@/components/atoms/LiveNumber";
 import {
   allocCommitBps,
   allocationPercents,
-  clampConcentrationPct,
   exitProfileFor,
   orchRuleTable,
   orchRuleScopeLine,
@@ -2028,7 +2027,7 @@ export function PortfolioVariant({
   /* THE RULES THIS VAULT ACTUALLY RUNS (item 8d). `deriveAllOrchRules` is the
      shipped derivation and it prints the shipped move cap, so this table said
      "at most 13% of the book per move" three lines under a run panel whose one
-     decision moved 50.0pp. `demoDeriveAllRouterRules` is the same pure
+     decision moved the whole lane. `demoDeriveAllRouterRules` is the same pure
      function with the founder's 48 hours, the derived bar and, on the floor
      pair, the whole-lane move: the table now describes the machine the panel
      below it draws. ONE number for a move, on every surface. */
@@ -2294,10 +2293,19 @@ export function PortfolioVariant({
               <span style={{ gridColumn: "1 / -1", opacity: 0.85 }}>{row.trigger}</span>
             </div>
           ))}
+          {/* ONE NUMBER FOR A MOVE (item 8d). The table derives its own
+              `maxMovePct` from the rule set it renders, which is now the demo's
+              own, so this line and the run panel below it state one size. At
+              the whole lane it is a word rather than a number: `100% of the
+              book per move` is arithmetically the same claim and reads as a
+              cap when it is an evacuation. */}
           <div className="rt-floor">
-            Every rule: at most {table.maxMovePct.toFixed(0)}% of the book per move · one failing
-            observation never moves capital · an emergency pauses the loop, bypassing cooldowns.{" "}
-            {ORCH_HONESTY_LINE}
+            Every rule:{" "}
+            {table.maxMovePct >= 100
+              ? "the whole lane per move"
+              : `at most ${table.maxMovePct.toFixed(0)}% of the book per move`}{" "}
+            · one failing observation never moves capital · an emergency pauses the loop,
+            bypassing cooldowns. {ORCH_HONESTY_LINE}
           </div>
         </div>
       ) : null}
@@ -2554,11 +2562,16 @@ function RouterRunSection() {
                   <span>{l.book}</span>
                   {/* NO FLOOR TICK: the route publishes no band per slot, and
                       re-deriving B.5's formula here to draw one would be a
-                      fifth spelling of it. The ceiling IS drawable, through
-                      the same `clampConcentrationPct` the route clamps with. */}
+                      fifth spelling of it.
+                      THE CEILING IS THE RUN'S OWN, UNCLAMPED. It used to run
+                      back through `clampConcentrationPct`, which snaps to the
+                      dial's [35, 80] grid, so a run publishing the switch's
+                      100% ceiling would have drawn an 80% mark across a lane
+                      the fold takes to 100. Null at 100: a ceiling at the
+                      whole book is a mark that states no bound. */}
                   <AllocationTrack
                     targetPct={earning * 100}
-                    maxPct={clampConcentrationPct(run.dials.maxConcentrationPct, run.lanes.length)}
+                    maxPct={run.dials.maxConcentrationPct >= 100 ? null : run.dials.maxConcentrationPct}
                     inFlightPct={inFlight * 100}
                     settlesAt={inFlight > 0 ? settlesAtLabel : null}
                   />

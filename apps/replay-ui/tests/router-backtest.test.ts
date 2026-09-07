@@ -87,7 +87,7 @@ import {
   routerPublishedToday,
   type RouterHistoryAlignedRow,
 } from "@/lib/canvas/router-history";
-import { REGIME_IDS, type RegimeId } from "@/lib/canvas/scenario/regime-ids";
+import { DEFAULT_REGIME, REGIME_IDS, type RegimeId } from "@/lib/canvas/scenario/regime-ids";
 import {
   TREASURY_CANDIDATES,
   issuerRedemptionTerms,
@@ -306,7 +306,7 @@ describe("the switch: what G1 relaxes, and the three facts that make this pair a
     expect(chainOfVenue(LOOP_SLOT.venue)).toBe(chainOfVenue(FLOOR_SLOT.venue));
     const terms = issuerRedemptionTerms(ROUTER_FLOOR_CANDIDATE_ID);
     expect(terms).not.toBeNull();
-    expect(settlementDaysOf(terms as NonNullable<typeof terms>)).toBe(0);
+    expect(settlementDaysOf(terms!)).toBe(0);
     expect(isDemoFloorPair([DEMO_MARKET_ID, ROUTER_FLOOR_CANDIDATE_ID])).toBe(true);
     expect(isFloorPairSlot(LOOP_SLOT, SLOTS)).toBe(true);
     expect(isFloorPairSlot(FLOOR_SLOT, SLOTS)).toBe(true);
@@ -541,6 +541,19 @@ describe("the backtest: the switch over the measured window and three regimes", 
     expect(RUNS).toHaveLength(4);
     expect(RUNS_SINCE).toHaveLength(4);
     expect(INCENTIVE_START_INDEX).toBe(42);
+  });
+
+  it("the default regime stays `measured`, and every routed return names its window (G4, F7)", () => {
+    /* G4: the 42 zero-incentive days are the case the floor lane exists for,
+       so the switcher opens on them and the regimes carry the return leg.
+       F7: the payback horizon is 90 days and BOTH windows here are shorter, so
+       a routed return quoted over either understates the mechanism rather than
+       measuring it. Every row above therefore travels with its window, and the
+       two windows are named with their day counts. */
+    expect(DEFAULT_REGIME).toBe("measured");
+    expect(RUNS[0]?.days).toBe(89);
+    expect(RUNS_SINCE[0]?.days).toBe(47);
+    for (const r of [...RUNS, ...RUNS_SINCE]) expect(r.days).toBeLessThan(PAYBACK_HORIZON_DAYS);
   });
 
   it("the fold in this file IS the fold the route serves, on the same regime", () => {

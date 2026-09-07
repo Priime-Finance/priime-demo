@@ -494,9 +494,10 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
           <span>{read.readingLine}</span>
           {/* THE REGISTER OF THIS NUMBER, AND IT IS NOT THE HERO'S (G3). The
               hero prints the record's published number at the stored leverage
-              and tags it `published at 2.50x, modeled`; this reads the capture
-              and tags itself with the day it read. */}
-          <i className="vxe-modeled">paying today, measured</i>
+              and tags it `published at 2.50x, modeled`; this one is what the
+              two lanes are paying today and the tag says so. The DATE is one
+              line up, inside the reading, so `measured` is stated once. */}
+          <i className="vxe-modeled">measured</i>
         </div>
         <div className="vxk">
           <div className="vxk-cells" aria-hidden>

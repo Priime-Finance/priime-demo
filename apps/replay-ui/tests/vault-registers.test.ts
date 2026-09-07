@@ -315,7 +315,11 @@ describe("the router's copy carries the ban and the register", () => {
        hero is `published at 2.50x, modeled`; this reading is the capture's
        last day and says so. */
     expect(automations).toContain('className="vxe-modeled"');
-    expect(automations).toContain("paying today, measured");
+    expect(automations).toContain('<i className="vxe-modeled">measured</i>');
+    /* The date is in the reading, one line above the tag, so `measured` is
+       stated once and the pair reads `measured Sep 7, 2026`. */
+    const reading = routerReadout(ROUTER_AUTOMATION);
+    expect(reading.readingLine).toContain(`(measured ${reading.asOfText})`);
     expect(
       readFileSync(join(process.cwd(), "components/vaults/VaultDetail.tsx"), "utf8"),
     ).toContain("published at ${lev.toFixed(2)}x, modeled");
