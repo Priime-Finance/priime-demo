@@ -29,6 +29,7 @@ import {
   fmtUsd,
   INCUBATING_FILTER_LABEL,
   loadUserVaults,
+  recordVenueLine,
   VAULT_STAGE_LABEL,
   VAULTS_EVENT,
   vaultStage,
@@ -192,7 +193,7 @@ function ComingSoonCard({ v, i }: { v: VaultRecord; i: number }) {
         </span>
       </div>
       <span className="vx-card-mkt">
-        {v.market} · {v.venue}
+        {v.market} · {recordVenueLine(v)}
       </span>
       {apyOk ? (
         <div className="vx-card-apy">
@@ -260,7 +261,7 @@ function LiveCard({ v, i, live }: { v: VaultRecord; i: number; live: boolean }) 
         <span className={`vx-tag${v.mine ? " vx-tag--mine" : ""}`}>{v.strategyLabel}</span>
       </div>
       <span className="vx-card-mkt">
-        {v.market} · {v.venue}
+        {v.market} · {recordVenueLine(v)}
       </span>
       <ApyHero apy={v.modeledApy} ok={apyOk} live={live} inView={inView} />
       {forfeit ? <span className="vx-card-forfeit">{collarForfeitLine(forfeit)}</span> : null}

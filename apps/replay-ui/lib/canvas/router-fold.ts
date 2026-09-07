@@ -272,7 +272,7 @@ function readingOf(
  * further, and naming them is what stops that reader from casting `unknown`
  * back into a shape it would then be free to get wrong.
  */
-export interface RunAnswer {
+interface RunAnswer {
   ok: true;
   modeled: true;
   /** One `YYYY-MM-DD` per tick, in tick order: the fold's own calendar. A day

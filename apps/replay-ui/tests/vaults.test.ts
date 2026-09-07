@@ -63,6 +63,7 @@ import {
   canonicalModuleName,
   moduleDepositorLine,
   recordModuleNames,
+  recordVenueLine,
   recordVenueParts,
   routerRuleSentence,
   venueParts,
@@ -553,6 +554,25 @@ function routedSource(over: Partial<AutomationSource> = {}): AutomationSource {
     ...over,
   };
 }
+
+describe("a card's venue line", () => {
+  /* One resolver for the directory card, the portfolio card and the page
+     header: the routed record read `2 markets · Multi-venue` on the card that
+     links to the page where the same record reads its two venues and its one
+     chain. */
+  it("resolves a routed record's Multi-venue through its own lanes", () => {
+    /* Through the record's own automations, which is where the lanes live
+       once `deriveAutomations` has seated the router. */
+    expect(
+      recordVenueLine({ venue: "Multi-venue", automations: deriveAutomations(routedSource()) }),
+    ).toBe("Morpho Blue and Aave v3 · Base");
+  });
+
+  it("hands back the raw field on every record that is not routed", () => {
+    expect(recordVenueLine({ venue: "Morpho Blue · Base" })).toBe("Morpho Blue · Base");
+    expect(recordVenueLine({ venue: "Hyperliquid · funding" })).toBe("Hyperliquid · funding");
+  });
+});
 
 describe("the hero record's two rates are labelled by how they were obtained", () => {
   /* Design item 22. The row said `Collateral yield, typed` while the value

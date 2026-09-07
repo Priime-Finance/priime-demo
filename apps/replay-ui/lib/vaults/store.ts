@@ -2260,6 +2260,21 @@ export function recordVenueParts(v: {
   return { venue: joined, chain: chains[0] };
 }
 
+/**
+ * The venue as a CARD prints it: `<market> · <this>`.
+ *
+ * One resolver for every card, because the directory and the portfolio each
+ * printed the raw field and a routed record read `2 markets · Multi-venue` on
+ * the card that links to the page where the same record reads
+ * `Morpho Blue and Aave USDC · Base`. Every record that is not routed falls
+ * straight through to the field it has always printed, so nothing else moves.
+ */
+export function recordVenueLine(v: Parameters<typeof recordVenueParts>[0]): string {
+  if (v.venue !== "Multi-venue") return v.venue;
+  const { venue, chain } = recordVenueParts(v);
+  return `${venue} · ${chain}`;
+}
+
 // ── live derivation helpers (all deterministic, slug + clock seeded) ───────
 
 const HOUR_MS = 3600e3;

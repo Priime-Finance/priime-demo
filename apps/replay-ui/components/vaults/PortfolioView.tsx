@@ -44,6 +44,7 @@ import {
   loadPositions,
   loadUserVaults,
   portfolioValueSeries,
+  recordVenueLine,
   shareValueAt,
   sparkHasHistory,
   VAULT_STAGE_LABEL,
@@ -394,7 +395,7 @@ export function PositionCard({ c, i, now }: { c: CardModel; i: number; now: numb
       </div>
       {c.vault ? (
         <span className="vx-card-mkt">
-          {c.vault.market} · {c.vault.venue}
+          {c.vault.market} · {recordVenueLine(c.vault)}
         </span>
       ) : null}
       <div className="vx-pf-val">
