@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { resolveInverse, screenToLocal } from "@/lib/canvas/wire-geometry";
 
 interface Segment {
   d: string;
@@ -38,6 +39,7 @@ export default function LaneWires({
   const [drawing, setDrawing] = useState<ReadonlySet<number>>(new Set());
   const prevHot = useRef<boolean[]>([]);
   const rafRef = useRef(0);
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
     const fresh: number[] = [];
@@ -68,22 +70,43 @@ export default function LaneWires({
       const rootRect = root.getBoundingClientRect();
       // Canvas pan/zoom (UX_ITERATION_3 §2) scales the viewport with a CSS
       // transform: client rects come back scaled while the SVG lives INSIDE
-      // the transform. Divide by the effective scale so path coordinates
-      // stay in local (untransformed) space.
-      const k = root.offsetWidth > 0 && rootRect.width > 0 ? rootRect.width / root.offsetWidth : 1;
+      // the transform, so every measured point has to come back out of
+      // viewport space before it can be a path coordinate.
+      //
+      // `lib/canvas/wire-geometry` owns that conversion for all three wire
+      // layers now (this one, RouterWires, OrchWires). It asks the SVG for its
+      // own screen matrix and inverts it, which is the same map this used to
+      // rebuild from `rootRect` and an INTEGER `offsetWidth` — minus that
+      // integer's rounding error, which on a wide rack is a tenth of a local
+      // pixel. The rebuilt form is still the fallback below.
+      const inverse = resolveInverse(svgRef.current?.getScreenCTM() ?? null, {
+        originX: rootRect.left,
+        originY: rootRect.top,
+        k: root.offsetWidth > 0 && rootRect.width > 0 ? rootRect.width / root.offsetWidth : 1,
+      });
       const nodes = Array.from(root.querySelectorAll<HTMLElement>("[data-wire-node]"));
       const segs: Segment[] = [];
       for (let i = 0; i < nodes.length - 1; i++) {
-        const a = nodes[i]!;
-        const b = nodes[i + 1]!;
+        const a = nodes[i];
+        const b = nodes[i + 1];
         const outJack = a.querySelector<HTMLElement>('[data-jack$=":out"]');
         const inJack = b.querySelector<HTMLElement>('[data-jack$=":in"]');
         const ar = (outJack ?? a).getBoundingClientRect();
         const br = (inJack ?? b).getBoundingClientRect();
-        const x1 = (outJack ? ar.left + ar.width / 2 - rootRect.left : ar.right - rootRect.left) / k;
-        const y1 = (outJack ? ar.top + ar.height / 2 - rootRect.top : ar.top + ar.height / 2 - rootRect.top) / k;
-        const x2 = (inJack ? br.left + br.width / 2 - rootRect.left : br.left - rootRect.left) / k;
-        const y2 = (inJack ? br.top + br.height / 2 - rootRect.top : br.top + br.height / 2 - rootRect.top) / k;
+        // A jack plugs at its centre; a bare wire-node plugs at the edge the
+        // cable leaves from or arrives at, vertically centred.
+        const from = screenToLocal(inverse, {
+          x: outJack ? ar.left + ar.width / 2 : ar.right,
+          y: ar.top + ar.height / 2,
+        });
+        const to = screenToLocal(inverse, {
+          x: inJack ? br.left + br.width / 2 : br.left,
+          y: br.top + br.height / 2,
+        });
+        const x1 = from.x;
+        const y1 = from.y;
+        const x2 = to.x;
+        const y2 = to.y;
         // IT4C: shallow, tight arcs that stay OUT of the lane-header band.
         // The SVG's top edge (local y=0) is the header's bottom edge; a
         // symmetric cubic with both control points at j-lift peaks at
@@ -127,7 +150,7 @@ export default function LaneWires({
   }, [pulseKey]);
 
   return (
-    <svg className="rk-wires" aria-hidden>
+    <svg ref={svgRef} className="rk-wires" aria-hidden>
       {segments.map((s, i) => (
         <g key={i}>
           <path
