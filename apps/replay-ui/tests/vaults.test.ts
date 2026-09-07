@@ -36,13 +36,17 @@ import {
   strikeDueAt,
   type DepositRequest,
 } from "@/lib/vaults/requests";
-import { DEMO_MARKET_ID, HERO_SEED_LEVERAGE } from "@/lib/demo/market";
+import { DEMO_MARKET_ID, HERO_SEED_LEVERAGE, demoMarketRates } from "@/lib/demo/market";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
 import { heroNavUsd } from "@/lib/vaults/rows";
 import { onchainExecutionsFor } from "@/lib/vaults/onchain-executions";
 import { SEED_SLUGS, SEED_VAULTS } from "@/lib/vaults/seeds";
 import { measuredRouterReplay } from "@/lib/canvas/router-replay";
-import { routerPublishedToday } from "@/lib/canvas/router-history";
+import {
+  ROUTER_HISTORY_SOURCES,
+  ROUTER_MEASURED_ON,
+  routerPublishedToday,
+} from "@/lib/canvas/router-history";
 import {
   DEMO_ROUTER_MOVE_WEIGHT,
   DEMO_SUSTAIN_HOURS,
@@ -549,6 +553,26 @@ function routedSource(over: Partial<AutomationSource> = {}): AutomationSource {
     ...over,
   };
 }
+
+describe("the hero record's two rates are labelled by how they were obtained", () => {
+  /* Design item 22. The row said `Collateral yield, typed` while the value
+     had become the capture's own last aligned day (item 1), so the page
+     called a measured rate typed. The pins read the owner, never a literal. */
+  it("says measured, at the precision the capture carries, with its provenance", () => {
+    const rows = heroRecord().params;
+    const rates = demoMarketRates();
+    expect(rows.find((r) => r.label === "Collateral yield, measured")?.value).toBe(
+      `${(rates.collateralYieldApy * 100).toFixed(2)}%`,
+    );
+    expect(rows.find((r) => r.label === "Borrow rate, measured")?.value).toBe(
+      `${(rates.borrowApyMarginal * 100).toFixed(2)}%`,
+    );
+    expect(rows.find((r) => r.label === "Rates measured")?.value).toBe(
+      `${ROUTER_MEASURED_ON} · ${ROUTER_HISTORY_SOURCES.loopReward.provider}`,
+    );
+    for (const r of rows) expect(r.label).not.toContain("typed");
+  });
+});
 
 describe("the risk sentence names the lane that borrows", () => {
   /* A routed record's `market` field is `2 markets`, because two lanes pin

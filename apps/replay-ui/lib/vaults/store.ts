@@ -1581,10 +1581,18 @@ export function routerRuleSentence(r: {
   moveWeight: number;
   maxConcentrationPct: number;
 }): string {
-  const other = r.lanes[1]?.label ?? "the other lane";
+  /* BOTH LANES ARE NAMED, AND BOTH ARE NAMED AS LANES. The sentence used to
+     read `... to ${other} when it has paid more than the loop`, which was two
+     defects at once: the destination was dropped in bare (`to Lane 2`, and
+     after the canvas started publishing the family word, `to treasury floor`),
+     and the source was the literal `the loop`, which is a family the second
+     lane on this rack is not. `the <label> lane` is grammatical for a family
+     word, for the plan's own lane labels and for a name the builder typed. */
+  const dest = r.lanes[1]?.label ?? "other";
+  const source = r.lanes[0]?.label ?? "first";
   const size = `${(routerMaxMoveFrac(r) * 100).toFixed(1)}pp`;
   const bar = `${(r.thresholdApy * 100).toFixed(2)}pp`;
-  return `Moves ${size} of the book to ${other} when it has paid more than the loop for ${r.sustainHours} hours by at least ${bar}, and back the same way.`;
+  return `Moves ${size} of the book to the ${dest} lane when it has paid more than the ${source} lane for ${r.sustainHours} hours by at least ${bar}, and back the same way.`;
 }
 
 /**

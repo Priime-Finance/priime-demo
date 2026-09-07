@@ -1198,6 +1198,23 @@ const CHART_W = 320;
 const CHART_H = 152;
 const PAD = { l: 36, r: 8, t: 10, b: 22 };
 
+/**
+ * Where a payback label may sit: the bracket's midpoint, pulled inside the
+ * plot when half the string would run off either end.
+ *
+ * A bracket that opens on tick 1 centres its label at x 80 with a half-width
+ * of 45, and the left 9px of `24 days to pay back` landed under the axis's own
+ * `-13%`, rendering `-13% days to pay back`. One clamp, used by BOTH the
+ * collision bookkeeping and the text, so the two cannot disagree about where
+ * the label is.
+ */
+function labelCenter(x: number, end: number, half: number): number {
+  const mid = (x + end) / 2;
+  const lo = PAD.l + half + 2;
+  const hi = CHART_W - PAD.r - half;
+  return hi < lo ? mid : Math.min(Math.max(mid, lo), hi);
+}
+
 function bandGeom(series: number[][], ticks: number): BandGeom {
   const flat = series.flat().filter((v) => Number.isFinite(v));
   /* ZERO IS ALWAYS INSIDE THE DOMAIN, which is the whole of F.1: a chart whose
@@ -1319,7 +1336,7 @@ function LaneBands({
       const x = g.xOf(n.t);
       const end = g.xOf(Math.min(T - 1, n.t + pb));
       const half = `${Math.round(pb)} days to pay back`.length * 2.3 + 4;
-      const mid = (x + end) / 2;
+      const mid = labelCenter(x, end, half);
       if (mid - half < lastRight) continue;
       labelled.add(n.d.decisionId);
       lastRight = mid + half;
@@ -1529,7 +1546,7 @@ function LaneBands({
                       `labelled` says it clears the label to its left. */}
                   {labelled.has(d.decisionId) ? (
                   <text
-                    x={(x + bracketEnd) / 2}
+                    x={labelCenter(x, bracketEnd, `${Math.round(pb as number)} days to pay back`.length * 2.3 + 4)}
                     y={by - 4}
                     textAnchor="middle"
                     fontSize={8}
@@ -2118,7 +2135,7 @@ export function PortfolioVariant({
         </div>
       ) : null}
       <div className="dock-orch-status">
-        {`governs ${portfolio.loops.length} loop${portfolio.loops.length === 1 ? "" : "s"}`}
+        {`governs ${portfolio.loops.length} lane${portfolio.loops.length === 1 ? "" : "s"}`}
         {capStr !== null ? (
           <>
             {" · capacity "}

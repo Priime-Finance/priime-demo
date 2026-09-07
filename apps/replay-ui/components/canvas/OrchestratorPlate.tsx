@@ -199,7 +199,7 @@ export default function OrchestratorPlate({
                   ? "quote gap · holding"
                   : drying
                     ? "drain modeled · no execution rail"
-                    : `governs ${loops.length} loop${loops.length === 1 ? "" : "s"}`}
+                    : `governs ${loops.length} lane${loops.length === 1 ? "" : "s"}`}
             </div>
           </div>
           <div className="hm-acts">

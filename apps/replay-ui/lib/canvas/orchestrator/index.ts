@@ -89,13 +89,31 @@ export {
   type OrchRuleTable,
 } from "./rule-schema";
 
+/* ⚠ TWO STRINGS HERE ARE CLAIMS, AND BOTH WERE RETIRED (design item 2,
+   2026-09-07, applied at integration once the two-lane panel was reachable).
+
+   `tagline` said "Reallocates capital from a drying loop to a better one".
+   The peer is a lending reserve on this rack, not a loop, and the record's
+   own module line is written from this field (`RackCanvas.tsx`), so a routed
+   vault published the sentence onto its own page.
+
+   `policyName` said "FOLLOW THE YIELD" and it renders twice in the dock's
+   router panel, which only mounts at two lanes and so was invisible when the
+   plate's lit key was corrected. The quant measured the routing at +0.35pp on
+   top of a second lane worth +2.19pp, over a pair whose normal spread is
+   0.10pp and behind a 3.00pp bar: that is a protection ratchet, and the
+   product may not advertise it as a yield follower on one surface while the
+   plate beside it says the opposite. It stays in the badge's own uppercase
+   register, because its three siblings (QUOTING, QUOTE GAP, DRYING) are
+   uppercase status words and a lone sentence-case member would break the set.
+*/
 export const ORCHESTRATOR_DEF = {
   name: "Capital router",
-  tagline: "Reallocates capital from a drying loop to a better one",
+  tagline: "Moves weight to the lane that has paid more",
   description:
     "Watches every loop's modeled economics on the same block-pinned quotes the plates use and derives the full reallocation rule set from three dials. Moves are capped per firing, never touch a loop mid-emergency, and in this version are modeled only: no execution rail exists yet.",
   /** Default policy name shown on the plate badge. */
-  policyName: "FOLLOW THE YIELD",
+  policyName: "HOLD THE BETTER LANE",
 } as const;
 
 /** The three dials (R10–R13), rendered through the standard Control idiom. */

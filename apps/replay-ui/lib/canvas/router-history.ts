@@ -67,6 +67,7 @@
  * `routerPublishedToday()`.
  */
 
+import { pct } from "@/lib/canvas/format";
 import { publishedNetApy, repriceAtLeverage } from "@/lib/canvas/mock-quote";
 import type { ProjectedCandidate } from "@/lib/canvas/opportunities";
 import {
@@ -448,4 +449,37 @@ export function routerPublishedToday(L: number = HERO_SEED_LEVERAGE): {
     loop: publishedNetApy(repriceAtLeverage(loopRowForDay(day), L), false),
     floor: publishedNetApy(floorRowToday(), false),
   };
+}
+
+/**
+ * THE DEMO ROW'S TWO RATES, AS A RECORD'S PARAMETERS PRINT THEM.
+ *
+ * Design item 22, and it lives HERE because it is a claim about a
+ * MEASUREMENT: the labels, the precision and the provenance row all describe
+ * the capture this module owns, and both writers (`lib/vaults/hero.ts` for the
+ * seeded record, `RackCanvas` for a publish) render the same three rows by
+ * calling this rather than by spelling them twice.
+ *
+ * THE LABEL SAYS `measured` BECAUSE THE VALUE IS. It said `typed` for as long
+ * as `lib/demo/market.ts` carried two literals, which was correct then and
+ * became false the moment item 1 substituted the capture's own last aligned
+ * day into that row: the page went on calling a measured rate typed. Two
+ * decimals, because 4.75% and 5.09% are what was read and 1 dp prints them as
+ * 4.8% and 5.1%, which is a rate nothing measured.
+ *
+ * The date is `ROUTER_MEASURED_ON` and the provider is the capture's own
+ * source entry. Neither is typed here.
+ */
+export function measuredRateRows(
+  collateralYieldApy: number,
+  borrowApyMarginal: number,
+): { label: string; value: string }[] {
+  return [
+    { label: "Collateral yield, measured", value: pct(collateralYieldApy, 2) },
+    { label: "Borrow rate, measured", value: pct(borrowApyMarginal, 2) },
+    {
+      label: "Rates measured",
+      value: `${ROUTER_MEASURED_ON} · ${ROUTER_HISTORY_SOURCES.loopReward.provider}`,
+    },
+  ];
 }

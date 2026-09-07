@@ -1,5 +1,5 @@
 /**
- * `GET /api/canvas/orchestrate?regime=` — the router run, as the dock's panel
+ * `GET /api/canvas/orchestrate?regime=`, the router run as the dock's panel
  * fetches it.
  *
  * THE FOLD ITSELF IS NOT HERE. It is `foldRouterRun` in

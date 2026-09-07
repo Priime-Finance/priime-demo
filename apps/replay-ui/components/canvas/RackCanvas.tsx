@@ -170,6 +170,7 @@ import { deriveLaneSignals, dialsFromParams, ORCHESTRATOR_DEF, slotsFromPortfoli
    initialization`. Kept directly under the orchestrator import so the order is
    stated rather than accidental. The cycle itself is not WP-1's to unpick. */
 import { publishedRouter, type PublishedLane } from "@/lib/canvas/published-lanes";
+import { measuredRateRows } from "@/lib/canvas/router-history";
 import CopilotPanel from "./CopilotPanel";
 import {
   discoverAbsence,
@@ -2147,10 +2148,14 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
         isLiveMarket(first.ok.candidate.id) &&
         typeof first.ok.candidate.economics?.collateralYieldApy === "number" &&
         typeof first.ok.candidate.economics.borrowApyMarginal === "number"
-          ? [
-              { label: "Collateral yield, typed", value: pct(first.ok.candidate.economics.collateralYieldApy) },
-              { label: "Borrow rate, typed", value: pct(first.ok.candidate.economics.borrowApyMarginal) },
-            ]
+          ? /* MEASURED, NOT TYPED (design item 22). The demo row's two rates
+               are the capture's own last aligned day since item 1, and the
+               three rows are owned beside that capture so this site and
+               `lib/vaults/hero.ts` cannot spell them differently. */
+            measuredRateRows(
+              first.ok.candidate.economics.collateralYieldApy,
+              first.ok.candidate.economics.borrowApyMarginal,
+            )
           : []),
         /* ONE ROUNDING, AND NO SENTINEL RENDERED AS A NUMBER. Both rules live
            in `healthBandsRow` (module scope, above) so a test can hold the
@@ -2389,7 +2394,15 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
       ...(orchOn
         ? (() => {
             const publishedLanes = lanes.map((l): PublishedLane => ({
-              label: l.loop.label,
+              /* THE LANE'S NAME, OR WHAT IT IS. `Lane 2` is the canvas's own
+                 default and it means nothing to a depositor who never opened
+                 the canvas: the rule sentence on the vault page read `Moves
+                 10.0pp of the book to Lane 2`, and the ledger row would read
+                 `loop to Lane 2`. An unrenamed lane therefore publishes its
+                 FAMILY, through `FAMILY_LABEL`, the one owner of that word;
+                 a lane the builder actually named keeps the name they gave
+                 it, because that name is a decision and this is not. */
+              label: /^Lane \d+$/.test(l.loop.label) ? FAMILY_LABEL[l.family] : l.loop.label,
               venue: l.p.venue,
               venueLabel: venueLabel(l.p.venue),
               market: l.p.pairLabel || "…",

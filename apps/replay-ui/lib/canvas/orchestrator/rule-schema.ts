@@ -1173,7 +1173,7 @@ const METRIC_NAME: Record<OrchRule["metric"], string> = {
   funding_p25_streak: "FUNDING TURNS",
   gate_flip: "GATE FAILS",
   basis_early_warn: "BASIS DRIFTS",
-  better_elsewhere: "BETTER LOOP",
+  better_elsewhere: "BETTER LANE",
 };
 
 const METRIC_TRIGGER: Record<OrchRule["metric"], (r: OrchRule) => string> = {
@@ -1281,10 +1281,15 @@ export function orchRuleTable(
 
 /** The table's own scope line: the real counts, never "every loop". */
 export function orchRuleScopeLine(t: OrchRuleTable): string {
-  if (t.slotCount === 0) return "no loops governed";
+  /* THE NOUN IS `lane`, NOT `loop` (integration, 2026-09-07). A slot on this
+     rack is a lane, and since the router lane landed one of them is a lending
+     reserve with no borrow leg: `7 rules across 2 loops` printed under a rule
+     table whose own rows name `USDC lending`. `lane` is true of every family
+     and is the word the rack, the dock and the vault page already use. */
+  if (t.slotCount === 0) return "no lanes governed";
   const rulesWord = `${t.ruleCount} rule${t.ruleCount === 1 ? "" : "s"}`;
-  const loopsWord = `${t.slotCount} loop${t.slotCount === 1 ? "" : "s"}`;
-  return `${rulesWord} across ${loopsWord}`;
+  const lanesWord = `${t.slotCount} lane${t.slotCount === 1 ? "" : "s"}`;
+  return `${rulesWord} across ${lanesWord}`;
 }
 
 export function decodeOrchRule(r: OrchRule): string {

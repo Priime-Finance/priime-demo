@@ -29,6 +29,7 @@ import { clampLeverage, deriveHfBands } from "@/lib/canvas/param-schema";
 import { pct } from "@/lib/canvas/format";
 import { HERO_MARKET_ID, HERO_SLUG } from "@/lib/demo-scope";
 import { demoMarketCandidate, HERO_SEED_LEVERAGE } from "@/lib/demo/market";
+import { measuredRateRows } from "@/lib/canvas/router-history";
 
 import { heroNavUsd } from "./rows";
 import {
@@ -91,12 +92,9 @@ export function heroRecord(): VaultRecord {
       label: "Health bands",
       value: `${hfFromBps(bands.hfTargetBps)} target · ${hfFromBps(bands.hfDeleverageBps)} deleverage · ${hfFromBps(bands.hfFloorBps)} floor`,
     },
-    ...(e
-      ? [
-          { label: "Collateral yield, typed", value: pct(e.collateralYieldApy) },
-          { label: "Borrow rate, typed", value: pct(e.borrowApyMarginal) },
-        ]
-      : []),
+    /* MEASURED, NOT TYPED, AND THE ROWS SAY WHICH (design item 22). One
+       owner beside the capture: `measuredRateRows` in router-history.ts. */
+    ...(e ? measuredRateRows(e.collateralYieldApy, e.borrowApyMarginal) : []),
     { label: "Compound cadence", value: `${HERO_COMPOUND_CADENCE_HOURS}h` },
     ...(capacityUsd !== null ? [{ label: "Capacity", value: `${fmtUsd(capacityUsd)} · modeled` }] : []),
     { label: "Read at", value: `Base · block ${blockNumber.toLocaleString("en-US")}` },

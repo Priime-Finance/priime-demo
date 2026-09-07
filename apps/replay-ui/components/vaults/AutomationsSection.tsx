@@ -338,6 +338,11 @@ export interface RouterReadout {
   loopText: string;
   floorText: string;
   floorLabel: string;
+  /** The levered lane's own label, `lanes[0].label`. The instrument names
+   *  BOTH lanes rather than hard-coding the word `loop` on one side: the
+   *  record carries what the canvas called each lane, and a portfolio whose
+   *  first lane is not called `loop` must not be described as if it were. */
+  loopLabel: string;
   asOfText: string;
   /** The bar, the hysteresis and the CLAMPED move, as the foot prints them. */
   barText: string;
@@ -406,7 +411,8 @@ export function routerReadout(r: RouterAutomation): RouterReadout {
     gapText: ppSigned(gap),
     loopText: pct(loopApy, 2),
     floorText: pct(floorApy, 2),
-    floorLabel: floorLane?.label ?? "the lending lane",
+    floorLabel: floorLane?.label ?? "lending lane",
+    loopLabel: loopLane?.label ?? "loop",
     asOfText: routerDayLabel(replay.asOfDate),
     barText: ppMagnitude(r.thresholdApy),
     rearmText: ppMagnitude(r.rearmApy),
@@ -444,7 +450,14 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
   const { chain } = recordVenueParts(vault);
   const replay = measuredRouterReplay();
   const read = routerReadout(r);
-  const { floorLabel, cells, filled, lit, zMove, zRearm, zHold } = read;
+  const { floorLabel, loopLabel, cells, filled, lit, zMove, zRearm, zHold } = read;
+  /* Both lanes are named the same way on every row: `the <label>` inside a
+     sentence, capitalised where the label opens one. Without this the card
+     read `Move to treasury floor` beside `Move to the loop`, and
+     `treasury floor leads by` beside `Loop leads by`: one mechanism, two
+     grammars, and the asymmetry read as a difference between the lanes. */
+  const capFloor = floorLabel.charAt(0).toUpperCase() + floorLabel.slice(1);
+  const capLoop = loopLabel.charAt(0).toUpperCase() + loopLabel.slice(1);
   const gap = read.gap;
   const needle = read.needlePct;
   const move = read.moveText;
@@ -464,7 +477,7 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
         <div className="vxe-read">
           <b>{read.gapText}</b>
           <span>
-            loop {read.loopText} against {floorLabel} {read.floorText}, on rates measured{" "}
+            {loopLabel} {read.loopText} against {floorLabel} {read.floorText}, on rates measured{" "}
             {read.asOfText}
           </span>
           <i className="vxe-modeled">modeled</i>
@@ -491,7 +504,7 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
           style={{ gridTemplateColumns: `${zMove}fr ${zRearm}fr ${zHold}fr ${zMove}fr` }}
         >
           <div className="vxe-lab vxe-lab--del">
-            <i>Move to {floorLabel}</i>
+            <i>Move to the {floorLabel}</i>
             <b>
               &lt; {MINUS}
               {ppMagnitude(r.thresholdApy)}
@@ -505,11 +518,11 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
             </b>
           </div>
           <div className="vxe-lab vxe-lab--tgt">
-            <i>{gap >= 0 ? "Loop leads" : "Loop trails"}</i>
+            <i>{capLoop} {gap >= 0 ? "leads" : "trails"}</i>
             <b>{read.gapText}</b>
           </div>
           <div className="vxe-lab vxe-lab--del">
-            <i>Move to the loop</i>
+            <i>Move to the {loopLabel}</i>
             <b>&gt; +{ppMagnitude(r.thresholdApy)}</b>
           </div>
         </div>
@@ -518,12 +531,12 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
           <div className="vxc-rows">
             <div className={`vxc-row${lit === 0 ? " vxc-row--on" : ""}`} style={{ "--i": 0 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--del" />
-              <span className="vxc-cond">{floorLabel} leads by</span>
+              <span className="vxc-cond">{capFloor} leads by</span>
               <b className="vxc-val">
                 {bar} for {r.sustainHours}h
               </b>
               <span className="vxc-arr">→</span>
-              <span className="vxc-act">Move {move} to {floorLabel}</span>
+              <span className="vxc-act">Move {move} to the {floorLabel}</span>
             </div>
             <div className={`vxc-row${lit === 1 ? " vxc-row--on" : ""}`} style={{ "--i": 1 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--tgt" />
@@ -534,12 +547,12 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
             </div>
             <div className={`vxc-row${lit === 2 ? " vxc-row--on" : ""}`} style={{ "--i": 2 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--del" />
-              <span className="vxc-cond">Loop leads by</span>
+              <span className="vxc-cond">{capLoop} leads by</span>
               <b className="vxc-val">
                 {bar} for {r.sustainHours}h
               </b>
               <span className="vxc-arr">→</span>
-              <span className="vxc-act">Move {move} to the loop</span>
+              <span className="vxc-act">Move {move} to the {loopLabel}</span>
             </div>
             <div className={`vxc-row${lit === 3 ? " vxc-row--on" : ""}`} style={{ "--i": 3 } as CSSProperties}>
               <span className="vxc-dot vxc-dot--em" />
