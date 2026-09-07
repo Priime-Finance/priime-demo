@@ -124,26 +124,39 @@
  * `compoundDelta` and `dnLpModel` use, and that choice is what makes the
  * number comparable to every other modeled figure on the screen.
  *
- * ── THE BAR, AND THE HONEST SURPRISE ─────────────────────────────────────
- * `upgradeThreshold` is the owner: `(oneShotFrac + windowCost) / (90/365)`,
+ * ── THE BAR, AND THE ONE FRICTION IT IS DERIVED FROM ─────────────────────
+ * `upgradeThreshold` is the arithmetic: `(oneShotFrac + windowCost) / (90/365)`,
  * floored at the 3% register floor. Both endpoints settle same-block, so
- * `windowCost` is exactly zero and the raw bar is 0.00186 x 365/90 = 0.75%.
- * That is UNDER the register floor, so the bar that ships is 3.0%, and the
- * demo's derived threshold lands on the same digits as the generic same-chain
- * derivation for an entirely different reason: this move is cheap, and the
- * product refuses to advertise a bar below 3pp even when the arithmetic would
- * pay the move back in 23 days. The constant is still COMPUTED here rather
- * than assumed, so if the friction moves the bar moves with it.
+ * `windowCost` is exactly zero and the raw one-way break-even is
+ * 0.00186 x 365/90 = 0.754%. Twice that, 1.508%, is the ROUND-TRIP
+ * break-even: a move and its return, both paid inside one horizon, which is
+ * the honest bar for a mechanism whose own hysteresis is symmetric.
  *
- * So the only field the founder's ruling actually changes is the PATIENCE:
- * 13 scans becomes 2 days.
+ * 1.508% IS THE BAR THAT SHIPS, and the block on `DEMO_UPGRADE_THRESHOLD`
+ * below carries the measurement that chose it. The register floor is not the
+ * bar any more because the thing that used to force it is gone: the machine
+ * charged `MOVE_FRICTION_FRAC_SAME_CHAIN` (0.007) in every cost record while
+ * publishing a bar derived from 0.00186, and `paybackMs` turned that second
+ * friction into an effective 2.84pp bar no rule had stated. One friction
+ * prices one move now (`demoRouterPricing`), the effective floor is the
+ * one-way break-even itself, and both derived candidates are reachable.
  *
- * ── HYSTERESIS, SYMMETRIC ────────────────────────────────────────────────
+ * So the founder's ruling changes the PATIENCE (13 scans becomes 2 days) and
+ * the measurement changes the BAR (3.00pp becomes 1.51pp). Both are computed
+ * here rather than assumed, so if the friction moves they move with it.
+ *
+ * ── HYSTERESIS, SYMMETRIC, AND LEGALLY NEGATIVE ──────────────────────────
  * `rearmLevel` is `threshold - 2pp`, the R28 floor met exactly, which is what
- * `deriveOrchRules` already does for this metric. After a move the rule
- * re-arms only once the improvement has been at or under 1.0% for two
- * consecutive days. The way back is the SAME margin measured from the other
- * lane, so nothing about the mechanism prefers one direction.
+ * `deriveOrchRules` already does for this metric. At a 1.508% bar that is
+ * MINUS 0.492%, and a negative re-arm level is legal, is still exactly the
+ * 2pp gap the invariant asks for, and says something a positive one cannot:
+ * the rule re-arms only once the improvement has been at or under -0.492% for
+ * two consecutive days, which is the OTHER lane leading by 0.492%. A lane
+ * that merely stops trailing does not re-arm the rule that left it; the lane
+ * it moved to has to fall behind. That is a stricter anti-churn condition
+ * than the 1.0% level a 3pp bar produced, not a weaker one. The way back is
+ * the SAME margin measured from the other lane, so nothing about the
+ * mechanism prefers one direction.
  *
  * ── R38, AND WHY IT IS RE-CHECKED RATHER THAN WAIVED ─────────────────────
  * `validateOrchestrator` re-derives the rule set with `deriveOrchRules` and
@@ -172,7 +185,14 @@ import {
   FLOOR_PAIR_MOVE_WEIGHT,
   isDemoFloorPair,
 } from "@/lib/canvas/floor-pair";
-import { deriveMoveWeight, deriveOrchRules, upgradeThreshold, validateOrchestrator } from "./rule-schema";
+import {
+  deriveMoveWeight,
+  deriveOrchRules,
+  exitProfileFor,
+  upgradeThreshold,
+  validateOrchestrator,
+} from "./rule-schema";
+import type { ExitEndpoint } from "./rule-schema";
 import type { ExitProfile, LoopSlot, OrchRule, OrchViolation, OrchestratorConfig } from "./types";
 import { ORCH_DIAL_DEFAULTS, type OrchestratorDials } from "@/lib/canvas/param-schema";
 import { HERO_SEED_LEVERAGE } from "@/lib/demo/market";
@@ -277,42 +297,105 @@ export const DEMO_BAR_ROUND_TRIP_BREAKEVEN = Number((2 * DEMO_BAR_ONE_WAY_BREAKE
 export const DEMO_BAR_REGISTER_FLOOR = upgradeThreshold(demoExitProfile());
 
 /**
- * ══ THE BAR THAT SHIPS, RE-MEASURED UNDER THE SWITCH (G2) ════════════════
+ * ══ THE BAR THAT SHIPS, RE-MEASURED UNDER ONE FRICTION (G2) ══════════════
  *
  * F4 measured the three candidates under 10pp band shifts and the register
- * floor won. Under a full switch the friction rides the WHOLE book and the
- * spread is earned on the whole book, so the ranking had to be re-taken. It
- * was, at all three bars, over the measured window and the since-incentive
- * window, in every regime, folded through the shipped `evaluateOrchestrator`
- * (`tests/router-backtest.test.ts`, table in docs/plans/ROUTER_QUANT.md,
- * section "under the switch", 2026-09-07).
+ * floor won. The first fix wave re-measured them under the switch and the
+ * register floor won again, but for a reason that turned out to be an
+ * ARTEFACT: the evaluator was charging `MOVE_FRICTION_FRAC_SAME_CHAIN` (0.007)
+ * in every cost record while the rule published a bar derived from the
+ * measured 0.00186, so `paybackMs` refused anything under an effective 2.84pp
+ * and only the 3.0pp candidate survived a gate no rule had stated. That second
+ * friction is gone (`demoRouterPricing`), and the ranking was taken again at
+ * all three bars, over both windows, in every regime, folded through the
+ * shipped `evaluateOrchestrator` (`tests/router-backtest.test.ts`, table in
+ * docs/plans/ROUTER_QUANT.md, section "under the switch, measured friction",
+ * 2026-09-07 night).
  *
  * The since-incentive window is the one this vault could have existed in, and
- * it is the one G2 rules by. Measured there, the two lower bars each take one
- * whole-book move that the 47-day window is too short to pay back, and both
- * land under the 3.0pp bar's book. The 3.0pp bar therefore ships again, now on
- * a switch measurement rather than a band-shift one, and it is still COMPUTED
- * (`upgradeThreshold`) rather than typed, so it moves if the friction does.
+ * it is the one G2 rules by. Measured there, THE ROUND-TRIP BAR AND THE
+ * REGISTER FLOOR ARE IDENTICAL: the same move count and the same routed return
+ * to the third decimal in all four regimes. The one-way bar is separated and
+ * it is separated the wrong way, taking a move on the default regime that ends
+ * the window at 2.221% against 2.946% for standing still. So the measurement
+ * ties the top two and G2's tie-break rules: prefer the lower derived bar,
+ * because it is the closer reading of the founder's sentence.
  *
- * `UPGRADE_THRESHOLD_FLOOR` is not edited and this constant does not sit under
- * it. The two lower bars stay exported, by name, because the sensitivity is
- * the argument and a deleted candidate is an argument nobody can check.
+ * **1.508% ships.** It is the round-trip break-even, twice the one-way
+ * `upgradeThreshold` arithmetic on the measured friction, so it still moves if
+ * the friction moves. `UPGRADE_THRESHOLD_FLOOR` is not edited: this constant
+ * sits UNDER the register floor by name, which is the licence G2 granted a
+ * demo-scoped owner, and `DEMO_BAR_REGISTER_FLOOR` stays exported so the floor
+ * it sits under is readable rather than implied. All three candidates stay
+ * exported, because the sensitivity is the argument and a deleted candidate is
+ * an argument nobody can check.
  */
-export const DEMO_UPGRADE_THRESHOLD = DEMO_BAR_REGISTER_FLOOR;
+export const DEMO_UPGRADE_THRESHOLD = DEMO_BAR_ROUND_TRIP_BREAKEVEN;
 
 /**
  * R28's floor met exactly: the safe side is 2pp inside the bar, both ways.
  *
- * A bar UNDER 2pp puts the re-arm below zero, which is legal, is still the
- * 2pp gap the invariant asks for, and means the lane has to be ahead before
- * the rule re-arms. It is exported as a function so the sensitivity folds
- * derive their re-arm the same way the shipped one does.
+ * A bar UNDER 2pp puts the re-arm BELOW ZERO, which is where the shipped
+ * 1.508% bar puts it (-0.492%). That is legal, it is still exactly the 2pp gap
+ * `validateOrchestrator` asks for, and it means the OTHER lane has to lead by
+ * that much before the rule re-arms: a lane that merely stops trailing does
+ * not re-arm the rule that left it. It is exported as a function so the
+ * sensitivity folds derive their re-arm the same way the shipped one does.
  */
 export function demoRearmFor(bar: number): number {
   return Number((bar - 0.02).toFixed(6));
 }
 
 export const DEMO_UPGRADE_REARM = demoRearmFor(DEMO_UPGRADE_THRESHOLD);
+
+/**
+ * ══ ONE FRICTION FOR ONE MOVE, AND THIS IS WHERE IT IS CHARGED ═══════════
+ *
+ * The bar above is DERIVED from `DEMO_MOVE_FRICTION_FRAC_ONE_WAY`, the rail
+ * this pair was measured on. Every surface that then PRICES a move used to
+ * ask `exitProfileFor(source, dest)` instead, which knows only whether the
+ * two venues share a chain and answers the flat `MOVE_FRICTION_FRAC_SAME_CHAIN`
+ * (0.007, itself an analogy to an annual drag constant). So the machine
+ * published a bar derived from 18.6 bps and then charged 70 bps: the dock
+ * printed `Move cost 0.70%`, the evaluator's cost record carried it into every
+ * decision, and `paybackMs` turned it into an EFFECTIVE bar of 2.84pp that
+ * silently overrode whatever the rule published. Two frictions for one move,
+ * and the depositor sentence named the one that was not charged.
+ *
+ * This is the one owner. It answers BOTH questions a priced move asks (what
+ * does the rail cost, and what bar does that cost justify) so no caller can
+ * take one from here and the other from somewhere else, and it is scoped by
+ * the SAME predicate the rest of the switch is scoped by: a portfolio that is
+ * not this pair gets `exitProfileFor` and `upgradeThreshold` unchanged.
+ *
+ * Its readers are the three surfaces that price a move:
+ *   `lib/canvas/router-fold.ts`            through `evaluateOrchestrator`'s
+ *                                          `exitProfile` hook, so the replay,
+ *                                          the run panel and the backtest all
+ *                                          charge the measured rail
+ *   `components/canvas/dock/LanePanel.tsx` `composedRoute`, the dock's
+ *                                          `Move cost` and its printed bar
+ *   this module                            the bar the rule publishes
+ */
+export function demoRouterPricing(
+  candidateIds: readonly string[],
+  source: ExitEndpoint,
+  dest: ExitEndpoint,
+): { exit: ExitProfile; bar: number } {
+  if (isDemoFloorPair([...new Set(candidateIds)])) {
+    return { exit: demoExitProfile(), bar: DEMO_UPGRADE_THRESHOLD };
+  }
+  const exit = exitProfileFor(source, dest);
+  return { exit, bar: upgradeThreshold(exit) };
+}
+
+/** The profile alone, in the shape `evaluateOrchestrator`'s hook takes. Same
+ *  owner, same predicate: a curried `demoRouterPricing().exit`. */
+export function demoRouterExitProfile(
+  candidateIds: readonly string[],
+): (source: ExitEndpoint, dest: ExitEndpoint) => ExitProfile {
+  return (source, dest) => demoRouterPricing(candidateIds, source, dest).exit;
+}
 
 /** The founder's window, in hours. Fixed by ruling; the margin is derived. */
 export const DEMO_SUSTAIN_HOURS = 48;

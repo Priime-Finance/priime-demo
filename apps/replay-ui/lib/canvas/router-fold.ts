@@ -48,6 +48,9 @@
  *   the risk-adjusted frame       `riskAdjUnified`, the shipped owner
  *   the band, the budget and the
  *   whole-lane move weight        `lib/canvas/floor-pair.ts`
+ *   the seat the run opens on     `lib/canvas/floor-pair-seat.ts`
+ *   the price of a move           `demoRouterExitProfile`, the pair's own
+ *                                 measured rail, through the evaluator's hook
  *   the book the friction is
  *   quoted against                `DEMO_ROUTER_BOOK_USD`
  * Nothing below re-derives an APY, a threshold, a friction or a weight.
@@ -97,8 +100,10 @@ import {
   DEMO_SUSTAIN_PINS_DAILY,
   DEMO_UPGRADE_THRESHOLD,
   demoDeriveAllRouterRules,
+  demoRouterExitProfile,
   validateDemoRouter,
 } from "@/lib/canvas/orchestrator/demo-rules";
+import { demoFloorPairSeat } from "@/lib/canvas/floor-pair-seat";
 import {
   FLOOR_LANE_LABEL,
   FLOOR_PAIR_MAX_CONCENTRATION_PCT,
@@ -155,8 +160,28 @@ function rulesHashSync(rules: OrchRule[]): string {
 const LOOP_SLOT = ROUTER_LOOP_SLOT;
 const FLOOR_SLOT = ROUTER_FLOOR_SLOT;
 
-/** A lane's target weight at rest. Two lanes, one book, no opinion. */
-const EVEN_SPLIT = 0.5;
+/**
+ * THE SEAT THE RUN OPENS ON, AND IT IS NOT A SPLIT (fix wave 2, ruling 2).
+ *
+ * A switch holds ONE lane: between firings the book is entirely in the lane
+ * the rule holds, and `lib/canvas/floor-pair-seat.ts` is the one owner of
+ * which. It was an even 50/50 here, which made the replay open in a position
+ * the machine is never in and printed every first move as a half-move: the
+ * measured run's own first decision read `50.0pp` out of a 100% rule, because
+ * the lane it evacuated only held half the book.
+ *
+ * The canvas, the published record and this fold all read the same seat, so
+ * the run panel opens on the allocation the plate draws.
+ *
+ * IT IS READ INSIDE THE FOLD, NEVER AT MODULE LOAD. `demoFloorPairSeat`
+ * reaches the capture, which reaches `templates`, and a module body that
+ * evaluates that graph on import is the F6 shape this package already paid
+ * for once.
+ */
+function seatWeights(): { loop: number; floor: number } {
+  const loop = demoFloorPairSeat() === "loop" ? 1 : 0;
+  return { loop, floor: 1 - loop };
+}
 
 /** One tick is one captured day, so a turnover week is seven of them. The
  *  evaluator has no opinion about how long a week is on a stream it did not
@@ -174,11 +199,13 @@ const alignedIndexOf = (date: string): number =>
 
 /** Two days after the USDe incentive first paid. */
 const HALVE_FROM = "2026-07-25";
-/** The squeeze, and its size is SIZED TO THE BAR rather than picked: the
- *  plan asked for 3pp, and 3pp of supply lift is only 2.4pp of published lift
- *  after the fee, against a loop leading by about 0.3pp, so it moved this
- *  router not at all. The smallest lift that clears the 3.00pp bar is 4.13pp;
- *  this is that, rounded up. */
+/** The squeeze, and its size is SIZED TO THE BAR rather than picked: the plan
+ *  asked for 3pp of supply lift, which is only 2.4pp of published lift after
+ *  the compute fee, and against a loop leading by about 0.3pp it moved this
+ *  router not at all. 5pp of supply is 4pp published, which clears
+ *  `DEMO_UPGRADE_THRESHOLD` with room at every bar the sensitivity folds. The
+ *  number the bar itself is is NOT retyped here: this is a stress transform,
+ *  and its one job is to be big enough that the regime is a crossing. */
 const SQUEEZE_FROM = "2026-08-10";
 const SQUEEZE_DAYS = 20;
 const SQUEEZE_LIFT = 0.05;
@@ -351,6 +378,7 @@ export function foldRouterScenario(args: {
   });
   const maxWeight = FLOOR_PAIR_MAX_WEIGHT;
   const minWeight = FLOOR_PAIR_MIN_WEIGHT;
+  const seat = seatWeights();
   const slots: LoopSlot[] = [
     {
       slotId: LOOP_SLOT,
@@ -358,7 +386,7 @@ export function foldRouterScenario(args: {
       candidateId: DEMO_MARKET_ID,
       marketKey: marketKeyOf(DEMO_MARKET_ID),
       cls: loopBase.cls === "N1" ? "N1" : "A",
-      targetWeight: EVEN_SPLIT,
+      targetWeight: seat.loop,
       minWeight,
       maxWeight,
       /* NULL, and it is load-bearing. `ECON_FLOOR_APY` is the levered-loop
@@ -376,7 +404,7 @@ export function foldRouterScenario(args: {
       candidateId: ROUTER_FLOOR_CANDIDATE_ID,
       marketKey: marketKeyOf(ROUTER_FLOOR_CANDIDATE_ID),
       cls: FLOOR_ROW.cls === "N1" ? "N1" : "A",
-      targetWeight: EVEN_SPLIT,
+      targetWeight: seat.floor,
       minWeight,
       maxWeight,
       screenedAtApy: null,
@@ -518,6 +546,14 @@ export function foldRouterScenario(args: {
     /* No seed: see the header. The regime IS the run's identity here. */
     scenario: { hash: scenarioHash, seed: 0, regime },
     budgetWindowTicks: BUDGET_WINDOW_TICKS,
+    /* ONE FRICTION FOR ONE MOVE. Without this the fold published a bar derived
+       from the measured 18.6 bps rail and then charged `exitProfileFor`'s flat
+       70 bps in every cost record, which `paybackMs` turned into an effective
+       2.84pp bar the rule never stated. The hook is the evaluator's own (the
+       one addition to that port) and the profile is `demo-rules`', scoped by
+       the same predicate as the rest of the switch: hand it a portfolio that
+       is not this pair and it answers `exitProfileFor` unchanged. */
+    exitProfile: demoRouterExitProfile(slots.map((s) => s.candidateId)),
   });
 
   /* THE RUN MUST NEVER ADVERTISE A REFERENCE THAT DOES NOT RESOLVE, and every

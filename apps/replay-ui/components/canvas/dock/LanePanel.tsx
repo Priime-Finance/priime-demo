@@ -59,9 +59,11 @@ import type { LoopGraph, LoopId, ParamValue, PortfolioGraph } from "@/lib/canvas
 import { FLOOR_PAIR_TURNOVER_PCT_WEEK } from "@/lib/canvas/floor-pair";
 import { laneDisplayLabel, laneFamily, nodeFor } from "@/lib/canvas/graph-ops";
 import { pricingParamsFor } from "@/lib/canvas/pricing-params";
+import { seatedPortfolioAllocationsBps, withSeatedAllocations } from "@/lib/canvas/floor-pair-seat";
 import { fmtCapacityUsd, vaultCapacity } from "@/lib/canvas/capacity";
 import {
   demoDeriveAllRouterRules,
+  demoRouterPricing,
   demoRouterRules,
 } from "@/lib/canvas/orchestrator/demo-rules";
 import { blockStamp, MINUS, pct, pp, ppMag, usd } from "@/lib/canvas/format";
@@ -69,7 +71,6 @@ import { LiveNumber } from "@/components/atoms/LiveNumber";
 import {
   allocCommitBps,
   allocationPercents,
-  exitProfileFor,
   orchRuleTable,
   orchRuleScopeLine,
   deriveLaneSignals,
@@ -83,7 +84,6 @@ import {
   riskAdjUnified,
   selectDestination,
   slotsFromPortfolio,
-  upgradeThreshold,
   type AttestedDecision,
   type AttestedReceipt,
   type LaneSignal,
@@ -296,8 +296,10 @@ export function AllocShareInput({
 
    THE COMPOSED PORTFOLIO (`composedRoute`) answers "where would the router
    send capital, out of the lanes YOU racked". It is derived here, from the
-   shipped owners — `selectDestination`, `exitProfileFor`, `upgradeThreshold`,
-   `paybackMs`, `riskAdjUnified` — and it is what both router placements draw.
+   shipped owners — `selectDestination`, `demoRouterPricing` (which is
+   `exitProfileFor` + `upgradeThreshold` everywhere except the floor pair, where
+   it is the pair's own MEASURED rail), `paybackMs`, `riskAdjUnified` — and it
+   is what both router placements draw.
 
    THE RUN (`useRouterRun`) is `/api/canvas/orchestrate`, which folds a seeded
    scenario through the evaluator and answers with `AttestedDecision[]`. Its
@@ -457,8 +459,8 @@ export interface ComposedRoute {
   destLabel: string | null;
   /** dest riskAdj − source riskAdj, published frame. */
   improvement: number | null;
-  /** `upgradeThreshold(exitProfileFor(source, dest))`: the bar the pair has to
-   *  clear before an upgrade is allowed to spend the rail. */
+  /** `demoRouterPricing(...).bar`: the bar the pair has to clear before an
+   *  upgrade is allowed to spend the rail. */
   bar: number | null;
   oneShotFrac: number | null;
   windowCost: number | null;
@@ -567,9 +569,19 @@ export function composedRoute(slots: readonly LoopSlot[], lanes: readonly RouteL
     if (ranking.destination === PAUSE_DESTINATION) continue;
     const dest = byId.get(ranking.destination);
     if (!dest || typeof dest.publishedNetApy !== "number") continue;
-    const exit = exitProfileFor(endpoint(source), endpoint(dest));
+    /* ONE FRICTION FOR ONE MOVE, AND ONE BAR DERIVED FROM IT. This line used
+       to be `exitProfileFor(...)` and `upgradeThreshold(exit)`, which on the
+       floor pair charged the flat same-chain 0.700% the dock then printed as
+       `Move cost 0.70%` beside a rule sentence quoting a bar derived from the
+       measured 0.186%. `demoRouterPricing` answers both questions at one
+       owner, and on any portfolio that is not this pair it IS the two shipped
+       functions, called with the same two endpoints. */
+    const { exit, bar } = demoRouterPricing(
+      slots.map((sl) => sl.candidateId),
+      endpoint(source),
+      endpoint(dest),
+    );
     const improvement = riskAdj(dest) - riskAdj(source);
-    const bar = upgradeThreshold(exit);
     const pb = paybackMs(exit, improvement) / DAY_MS;
     const margin = improvement - bar;
     if (margin <= bestMargin) continue;
@@ -1977,7 +1989,11 @@ export function PortfolioVariant({
   onAlloc: (loopId: LoopId, bps: number) => void;
 }) {
   const [rulesOpen, setRulesOpen] = useState(true); // default open — it is why the user focused the orchestrator
-  const alloc = portfolio.orchestrator.allocationsBps;
+  /* THE SEAT, NOT THE DIAL, ON THE FLOOR PAIR (fix wave 2, ruling 2). Same one
+     owner the plate, the review rows and the publish read, so the dock's bars
+     and the plate's bars cannot state two allocations for one book. Any other
+     composition gets the stored map back unchanged. */
+  const alloc = seatedPortfolioAllocationsBps(portfolio);
 
   /* §4.4 — one CLAUSE on the existing status line, no new element and no
      second card. It sits directly beneath the allocation sliders, so when
@@ -2029,7 +2045,9 @@ export function PortfolioVariant({
   );
 
   const dials = useMemo(() => dialsFromParams(portfolio.orchestrator.params), [portfolio.orchestrator.params]);
-  const slots = useMemo(() => slotsFromPortfolio(portfolio), [portfolio]);
+  /* SEATED (fix wave 2, ruling 2): a slot's `targetWeight` IS the allocation,
+     and `composedRoute` filters headroom with it. */
+  const slots = useMemo(() => slotsFromPortfolio(withSeatedAllocations(portfolio)), [portfolio]);
   /* THE RULES THIS VAULT ACTUALLY RUNS (item 8d). `deriveAllOrchRules` is the
      shipped derivation and it prints the shipped move cap, so this table said
      "at most 13% of the book per move" three lines under a run panel whose one

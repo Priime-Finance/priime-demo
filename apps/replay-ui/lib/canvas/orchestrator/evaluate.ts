@@ -6,10 +6,24 @@
  *   source commit eb6d33a96954819b370e93727fc2d7dcd6ba23bc
  *
  * The body below is the live app's file, byte for byte, with this header
- * prepended and NOTHING ELSE CHANGED. Any import that did not resolve in the
- * demo is listed in the WP-2 report rather than silently rewritten here; a
- * ported file that quietly diverges from its source is a second
- * implementation wearing the first one's name.
+ * prepended and ONE ADDITIVE CHANGE, declared here rather than buried in the
+ * diff. Any import that did not resolve in the demo is listed in the WP-2
+ * report rather than silently rewritten here; a ported file that quietly
+ * diverges from its source is a second implementation wearing the first one's
+ * name.
+ *
+ *   THE ONE CHANGE: `EvaluateArgs.exitProfile`, an OPTIONAL hook the caller
+ *   may pass to price a move between two endpoints it knows more about than
+ *   `exitProfileFor` can. It defaults to `exitProfileFor` itself, so an
+ *   omitted hook makes this file byte-equivalent to its source at runtime,
+ *   and the fold's logic below is untouched: one call site reads the hook and
+ *   nothing else in the file knows it exists. The demo needs it because
+ *   `exitProfileFor` prices a same-chain rail from a flat 0.7% analogy to an
+ *   annual drag constant, while the floor pair's rail has been MEASURED at
+ *   0.186% (`orchestrator/demo-rules.ts`), and a cost record charging a
+ *   friction the product did not measure is the defect the register refuses.
+ *   Editing the fold to special-case a pair would have been the alternative,
+ *   and that is the divergence this header exists to prevent.
  * ───────────────────────────────────────────────────────────────────────── */
 
 /* eslint-disable @typescript-eslint/prefer-optional-chain, @typescript-eslint/no-unused-vars --
@@ -107,6 +121,7 @@ import type { DestinationRanking, ExitEndpoint } from "./rule-schema";
 import type {
   AttestedDecision,
   AttestedReceipt,
+  ExitProfile,
   ObservationRef,
   OrchBudgetState,
   OrchestratorConfig,
@@ -266,6 +281,19 @@ export interface EvaluateArgs {
   /** One tick-week, in ticks. The caller owns its own clock: this file has no
    *  opinion about how long a week is on a stream it did not generate. */
   budgetWindowTicks: number;
+  /**
+   * THE PRICE OF A MOVE, WHEN THE CALLER HAS MEASURED IT (the one addition to
+   * this port; see the header).
+   *
+   * Defaults to `exitProfileFor`, which is the only profile this file knows
+   * how to build: a same-chain/cross-chain rail constant plus the settlement
+   * window the two endpoints publish. A caller that has measured the actual
+   * rail between its own two endpoints passes it here, and the cost record,
+   * the payback gate and the realized cost all charge the measured number
+   * instead of the analogy. It is a REPLACEMENT, never an adjustment: one
+   * profile prices one move, so no surface can hold two.
+   */
+  exitProfile?: (source: ExitEndpoint, dest: ExitEndpoint) => ExitProfile;
 }
 
 // ── The metric predicates ─────────────────────────────────────────────────
@@ -672,7 +700,10 @@ export function evaluateOrchestrator(args: EvaluateArgs): EvaluateResult {
         });
         continue;
       }
-      const exit = exitProfileFor(sourceEnd, destEnd);
+      /* THE HOOK, AND THE DEFAULT IS THE SHIPPED OWNER. `args.exitProfile` is
+         the one addition to this port (see the header); absent, this line is
+         the source file's own `exitProfileFor(sourceEnd, destEnd)`. */
+      const exit = (args.exitProfile ?? exitProfileFor)(sourceEnd, destEnd);
       const pbMs = paybackMs(exit, improvement);
       const paybackDays = pbMs / DAY_MS;
 
