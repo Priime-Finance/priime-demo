@@ -387,7 +387,12 @@
   justify-content:flex-end;gap:8px;max-width:calc(100% - 36px);z-index:6}
 .rk-nav .hm-key{flex:0 0 auto;min-width:42px;height:34px;padding:0 12px;cursor:pointer;font-size:10px}
 .rk-rack{position:relative;display:flex;align-items:stretch;min-height:100%;padding:10px 18px 40px}
-.rk-orchcol{flex:0 0 auto;display:flex;flex-direction:column;justify-content:center;padding:40px 26px 40px 8px}
+/* PLATES ALIGN BY TOP BORDER (ratified 2026-08-21). Centring this column
+   against a lane stack that starts at the top floated the router plate
+   mid-height, staggered against both lane heads. `10px` matches `.rk-rack`'s
+   own top padding on the line above, so the plate's top border lands flush
+   with Lane 1's first plate (item 21). */
+.rk-orchcol{flex:0 0 auto;display:flex;flex-direction:column;justify-content:flex-start;padding:10px 26px 40px 8px}
 .rk-lanes{flex:1;min-width:0;display:flex;flex-direction:column}
 
 /* ── lane ── */
@@ -508,6 +513,8 @@
 .rk-riskk{font-family:var(--fm);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--bc-muted-warm);
   background:none;border:1px solid var(--bc-line-mute);border-radius:30px;padding:3px 10px;cursor:pointer;transition:.15s}
 .rk-riskk:hover{border-color:#2B5CFF;color:var(--bc-accent-text)}
+/* the press every other capsule on this canvas has (item 34). */
+.rk-riskk:active{transform:translateY(.5px);transition-duration:60ms}
 .rk-riskk.on{background:#2B5CFF;border-color:#2B5CFF;color:#fff}
 .rk-riskk.on.custom{background:var(--bc-ink-fill);border-color:var(--bc-ink-fill);
   color:var(--bc-on-ink-fill);cursor:default}
@@ -619,8 +626,20 @@
 @keyframes slotwant{0%,100%{box-shadow:0 0 0 0 var(--bc-accent-ring-soft)}50%{box-shadow:0 0 0 8px rgba(43,92,255,0)}}
 .rk-slot .hm-key{flex:0 0 auto;width:82%;height:40px}
 /* ghost add-a-loop lane */
-.rk-addlane{margin:8px 16px 26px;display:flex;align-items:center;justify-content:center;height:64px;border:1.5px dashed var(--bc-line-invite);border-radius:16px;background:none;cursor:pointer;font-family:var(--fm);font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--bc-muted-warm);width:calc(100% - 32px)}
+/* ── THE ADD-A-LANE BAY (router lane, design items 26 / 33 / 34) ──────────
+   · the register is folded in rather than overridden 886 lines later. The
+     de-uppercase correction lived at :1508 as a second declaration, and
+     FundingCanvas is a second rack on this stylesheet, so that override was
+     one scoped rule away from resurrecting the retired uppercase register.
+   · `width:calc(100% - 36px)` against the `margin:6px 18px 0` at :1056, so
+     the box is 18px from BOTH edges. It was `100% - 32px`, an 18/14 split
+     that overhung `.rk-lanehead`'s right edge by 3.45px at 1440 FIT.
+   · a press. The bay had a hover and no transition at all, so even the hover
+     snapped; 60ms and 1px are what every other pressable object on this
+     canvas uses (hm.css:191, build.css:1239, build.css:2769). ── */
+.rk-addlane{margin:8px 16px 26px;display:flex;align-items:center;justify-content:center;height:64px;border:1.5px dashed var(--bc-line-invite);border-radius:16px;background:none;cursor:pointer;font-family:var(--fm);font-size:10px;letter-spacing:.05em;text-transform:none;color:var(--bc-muted-warm);width:calc(100% - 36px);transition:.15s}
 .rk-addlane:hover{border-color:#2B5CFF;color:var(--bc-accent-text)}
+.rk-addlane:active{transform:translateY(1px);transition-duration:60ms}
 /* one-shot want pulse after the first lane completes (UX_ITERATION_3 §5):
    three beats, never looping forever */
 .rk-addlane.want{border-color:#2B5CFF;color:var(--bc-accent-text);background:var(--bc-accent-wash);animation:slotwant 1.6s ease-in-out 3}
@@ -628,6 +647,18 @@
 /* dim unlit vault terminus at stage 0 */
 .rk-vault--dim{opacity:.5;filter:saturate(.4)}
 .rk-vault{cursor:default}
+
+/* ── THE ROOM REARRANGES, THEN THE OBJECT LANDS IN IT (item 20) ───────────
+   `zoom` is in no transition list, so the whole rack snapped 38% smaller with
+   no motion to catch the eye at the moment the second lane arrived, and the
+   router plate mounted in the same frame with no arrival at all: the one
+   plate the user does not place was the one plate with no beat. The lanes
+   settle over 0 to 260ms and RackCanvas snaps the plate at +180ms through the
+   existing `markSnap`. 1.12 and not 1.61: a scale that returns the old size
+   would claim the plates got smaller by moving, which is not what happened.
+   No `both` or `forwards` fill, so no resting state is hidden. ── */
+@keyframes rkmulti{from{transform:scale(1.12);opacity:.72}to{transform:none;opacity:1}}
+.rk-rack--multi .rk-lane{animation:rkmulti 260ms cubic-bezier(.4,0,.2,1)}
 
 /* orchestrator plate (one size larger) */
 .rk-orch .hm-hw{width:280px;flex:0 0 280px;zoom:.86}
@@ -638,6 +669,23 @@
 .rk-orchbar i{position:absolute;inset:0;width:0;background:#ffffff;box-shadow:0 0 8px rgba(255,255,255,.5);border-radius:4px;transition:width .35s cubic-bezier(.4,0,.2,1)}
 .rk-orchrow.dry b{color:#c2864e}
 .rk-orchrow .arr{color:#c2864e;font-size:9px}
+/* ── THE SAME CLASS, TWICE, AND ONLY THE REGISTER DIFFERS (item 7, MEASURED)
+   `LanePanel` renders `.rk-orchrow` twice inside the dock, and the wave's
+   build list called for recolouring those two to `--bc-body` / `--bc-ink` on
+   the premise that the dock is theme-carrying and the rows therefore sat at
+   2.47:1 on white. THEY DO NOT SIT ON WHITE. Their container `.dock-allocs`
+   is a mode-constant dark card (`background:#0d0d0d` at :869, restyled to
+   `#0A0E2A` at :1528, neither behind a media query), measured live in LIGHT
+   mode as rgb(10,14,42). Against that ground:
+       #a5a5a0 (shipped)        7.64:1      #e9e9e6 (shipped b)  15.2:1
+       --bc-body #56534e        2.47:1      --bc-ink #141210      ~1.1:1
+   so the recolour was a regression of the exact size the item was written to
+   fix, in the opposite direction. The colours stay. What the sweep really
+   missed is the CASE: `.dock-orch-status` one declaration away was
+   de-uppercased at :1524 and this was not, so the dock printed `LANE 1` where
+   every sibling reads sentence case. That, and only that, is scoped here; the
+   plate keeps uppercase, which is its own instrument register. ── */
+.dock-scroll .rk-orchrow{text-transform:none;letter-spacing:.02em}
 
 /* ── market discovery content rules (shell retired in IT4 — the content
       lives in the context dock; .mt-* row/card classes are KEPT) ── */
@@ -685,7 +733,8 @@
       the decode renders inside the dock's portfolio panel) ── */
 .rt-body{padding:20px 30px 60px;max-width:860px}
 .rt-policy{font-family:var(--fm);font-size:12px;letter-spacing:.1em;color:var(--bc-ink);margin-bottom:6px}
-.rt-modeled{display:inline-block;font-family:var(--fm);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--bc-warn);border:1px solid var(--bc-warn-e45);border-radius:30px;padding:3px 10px;margin-bottom:16px}
+/* The de-uppercase register folded in (item 34), not overridden at :1517. */
+.rt-modeled{display:inline-block;font-family:var(--fm);font-size:9px;letter-spacing:.02em;text-transform:none;color:var(--bc-warn);border:1px solid var(--bc-warn-e45);border-radius:30px;padding:3px 10px;margin-bottom:16px}
 .rt-rule{font-family:var(--fm);font-size:11px;line-height:1.7;color:var(--bc-body);border-bottom:1px dashed var(--bc-line);padding:10px 2px}
 .rt-floor{font-family:var(--fm);font-size:10px;color:var(--bc-muted);margin-top:14px}
 
@@ -1505,7 +1554,9 @@ body:has(.bc-root) footer{display:none}
 .rk-lanenote{font-family:var(--fser);font-style:italic;font-size:10.5px;color:var(--bc-muted-soft);font-weight:400}
 .rk-lanekill{text-transform:none;letter-spacing:.02em}
 .rk-slot{text-transform:none;letter-spacing:.05em;font-size:10px}
-.rk-addlane{text-transform:none;letter-spacing:.05em;font-size:10px}
+/* `.rk-addlane` and `.rt-modeled` are NOT here any more (item 34): their
+   register is folded into their own declarations at :622 and :688, so a
+   scoped rule on the second rack cannot resurrect the retired uppercase. */
 .mt-sec-h{font-family:var(--fser);font-style:italic;text-transform:none;letter-spacing:0;font-size:13px;color:var(--bc-body)}
 .mt-status{font-family:var(--fser);font-style:italic;font-size:12px;color:var(--bc-muted-soft);margin-top:12px}
 .mt-venuechip{text-transform:none;letter-spacing:.02em}
@@ -1514,7 +1565,6 @@ body:has(.bc-root) footer{display:none}
 .dock-ro-register{text-transform:none;letter-spacing:.03em}
 .dock-ro-lane{font-family:var(--fser);font-style:italic;text-transform:none;letter-spacing:0;font-size:11px}
 .dock-orch-status{text-transform:none;letter-spacing:.03em}
-.rt-modeled{text-transform:none;letter-spacing:.02em}
 .cop-register,.cop-limit,.cop-offline{text-transform:none;letter-spacing:.03em}
 .cop-bp-lane-m{text-transform:none;letter-spacing:.02em}
 .cop-bp-confirm{text-transform:none;letter-spacing:.02em}
@@ -1559,6 +1609,7 @@ body:has(.bc-root) footer{display:none}
 .rk-lanepick:focus-visible,
 .bc-root .rk-plate:focus-visible,
 .bc-root .rk-slot:focus-visible,.bc-root .rk-addlane:focus-visible,
+.bc-root .cpz-addlane:focus-visible,
 .bc-root .hm-help:focus-visible,.bc-root .pc input:focus-visible,
 .pf-name:focus-visible,.pf-publish:focus-visible,.pf-close:focus-visible,
 .pf-ghostlink:focus-visible,.pf-chip:focus-visible{
@@ -2014,6 +2065,7 @@ body:has(.bc-root) footer{display:none}
   .dock .mt-card,.mt-dead{animation:none;opacity:1;transform:none}
   .mt-dead-chev,.dk-comp-rail,.dk-comp-row{transition:none}
   .dk-comp-row:active{transform:none}
+  .rk-riskk:active{transform:none}
   .pf-cap::before{animation:none;transform:scaleX(1)}
   .pf-cap-bind{animation:none;opacity:1}
   .dk-shared.swept::after{animation:none;opacity:0}
@@ -2689,10 +2741,18 @@ body:has(.bc-root) footer{display:none}
 .cpz-bay-keys .hm-key{width:100%}
 
 /* the canvas's own add-a-lane idiom, shrunk into the dock */
+/* HEIGHT UNCHANGED AT 48px, deliberately (item 33's height clause, measured
+   and declined). The ghost twin is `height:auto;min-height:48px;padding:10px 0`
+   on the same class, so ghost and live key already agree here; and with both
+   strategies live (`DEMO_SCOPE.liveStrategies`) the ghost branch is
+   unreachable in this build, so there is no flip left to make invisible.
+   Raising the live key to the canvas bay's 64px would be a 14px change to a
+   shipped control that nothing asked for. */
 .cpz-addlane{display:flex;align-items:center;justify-content:center;height:48px;width:100%;
   border:1.5px dashed var(--bc-line-invite);border-radius:14px;background:none;cursor:pointer;
-  font-family:var(--fm);font-size:10px;letter-spacing:.05em;color:var(--bc-muted-warm)}
+  font-family:var(--fm);font-size:10px;letter-spacing:.05em;color:var(--bc-muted-warm);transition:.15s}
 .cpz-addlane:hover{border-color:#2B5CFF;color:var(--bc-accent-text)}
+.cpz-addlane:active{transform:translateY(1px);transition-duration:60ms}
 
 /* ── §5.5 JUST-ADDED — 600ms, ONE beat, no new loop. The lane header APY is
       deliberately NOT also animated: useCountUp already tweens it and the
@@ -2812,6 +2872,12 @@ body:has(.bc-root) footer{display:none}
     background:#2B5CFF;border-radius:1px}
   .cpz-lane-chev,.cpz-skip-chev,.cpz-bridge-chev,.cpz-row-chev,.cpz-bay{transition:none}
   .cpz-bay:hover{transform:none;box-shadow:none}
+  /* the router-lane wave's own motion (items 20 / 26 / 33). `rkmulti` has no
+     fill, so removing it rests at the natural state; the two presses are
+     transforms with no information in them. `.rk-plate--snap{animation:none}`
+     is already declared at :2353. */
+  .rk-rack--multi .rk-lane{animation:none}
+  .rk-addlane:active,.cpz-addlane:active{transform:none}
   .rail-status[data-receipt="1"]{animation:none}
   /* an instant vanish under the cursor reads as a crash: SWAP the eject,
      never remove it (mirrors the .rk-plate--snap fallback above). */

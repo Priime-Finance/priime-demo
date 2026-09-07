@@ -54,6 +54,7 @@ export default function OrchestratorPlate({
   turnoverCeiling,
   params,
   focused,
+  snap,
   onFocus,
   onParam,
   onAlloc,
@@ -72,6 +73,8 @@ export default function OrchestratorPlate({
   turnoverCeiling: number;
   params: Record<string, ParamValue>;
   focused: boolean;
+  /** The plate's arrival beat, held ~450ms by `markSnap` (design item 20). */
+  snap?: boolean;
   onFocus: () => void;
   onParam: (field: string, value: ParamValue) => void;
   /** One lane's target share in bps; the rest rebalance to Σ=10000 (P1-6). */
@@ -107,7 +110,12 @@ export default function OrchestratorPlate({
   })();
   return (
     <div
-      className={`rk-plate rk-orch${focused ? " rk-plate--focused on" : ""}`}
+      /* `snap` is the plate's ARRIVAL, and it is the one plate the user does
+         not place: it mounts on its own the instant a second lane lands, and
+         until this it did so with no beat at all (design item 20). Same
+         `rk-plate--snap` every module plate takes from `markSnap`, and the
+         reduced-motion substitution at build.css:2353 already covers it. */
+      className={`rk-plate rk-orch${focused ? " rk-plate--focused on" : ""}${snap ? " rk-plate--snap" : ""}`}
       data-node-id="orchestrator"
       onClick={(e) => {
         e.stopPropagation();
@@ -131,7 +139,12 @@ export default function OrchestratorPlate({
                 ?
               </button>
             </span>
-            <span className="n">OR</span>
+            {/* EMPTY, not `OR` (design item 21). Every other plate prints an
+                ordinal or nothing, and this was the only one inventing a
+                two-letter code in the numeral slot. `VaultPlate` is the other
+                plate that is not a numbered module and it renders the same
+                empty span. */}
+            <span className="n" />
           </div>
           {helpOpen ? (
             <div className="hm-helppop" onClick={(e) => e.stopPropagation()}>
@@ -257,9 +270,15 @@ export default function OrchestratorPlate({
               </div>
             ) : (
               <div className="hm-keys">
+                {/* NOT `Follow yield` (design item 2, 2026-09-07). The quant
+                    measured the routing at +0.35pp on top of a second lane
+                    worth +2.19pp, over a pair whose normal spread is 0.10pp
+                    and behind a 3.00pp bar: that is a protection ratchet, and
+                    the lit key is the loudest claim this plate makes about
+                    itself. `data-key` is unchanged: it is an id, not chrome. */}
                 <div className="hm-key lit" data-key="follow">
                   <span className="hm-led" />
-                  Follow yield
+                  Hold the better lane
                 </div>
                 <div
                   role="button"

@@ -14,6 +14,8 @@
  */
 
 import type { OpportunitiesPayload } from "@/components/canvas/types";
+import { floorRowToday } from "@/lib/canvas/router-history";
+import { MODELED_CONTENT_HASH } from "@/lib/canvas/unified-list";
 import snapAave from "@/lib/canvas/fixtures/aave-v3-base.json";
 import snapDolomite from "@/lib/canvas/fixtures/dolomite-v1.json";
 import snapHlFunding from "@/lib/canvas/fixtures/hyperliquid-funding.json";
@@ -25,13 +27,13 @@ import { demoMarketCandidate } from "@/lib/demo/market";
 import type { CandidateDocument } from "@/lib/strategy-factory/types";
 import type { VenueDocV2 } from "@/lib/strategy-factory/venues/types";
 
-import { projectDolomiteDoc, projectVenueDocV2, type ProjectedVenue } from "./opportunities";
+import { projectDolomiteDoc, projectVenueDocV2, VENUE_LABELS, type ProjectedVenue } from "./opportunities";
 import { reconcileHedgeFunding } from "./perp-books";
 import type { SourcedProjectedVenue } from "./server-shim";
 
 /**
  * The six committed venues, in the loader's own order (sorted by venue id, as
- * `loadAllVenues` sorts them).
+ * `loadAllVenues` sorts them). The floor venue joins them in `demoVenues`.
  */
 function projectAll(nowMs: number): ProjectedVenue[] {
   const v2 = [snapAave, snapMorphoBase, snapMorphoEth, snapHyper, snapHlFunding].map((doc) =>
@@ -55,9 +57,47 @@ function spliceDemoRow(venues: ProjectedVenue[]): ProjectedVenue[] {
   );
 }
 
-/** Every committed venue, the demo row spliced in, funding reconciled. The opportunities route's body. */
+/**
+ * THE ROUTER'S FLOOR LANE, SERVED AS ITS OWN VENUE (router lane plan R1).
+ *
+ * The floor is a hand-authored issuer row, not a scanned market, so it belongs
+ * to no scanner snapshot. On the live app such a row reaches the client only
+ * through `modeledRows()` and a lane pins it through `templateCatalogHit`,
+ * which returns the SHIPPED `TREASURY_CANDIDATES` row and its own 2026-09-03
+ * capture. The router prices the same reserve from the 2026-09-07 capture, and
+ * `catalogRow` beats `templateCatalogHit` in `param-context.ts`, so serving the
+ * row here is what makes the dock card, the lane's own quote, the published
+ * record and the router instrument read ONE number.
+ *
+ * `floorRowToday()` is that number's owner and nothing is priced here. The
+ * venue carries `MODELED_CONTENT_HASH`, the same hash `modeledRows` stamps: a
+ * hand-authored row has no scan document behind it and must not claim one.
+ * Null when the capture has no aligned day, in which case the catalog is the
+ * six snapshots exactly as before.
+ */
+function floorVenue(nowMs: number): ProjectedVenue | null {
+  const row = floorRowToday();
+  if (!row) return null;
+  return {
+    venue: "treasury-ausdc-base",
+    label: VENUE_LABELS["treasury-ausdc-base"],
+    generatedAtMs: nowMs,
+    blockNumber: 0,
+    contentHash: MODELED_CONTENT_HASH,
+    stale: false,
+    launchable: false,
+    hedged: [],
+    unhedged: [row],
+  };
+}
+
+/** Every committed venue plus the floor, the demo row spliced in, funding reconciled. The opportunities route's body. */
 export function demoVenues(nowMs: number): OpportunitiesPayload {
-  const reconciled = reconcileHedgeFunding(spliceDemoRow(projectAll(nowMs)));
+  const floor = floorVenue(nowMs);
+  const all = [...projectAll(nowMs), ...(floor ? [floor] : [])].sort((a, b) =>
+    a.venue.localeCompare(b.venue),
+  );
+  const reconciled = reconcileHedgeFunding(spliceDemoRow(all));
   const venues: SourcedProjectedVenue[] = reconciled.map((v) => ({ ...v, source: "snapshot" }));
   return { ok: true, nowMs, venues, degraded: [] };
 }

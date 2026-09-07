@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { POST } from "@/app/api/canvas/reprice/route";
 import type { RepriceData } from "@/components/canvas/types";
 import { liveVenues } from "@/lib/canvas/catalog-server";
+import { routerPublishedToday } from "@/lib/canvas/router-history";
 import { catalogRow, laneQuote, mockQuote, publishedNetApy } from "@/lib/canvas/mock-quote";
 import { DEMO_MARKET_ID, HERO_SEED_LEVERAGE } from "@/lib/demo/market";
 
@@ -63,8 +64,10 @@ describe("POST /api/canvas/reprice", () => {
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
     expect(a).toBeCloseTo(b ?? Number.NaN, 6);
-    // The vault number the header prints, from the one owner, with the fee inside.
-    expect(a).toBeCloseTo(0.043, 3);
+    /* The vault number the header prints, from the one owner, with the fee
+       inside, and it is the ROUTER's own loop number, not a typed constant
+       (router lane WP-1, design item 1: one owner across the two frames). */
+    expect(a).toBe(routerPublishedToday()!.loop);
     expect((fromRail as Ok).candidate?.economics?.loopLeverage).toBeCloseTo(HERO_SEED_LEVERAGE, 6);
   });
 

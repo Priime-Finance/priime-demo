@@ -155,3 +155,96 @@ describe("icon (1.7)", () => {
     expect(favicon).not.toMatch(/F5481F/i);
   });
 });
+
+/* ══ THE ROUTER LANE'S CHROME (router lane plan WP-1, design items 1-7) ═════
+   Source-level pins, in this file's own idiom: the register these surfaces
+   print has one owner each, and the greps below are what stops a second copy
+   of a figure or of a retired claim from landing beside it. */
+
+describe("the demo row's two rates are measured, not typed (item 1)", () => {
+  const src = read("lib/demo/market.ts");
+  it("carries no literal rate pair and reads the capture's own owner", () => {
+    /* Code only: the docblock NAMES the two retired literals, which is the
+       record of what moved and must stay readable. */
+    const code = src.split("\n").filter((l) => !l.trimStart().startsWith("*")).join("\n");
+    expect(code).not.toContain("0.044");
+    expect(code).not.toContain("0.035");
+    expect(code).not.toContain("DEMO_COLLATERAL_YIELD_APY");
+    expect(code).not.toContain("DEMO_BORROW_APY_MARGINAL");
+    expect(src).toContain('from "@/lib/canvas/router-history"');
+    expect(src).toContain("routerLastAlignedDay()");
+    expect(src).toContain("collateralYieldApy: rates.collateralYieldApy");
+    expect(src).toContain("borrowApyMarginal: rates.borrowApyMarginal");
+  });
+});
+
+describe("the router is not advertised as a yield follower (item 2)", () => {
+  it("prints the measured claim on the plate key and on both summaries", () => {
+    const plate = read("components/canvas/OrchestratorPlate.tsx");
+    expect(plate).toContain("Hold the better lane");
+    expect(plate).not.toMatch(/^\s+Follow yield$/m);
+    const rack = read("components/canvas/RackCanvas.tsx");
+    expect(rack).not.toContain("following modeled yield");
+    expect(rack.match(/router holding the better lane inside the published concentration cap/g)).toHaveLength(2);
+  });
+});
+
+describe("one control, one name (item 3)", () => {
+  it("spells the add-a-lane key identically on the rack and in the dock", () => {
+    const rack = read("components/canvas/RackCanvas.tsx");
+    const dock = read("components/canvas/dock/ComposePanel.tsx");
+    expect(rack).not.toContain("＋ Add a loop");
+    expect(rack.match(/＋ Add a lane/g)).toHaveLength(2);
+    expect(dock.match(/＋ Add a lane/g)).toHaveLength(2);
+    expect(rack).toContain("addLaneAndDiscover");
+    expect(rack).not.toContain("addLoopAndDiscover");
+  });
+});
+
+describe("the shelf count is never typed at a call site (item 6)", () => {
+  it("appears only inside its own derivation", () => {
+    for (const rel of [
+      "components/canvas/GhostSlot.tsx",
+      "components/canvas/dock/ComposePanel.tsx",
+      "components/canvas/RackCanvas.tsx",
+      "lib/canvas/shelf-count.ts",
+    ]) {
+      expect(read(rel)).not.toContain("3 modules, 2 strategies");
+    }
+  });
+});
+
+describe("the allocation rows read in the dock (item 7)", () => {
+  const css = read("app/build/build.css");
+  it("de-uppercases the dock rows and leaves both grounds' colours alone", () => {
+    expect(css).toContain(".dock-scroll .rk-orchrow{text-transform:none;letter-spacing:.02em}");
+    /* NO COLOUR IN THE DOCK-SCOPED RULE, measured: `.dock-allocs` is a
+       mode-constant dark card (#0d0d0d at :869, #0A0E2A at :1528, neither
+       behind a media query), so the shipped #a5a5a0 / #e9e9e6 read 7.64:1 and
+       15.2:1 there and `--bc-body` would read 2.47:1. */
+    const dockScoped = css.split("\n").filter((l) => l.startsWith(".dock-scroll .rk-orchrow"));
+    expect(dockScoped).toHaveLength(1);
+    for (const l of dockScoped) expect(l).not.toContain("color:");
+    // the mode-constant plate rules are untouched
+    expect(css).toContain(".rk-orchrow b{color:#e9e9e6;font-weight:600;font-size:9.5px}");
+    expect(css).toContain("background:#0d0d0d");
+    expect(css).toContain(".dock-allocs{background:#0A0E2A;border-color:#1B2350}");
+  });
+  it("carries the router wave's motion with its reduced-motion substitution", () => {
+    expect(css).toContain("@keyframes rkmulti{from{transform:scale(1.12);opacity:.72}to{transform:none;opacity:1}}");
+    expect(css).toContain(".rk-rack--multi .rk-lane{animation:none}");
+    expect(css).toContain(".rk-addlane:active,.cpz-addlane:active{transform:none}");
+    // no `both` / `forwards` fill on the new beat: nothing rests hidden
+    expect(css).not.toMatch(/rkmulti [^;}]*\b(both|forwards)\b/);
+  });
+  it("folds the de-uppercase register into the two declarations that own it", () => {
+    expect(css).not.toMatch(/^\.rk-addlane\{text-transform:none/m);
+    expect(css).not.toMatch(/^\.rt-modeled\{text-transform:none;letter-spacing:\.02em\}$/m);
+    expect(css.match(/\.rk-addlane\{[^}]*text-transform:none/g)).toHaveLength(1);
+    expect(css).toContain("width:calc(100% - 36px)");
+  });
+  it("seats the router column by top border and gives the plate no invented code", () => {
+    expect(css).toContain(".rk-orchcol{flex:0 0 auto;display:flex;flex-direction:column;justify-content:flex-start;padding:10px 26px 40px 8px}");
+    expect(read("components/canvas/OrchestratorPlate.tsx")).not.toContain('<span className="n">OR</span>');
+  });
+});

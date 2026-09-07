@@ -126,6 +126,7 @@ import {
   type UnifiedRow,
 } from "@/lib/canvas/unified-list";
 import { COMING_SOON, isLiveMarket, isLiveVenue } from "@/lib/demo-scope";
+import { ROUTER_MEASURED_ON } from "@/lib/canvas/router-history";
 import { CATALOG_COMPOSITION, composedNetApy, mockQuote } from "@/lib/canvas/mock-quote";
 import { getDef } from "@/lib/canvas/modules";
 import { FAMILY_LABEL, laneFamilies, type LaneFamily } from "@/lib/canvas/graph-ops";
@@ -153,6 +154,11 @@ const VENUE_ORDER: CanvasVenueId[] = [
   "aave-v3-base",
   "hyperliquid-funding",
   "dolomite-berachain",
+  /* The router's floor lane is served as its own venue by `catalog-server`
+     (it is a hand-authored issuer row and belongs to no scanner snapshot), so
+     it needs a place in the filter order like any other live venue. The key
+     only renders while `isLiveVenue` holds it. */
+  "treasury-ausdc-base",
 ];
 
 /**
@@ -467,6 +473,50 @@ function moduleNames(keys: readonly ModuleKey[]): string {
 }
 
 /**
+ * THE LENDING RESERVE'S ROW (router lane plan R1, design item 4).
+ *
+ * The floor lane is a USDC supply position on Aave v3 Base: one leg, no debt,
+ * no dial. `RowBody` above is a LOOP grammar and three of its slots are false
+ * on this row, so the row gets its own body rather than a fall-through:
+ *
+ *  · `.mt-lev` is ABSENT, not `at 1.00x` and not `unlevered`. A slot that can
+ *    never move is not an instrument (2026-08-22), and printing a leverage
+ *    advertises a dial this family does not have.
+ *  · the econ line reads the reserve's own supply rate and says there is no
+ *    borrow leg. `carry +0.90pp · borrow 3.50%` against a borrow rate the row
+ *    carries as a structural 0 is the exact defect the funding body line was
+ *    introduced to fix.
+ *  · the class pill is the family's word rather than `unhedged`, which is true
+ *    and useless about a lending reserve.
+ *
+ * NO NUMBER IS DERIVED HERE. The headline is `composedNetApy` on the row the
+ * catalog served, which is the row the lane will pin and price; the supply
+ * rate is the row's own `collateralYieldApy` (this family's whole return, per
+ * `treasuryCandidate`); the capacity and its binding come from the two
+ * accessors every other card calls.
+ */
+function LendingRowBody({ c, v }: { c: UnifiedRow; v: CardView }) {
+  const supply = c.economics?.collateralYieldApy ?? null;
+  return (
+    <>
+      <span className="mt-pair">{c.pair}</span>
+      <span className="mt-apy">{pct(v.apy)}</span>
+      <span className="mt-meta">
+        <i className="mt-venuechip">{c.venueLabel}</i>
+        <i className="mt-venuechip">lending</i>
+      </span>
+      <span className="mt-econ">
+        {supply === null ? "no measured supply rate" : `supply ${pct(supply, 2)} · no borrow leg`}
+      </span>
+      <span className="mt-econ">
+        {v.capacity}
+        {v.binds ? (isModeledBinding(v.binds) ? ` ${v.binds}` : ` in ${v.binds}`) : null}
+      </span>
+    </>
+  );
+}
+
+/**
  * A MODELED ROW (P0-7). Same `.mt-card` geometry, same pickable blue — these
  * rows ARE pickable and that is the entire point of the item — with four
  * differences, each of which states something the scan rows cannot state.
@@ -579,6 +629,9 @@ export default function DiscoverPanel({
    *  and a perp leg, which is the loop family and nothing else. A lane that
    *  can no longer be a loop cannot price ONE of them. */
   const offersScan = laneFams.includes("loop");
+
+  /** The lending reserve is a treasury row and nothing else can price one. */
+  const offersLending = laneFams.includes("treasury");
 
   /** The hand-authored rows, every family's: on this build each is coming
    *  soon whatever the lane can price, so the list is the catalog's, not the
@@ -726,25 +779,41 @@ export default function DiscoverPanel({
   };
 
   /* The live section's head is the class the live rows are: one word per
-     class, the live dock's own two titles. */
-  const liveHedged = split.live.filter((c) => c.cls === "A");
-  const liveUnhedged = split.live.filter((c) => c.cls !== "A");
-  const liveSection = (title: string, rows: UnifiedRow[]) =>
-    rows.length === 0 ? null : (
+     class, the live dock's own two titles. The lending reserve is neither: it
+     is routed out by FAMILY, from `familiesForCandidateId`, so a second
+     issuer row would land in the same place without a second predicate. */
+  const isLending = (c: UnifiedRow) => familiesForCandidateId(c.id).includes("treasury");
+  const liveHedged = split.live.filter((c) => c.cls === "A" && !isLending(c));
+  const liveUnhedged = split.live.filter((c) => c.cls !== "A" && !isLending(c));
+  const liveLending = split.live.filter(isLending);
+  /* ONE CASCADE ACROSS THE GROUPS (design item 32). `--i` was local to each
+     section, so with a third live group three first rows landed together at
+     delay 0 and the cascade read as columns. A running offset is carried
+     through the calls, exactly as the coming-soon block below already does. */
+  let liveIdx = 0;
+  const liveSection = (title: string, rows: UnifiedRow[], body: (c: UnifiedRow) => React.ReactNode, status?: string) => {
+    if (rows.length === 0) return null;
+    const offset = liveIdx;
+    liveIdx += rows.length;
+    return (
       <div>
         <div className="mt-sec-h">{title}</div>
+        {status ? <div className="mt-status">{status}</div> : null}
         {rows.map((c, i) => (
           <button
             key={c.id}
             className={`mt-card${selectedId === c.id ? " sel" : ""}`}
-            style={{ "--i": i } as React.CSSProperties}
+            style={{ "--i": offset + i } as React.CSSProperties}
             onClick={() => pick(c)}
           >
-            <RowBody c={c} v={view(c)} />
+            {body(c)}
           </button>
         ))}
       </div>
     );
+  };
+  const scanBody = (c: UnifiedRow) => <RowBody c={c} v={view(c)} />;
+  const lendingBody = (c: UnifiedRow) => <LendingRowBody c={c} v={view(c)} />;
 
   return (
     <div className="dock-discover" onClick={(e) => e.stopPropagation()}>
@@ -799,13 +868,14 @@ export default function DiscoverPanel({
           </button>
         </div>
 
-        {/* ONE register line (A.3 #31). Nothing on this build is scanned: the
-            row's number is the vault at the leverage this pick builds at, from
-            the market's typed inputs, and the carry the venue pays in
-            incentives is not in it. */}
+        {/* ONE register line (A.3 #31) OVER THE TWO LOOP SECTIONS. The loop
+            row's two rates are measured now, not typed (`demoMarketRates`), so
+            the clause that called them typed inputs stopped being true; the
+            lending reserve carries its own line on its own head, because it
+            has no leverage and no carry to describe. */}
         <div className="mt-status">
-          Modeled from typed inputs at the leverage this pick builds at. The carry is
-          incentive-paid and the scan does not credit it.
+          Modeled from rates measured {ROUTER_MEASURED_ON}, at the leverage this pick builds
+          at. The carry is incentive-paid and the scan does not credit it.
         </div>
 
         {error ? <div className="mt-empty">{error}</div> : null}
@@ -818,10 +888,22 @@ export default function DiscoverPanel({
       <div className="mt-body">
         {offersScan && data ? (
           <>
-            {classFilter !== "unhedged" ? liveSection("Hedged (delta-neutral)", liveHedged) : null}
-            {classFilter !== "hedged" ? liveSection("Unhedged", liveUnhedged) : null}
+            {classFilter !== "unhedged" ? liveSection("Hedged (delta-neutral)", liveHedged, scanBody) : null}
+            {classFilter !== "hedged" ? liveSection("Unhedged", liveUnhedged, scanBody) : null}
           </>
         ) : null}
+        {/* The reserve is offered to any lane that can still be a treasury
+            floor, which is not the same question as `offersScan`: a lane
+            already seated on the floor can no longer price a scan row and must
+            still be able to swap between reserves. */}
+        {offersLending && data && classFilter !== "hedged"
+          ? liveSection(
+              "Lending",
+              liveLending,
+              lendingBody,
+              `Priced from the reserve's own supply rate, measured ${ROUTER_MEASURED_ON}. No leverage, no carry.`,
+            )
+          : null}
 
         {soonCount > 0 ? (
           <div className="mt-soon">

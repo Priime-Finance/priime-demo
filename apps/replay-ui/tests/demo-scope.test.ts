@@ -14,6 +14,7 @@ import {
   COMING_SOON,
   COPILOT_REJECT_COMING_SOON,
   DEMO_SCOPE,
+  FLOOR_MARKET_ID,
   HERO_MARKET_ID,
   HERO_SLUG,
   isLiveMarket,
@@ -23,23 +24,32 @@ import {
   REVIEW_REASON_COMING_SOON,
   shelfCountScoped,
 } from "@/lib/demo-scope";
+import { ROUTER_FLOOR_CANDIDATE_ID } from "@/lib/canvas/router-history";
+import { TREASURY_CANDIDATES } from "@/lib/canvas/templates";
 import { DEMO_MARKET_ID } from "@/lib/demo/market";
 import { VAULT_STAGE_LABEL, VAULT_STAGE_NOUN, vaultStage } from "@/lib/vaults/store";
 
 const EM_DASH = "—";
 
 describe("the register", () => {
-  it("names one live workflow", () => {
+  it("names one live vault of two lanes", () => {
     expect(HERO_SLUG).toBe("verifiable-usde-loop");
     expect(HERO_MARKET_ID).toBe("morpho-blue-base:8453:USDe-USDC:0x54cf9be5");
+    expect(FLOOR_MARKET_ID).toBe("template:treasury-floor:treasury-ausdc-base:ausdc");
     expect(DEMO_MARKET_ID).toBe(HERO_MARKET_ID);
     expect(DEMO_SCOPE).toEqual({
       liveMarketId: HERO_MARKET_ID,
-      liveVenues: ["morpho-blue-base"],
-      liveModules: ["liquidity-source", "safety-buffer", "auto-compound"],
-      liveStrategies: ["loop"],
+      liveMarketIds: [HERO_MARKET_ID, FLOOR_MARKET_ID],
+      liveVenues: ["morpho-blue-base", "treasury-ausdc-base"],
+      liveModules: ["liquidity-source", "safety-buffer", "auto-compound", "redemption-route"],
+      liveStrategies: ["loop", "treasury"],
       liveSlug: HERO_SLUG,
     });
+  });
+
+  it("keeps the floor id and the router's own spelling of it as one string", () => {
+    expect(FLOOR_MARKET_ID).toBe(ROUTER_FLOOR_CANDIDATE_ID);
+    expect(TREASURY_CANDIDATES.some((c) => c.id === FLOOR_MARKET_ID)).toBe(true);
   });
 
   it("spells its ids in the kit's own vocabulary", () => {
@@ -55,12 +65,18 @@ describe("the register", () => {
 
   it("answers the four predicates from the lists, never from a name", () => {
     expect(isLiveMarket(HERO_MARKET_ID)).toBe(true);
+    expect(isLiveMarket(FLOOR_MARKET_ID)).toBe(true);
     expect(isLiveMarket("morpho-blue-base:8453:wstETH-WETH:0x0")).toBe(false);
+    // The five other issuer rows stay coming soon (R1).
+    expect(isLiveMarket("template:treasury-floor:treasury-buidl-ethereum:buidl")).toBe(false);
     expect(isLiveVenue("morpho-blue-base")).toBe(true);
+    expect(isLiveVenue("treasury-ausdc-base")).toBe(true);
     expect(isLiveVenue("aave-v3-base")).toBe(false);
     expect(isLiveModule("safety-buffer")).toBe(true);
+    expect(isLiveModule("redemption-route")).toBe(true);
     expect(isLiveModule("hedge")).toBe(false);
     expect(isLiveStrategy("loop")).toBe(true);
+    expect(isLiveStrategy("treasury")).toBe(true);
     expect(isLiveStrategy("funding")).toBe(false);
   });
 
@@ -85,12 +101,24 @@ describe("the register", () => {
 
 describe("the shelf count", () => {
   it("is derived from the kit's own totals, never typed", () => {
-    expect(SHELF_COUNT_SCOPED).toBe("1 source, 2 modules, 1 strategy · 10 coming soon");
+    /* DERIVED, never hand-typed: the four numbers in the string are
+       (liveSources), (liveModules − liveSources), (liveStrategies) and
+       (DISPLAY_ORDER.length − liveModules) + (STRATEGIES.length −
+       liveStrategies). The assertion reads the same two owners the string
+       does rather than pinning 9 and 5. */
+    const live = DEMO_SCOPE.liveModules.length;
+    const liveStrat = DEMO_SCOPE.liveStrategies.length;
+    const soon = DISPLAY_ORDER.length - live + (STRATEGIES.length - liveStrat);
+    expect(SHELF_COUNT_SCOPED).toBe(`1 source, ${live - 1} modules, ${liveStrat} strategies · ${soon} coming soon`);
+    expect(SHELF_COUNT_SCOPED).toBe("1 source, 3 modules, 2 strategies · 8 coming soon");
     expect(SHELF_COUNT_SCOPED).toBe(shelfCountScoped(DISPLAY_ORDER.length, STRATEGIES.length));
     // One more module key on the shelf is one more coming soon.
     expect(shelfCountScoped(DISPLAY_ORDER.length + 1, STRATEGIES.length)).toBe(
-      "1 source, 2 modules, 1 strategy · 11 coming soon",
+      `1 source, ${live - 1} modules, ${liveStrat} strategies · ${soon + 1} coming soon`,
     );
+    /* A SECOND LIVE VENUE ADDS NO SOURCE ROW: `liveSources` counts the
+       `liquidity-source` KEY, and both lanes pin their market on one. */
+    expect(SHELF_COUNT_SCOPED.startsWith("1 source,")).toBe(true);
   });
 });
 
@@ -112,6 +140,20 @@ describe("the review gate", () => {
     });
     expect(g.armed).toBe(false);
     expect(g.reason).toBe(REVIEW_REASON_COMING_SOON);
+  });
+
+  it("arms the two-lane router composition, every module live", () => {
+    const g = deriveReviewGate({
+      validationOk: true,
+      lanes: [
+        { ...armedLane, placed: ["liquidity-source", "safety-buffer"] },
+        { ...armedLane, netApy: 0.0297088, placed: ["liquidity-source", "redemption-route"] },
+      ],
+      orchOn: true,
+      launchShapedCount: 2,
+    });
+    expect(g.armed).toBe(true);
+    expect(g.reason).toBeNull();
   });
 
   it("arms the live composition", () => {
