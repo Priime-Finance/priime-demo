@@ -1,16 +1,25 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Geist, Geist_Mono, Hanken_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { SiteNav } from "@/components/nav/SiteNav";
 import { VintageFooter } from "@/components/footer/VintageFooter";
+import { DemoWalletSheet } from "@/components/wallet/DemoWalletSheet";
 import "./globals.css";
 
-// Font system mirrors Linear's (linear.app). Linear pairs Inter Variable
-// for everything sans (body + display + UI) with Berkeley Mono for
-// monospace. Berkeley Mono is a paid commercial license we can't
-// redistribute, so we substitute Geist Mono — a free geometric monospace
-// that hits the same visual register.
-// Priime uses Geist (sans) + Geist Mono. Inter itself is not loaded: it never
-// rendered (Geist always resolves ahead of it), so it was dead preloads.
+/* ────────────────────────────────────────────────────────────────────────────
+   FONTS: THE ROOT LAYOUT OWNS EVERY FACE (docs/plans/LATEST_UI_PORT_SPEC.md
+   A.3 #33). Five next/font faces, self-hosted at build time, exposed as CSS
+   variables on <html>. Route layouts import CSS only; every literal family
+   name in the ported CSS is remapped to one of these variables, so nothing on
+   the property contacts fonts.googleapis.com at runtime (the network
+   dependency PR #12 removed stays removed).
+
+   Geist and Geist Mono are the app's sans and mono. IBM Plex Mono is the
+   static site's nav face: priime.finance sets the pill's links in Plex Mono
+   12.5px, and the pill is the one element present on every page of both
+   hosts. Hanken Grotesk is the hardware-module nameplate face and Fraunces
+   the brand's serif-italic annotation face (DESIGN_HWMOD_SPEC §1A), both
+   previously loaded per route through a Google Fonts <link>.
+   ──────────────────────────────────────────────────────────────────────────── */
 const geist = Geist({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800"],
@@ -25,48 +34,122 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-plex-mono",
+  display: "swap",
+});
+
+const hanken = Hanken_Grotesk({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-hanken",
+  display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  weight: "variable",
+  style: ["normal", "italic"],
+  axes: ["opsz"],
+  variable: "--font-fraunces",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Priime, vaults composed and verifiable.",
   description:
     "One vault, a USDe/USDC leveraged loop on Morpho Blue. Three independent operators re-execute its NAV and a quorum attests it on chain: the vault that cannot lie about its NAV.",
   metadataBase: new URL("https://loop.priime.finance"),
+  icons: { icon: "/favicon.svg" },
 };
 
-// Phase I (2026-05-12) — explicit viewport for mobile rendering. Without
-// this Next.js falls back to its default which excludes `viewportFit: cover`
-// and can mis-handle iOS Safari notch / dynamic-island insets. Pinning the
-// initial scale + width-device-width also prevents the rare zoomed-out
-// first paint on Android Chrome when the page content is wider than
-// expected (was a real risk before the dashboard table overflow fixes).
+/* Explicit viewport for mobile rendering. Without it Next falls back to a
+   default that excludes `viewportFit: cover` and can mis-handle iOS Safari
+   notch and dynamic-island insets. Pinning the initial scale and
+   width=device-width also prevents the rare zoomed-out first paint on Android
+   Chrome when page content is wider than expected. */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#f4f3f1",
+  /* HELIOS: the light ground is #F5F2EB. A single value rather than a
+     prefers-color-scheme pair on purpose: dark is resolved by the pre-paint
+     script below, not by the OS media query alone, so an OS-keyed pair would
+     tint the browser chrome navy for a dark-OS visitor who is sitting in
+     light. The script re-stamps it instead. */
+  themeColor: "#F5F2EB",
+  /* Tells the browser this document has both registers, so it stops painting
+     a white canvas, white scrollbars and light form controls in the window
+     between navigation and CSS. That window opens before any script exists,
+     so no amount of JS closes it. The `color-scheme` CSS property on :root
+     (tokens.css) is what actually picks the register. */
+  colorScheme: "light dark",
 };
+
+/* ────────────────────────────────────────────────────────────────────────────
+   THE PRE-PAINT SCRIPT (pretheme-v5), verbatim from build.priime.finance.
+   ----------------------------------------------------------------------------
+   Byte-for-byte the resolution order that priime.finance ships, so a visitor
+   crossing from the static site to build. or loop. cannot see the ground
+   change:  cookie -> localStorage -> matchMedia.  Never the reverse; the
+   cookie is the cross-origin carrier (Domain=.priime.finance, readable by all
+   three hosts) and it must win.
+
+   INLINE, NON-ASYNC, NON-DEFER, NON-MODULE, AND IN THE HEAD. Blocking means
+   the parser stops, runs this, and only then reaches the stylesheets. No
+   paint can occur first because no stylesheet has been parsed. A useEffect
+   runs AFTER paint and the page flashes: that is the whole reason this is
+   not a useEffect.
+
+   `data-theme-auto` marks "resolved from the OS, not chosen", which is what
+   lets the live matchMedia listener keep re-theming a visitor who never
+   picked, and stop the moment they do.
+
+   KILL SWITCH WITHOUT A REDEPLOY: the script bails if <html> carries
+   data-theme-off.
+   ──────────────────────────────────────────────────────────────────────────── */
+const PRETHEME = `/*pretheme-v5*/!function(){try{var d=document.documentElement;if(d.hasAttribute("data-theme-off"))return;var m=document.cookie.match(/(?:^|;\\s*)priime_theme=(light|dark)/),t=m&&m[1];if(!t){try{t=localStorage.getItem("priime_theme")}catch(e){}}if(t!=="light"&&t!=="dark"){t=window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.setAttribute("data-theme-auto","")}else{d.removeAttribute("data-theme-auto")}d.setAttribute("data-theme",t);var c=function(){var n=document.querySelector('meta[name="theme-color"]');if(n){n.setAttribute("content",t==="dark"?"#04060F":"#F5F2EB")}};if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",c)}else{c()}}catch(e){}}()`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${geist.variable} ${geistMono.variable}`}
+      className={`${geist.variable} ${geistMono.variable} ${plexMono.variable} ${hanken.variable} ${fraunces.variable}`}
+      /* The script above stamps data-theme on <html> before React hydrates,
+         so the server markup and the client DOM legitimately differ by that
+         one attribute. Theme is NOT React state: it is an attribute written
+         imperatively, never threaded through a provider and never used as a
+         key. Keying on it would remount the subtree and replay every entrance
+         animation in the app at once on a preference change. */
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: PRETHEME }} />
+      </head>
       <body>
-        {/* A11y fix 2026-05-01: skip-link for keyboard / screen-reader users
-            to bypass the global Nav and land directly on page content.
-            WCAG 2.4.1 Bypass Blocks. */}
+        {/* Skip-link for keyboard and screen-reader users to bypass the
+            global nav and land directly on page content. WCAG 2.4.1. */}
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-[var(--radius)] focus:bg-stone-925 focus:border focus:border-[var(--color-honey-400)] focus:px-3 focus:py-2 focus:text-sm focus:text-stone-100"
         >
           Skip to content
         </a>
+        {/* The live shell minus what this build does not carry: no wallet
+            Providers (lib/wallet.ts is the mock behind the same hook shapes),
+            no AppTabs strip (hidden by ruling), no BareRoute (there is no
+            bare route here, so the content column is unconditional). The main
+            class string is the live one. */}
         <SiteNav />
         <main id="main-content" className="mx-auto max-w-7xl px-6 sm:px-10 lg:px-16 xl:px-20 pt-8 pb-24 space-y-8">
           {children}
         </main>
         <VintageFooter />
+        {/* Mounted once, for every route: the Review card and the portfolio's
+            Connect key both open it through useConnectModal(). */}
+        <DemoWalletSheet />
       </body>
     </html>
   );
