@@ -663,7 +663,7 @@
 /* orchestrator plate (one size larger) */
 .rk-orch .hm-hw{width:280px;flex:0 0 280px;zoom:.86}
 .rk-orch.rk-plate--focused .hm-hw{width:340px;flex:0 0 340px}
-.rk-orchrow{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;font-size:9px;letter-spacing:.04em;color:#a5a5a0;text-transform:uppercase}
+.rk-orchrow{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;font-size:9px;letter-spacing:.02em;color:#a5a5a0;text-transform:none}
 .rk-orchrow b{color:#e9e9e6;font-weight:600;font-size:9.5px}
 .rk-orchbar{position:relative;flex:1;height:7px;border-radius:4px;background:#1a1816;border:1px solid #262422;overflow:hidden;margin:0 8px}
 .rk-orchbar i{position:absolute;inset:0;width:0;background:#ffffff;box-shadow:0 0 8px rgba(255,255,255,.5);border-radius:4px;transition:width .35s cubic-bezier(.4,0,.2,1)}
@@ -680,11 +680,16 @@
        #a5a5a0 (shipped)        7.64:1      #e9e9e6 (shipped b)  15.2:1
        --bc-body #56534e        2.47:1      --bc-ink #141210      ~1.1:1
    so the recolour was a regression of the exact size the item was written to
-   fix, in the opposite direction. The colours stay. What the sweep really
-   missed is the CASE: `.dock-orch-status` one declaration away was
-   de-uppercased at :1524 and this was not, so the dock printed `LANE 1` where
-   every sibling reads sentence case. That, and only that, is scoped here; the
-   plate keeps uppercase, which is its own instrument register. ── */
+   fix, in the opposite direction. The colours stay.
+
+   THE CASE IS NOW SENTENCE CASE ON BOTH PLACEMENTS (fix wave 2, ruling 3).
+   The dock was de-uppercased first, on the reasoning that the plate keeps
+   uppercase as its own instrument register; the founder read that register on
+   the plate as letterspaced-uppercase AI slop, and the labels these rows carry
+   are lane NAMES (`Loop`, `USDC lending`), not instrument legends. So the base
+   rule above sets `none` and this override is what it always was: the same
+   declaration, kept because `.dock-allocs` is a different card and a future
+   change to one register must not silently move the other. ── */
 .dock-scroll .rk-orchrow{text-transform:none;letter-spacing:.02em}
 
 /* ── market discovery content rules (shell retired in IT4 — the content

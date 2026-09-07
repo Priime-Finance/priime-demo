@@ -1608,6 +1608,28 @@ export function routerRuleSentence(r: {
 }
 
 /**
+ * THE RE-ARM STOP, AS EVERY SURFACE PRINTS IT: SIGNED, ON THE GAP AXIS.
+ *
+ * The rule re-arms when the improvement (the destination lane's rate minus the
+ * source lane's) is at or under `rearmApy`, and every surface that draws this
+ * mechanism draws the axis the other way round, as the source lane's lead. So
+ * the stop is at MINUS `rearmApy`, and printing the raw level is printing the
+ * other end of the axis.
+ *
+ * It became load-bearing when the shipped bar moved to the round-trip
+ * break-even: R28's 2pp gap puts the re-arm at -0.492%, so the instrument's
+ * band stop was printing `-0.49pp` for a stop that sits at `+0.49pp`, and the
+ * Parameters row was printing a third spelling with an ASCII hyphen. One owner,
+ * one string, `MINUS` where a minus is called for.
+ */
+export function routerRearmStopText(rearmApy: number, dp = 2): string {
+  const stop = -rearmApy;
+  const rounded = Number((stop * 100).toFixed(dp));
+  const body = Math.abs(rounded === 0 ? 0 : stop * 100).toFixed(dp);
+  return `${rounded < 0 ? MINUS : "+"}${body}pp`;
+}
+
+/**
  * THE MOVE THIS BOOK CAN ACTUALLY MAKE, and the one owner of it.
  *
  * A lane can give at most the weight it holds and a peer can take at most the

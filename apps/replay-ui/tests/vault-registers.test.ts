@@ -26,6 +26,7 @@ import { heroNavPerShare, heroNavUsd, heroSettlingJournal, heroStrikes } from "@
 import { SEED_VAULTS } from "@/lib/vaults/seeds";
 import {
   VAULT_STAGE_LABEL,
+  routerRearmStopText,
   type PublishedLane,
   type RouterAutomation,
 } from "@/lib/vaults/store";
@@ -260,6 +261,7 @@ describe("the router instrument prints the owners and nothing else", () => {
        the rule that would leave it re-arms. An unsigned magnitude with a
        hard-coded minus in front printed the wrong side of zero. */
     expect(DEMO_UPGRADE_REARM).toBeLessThan(0);
+    expect(read.rearmText).toBe(routerRearmStopText(DEMO_UPGRADE_REARM));
     expect(read.rearmText).toBe(`+${Math.abs(DEMO_UPGRADE_REARM * 100).toFixed(2)}pp`);
     /* THE WHOLE LANE, AND UNDER THE SEAT THAT IS THE WHOLE BOOK: this record
        holds 100% in the loop, so the move the rule asks for is 100.0pp and not

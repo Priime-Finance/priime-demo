@@ -47,6 +47,7 @@ import {
   railsArmed,
   rand01,
   routerMaxMoveFrac,
+  routerRearmStopText,
   recordModuleNames,
   recordVenueParts,
   type LeverageAutomation,
@@ -57,6 +58,7 @@ import {
    product's one % formatter and carries it. An ASCII hyphen beside mono
    tabular digits is the drift the glyph sweep (2026-08-24) removed. */
 import { MINUS, pct } from "@/lib/canvas/format";
+import { openingCase } from "@/lib/canvas/graph-ops";
 import { collarForfeit, type CollarForfeit } from "@/lib/canvas/templates";
 /* The router's two published rates and its measured decisions, each from its
    one owner. The card retypes neither. */
@@ -432,7 +434,7 @@ export function routerReadout(r: RouterAutomation): RouterReadout {
     loopLabel: loopLane?.label ?? "loop",
     asOfText: routerDayLabel(replay.asOfDate),
     barText: ppMagnitude(r.thresholdApy),
-    rearmText: ppSigned(-r.rearmApy),
+    rearmText: routerRearmStopText(r.rearmApy),
     moveText: ppMagnitude(maxMove, 1),
     maxMove,
     /* THE MEASURED PAIR, AS THE READING LINE STATES IT (G3). The loop's rate
@@ -485,9 +487,11 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
      sentence, capitalised where the label opens one. Without this the card
      read `Move to treasury floor` beside `Move to the loop`, and
      `treasury floor leads by` beside `Loop leads by`: one mechanism, two
-     grammars, and the asymmetry read as a difference between the lanes. */
-  const capFloor = floorLabel.charAt(0).toUpperCase() + floorLabel.slice(1);
-  const capLoop = loopLabel.charAt(0).toUpperCase() + loopLabel.slice(1);
+     grammars, and the asymmetry read as a difference between the lanes.
+     `openingCase` is the one owner of that rule; the plate's bars and the
+     dock's bars read the same function. */
+  const capFloor = openingCase(floorLabel);
+  const capLoop = openingCase(loopLabel);
   const gap = read.gap;
   const needle = read.needlePct;
   const bar = read.barText;

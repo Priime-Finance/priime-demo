@@ -638,7 +638,7 @@ function screenedAtApyOf(loop: LoopGraph, candidateId: string): number | null {
      hand-authored issuer row. Neither was ever ranked against `ECON_FLOOR_APY`,
      so neither has a screen to fall below, and handing one a screen it was
      never admitted through leaves `apy-floor` permanently breaching: the dock
-     printed `YIELD DRIES · net APY below 8%` over a market the scan never
+     printed `Yield dries · net APY below 8%` over a market the scan never
      screened, and `evaluate.ts`'s `evacuationBreaching` would then disqualify
      that lane as a DESTINATION, silently deleting the founder's return leg.
 

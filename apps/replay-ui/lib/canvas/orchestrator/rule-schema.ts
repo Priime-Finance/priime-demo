@@ -1186,13 +1186,25 @@ export interface OrchRuleRow {
   scope: string;
 }
 
+/**
+ * WHAT A RULE IS CALLED ON SCREEN, IN SENTENCE CASE.
+ *
+ * These were `YIELD DRIES`, `CAPACITY SHRINKS`, `BETTER LANE`. The founder read
+ * the rule table's letterspaced uppercase as the house style of a machine
+ * rather than of this product, and these are the only strings in the table that
+ * were shouting: the triggers under them, the patience beside them and the
+ * lane names above them are all sentence case. It is fixed HERE, at the one
+ * owner every surface reads `row.name` from, rather than with a
+ * `text-transform` on one of them, so no surface can print a different case
+ * from another.
+ */
 const METRIC_NAME: Record<OrchRule["metric"], string> = {
-  net_apy_floor: "YIELD DRIES",
-  capacity_shrink: "CAPACITY SHRINKS",
-  funding_p25_streak: "FUNDING TURNS",
-  gate_flip: "GATE FAILS",
-  basis_early_warn: "BASIS DRIFTS",
-  better_elsewhere: "BETTER LANE",
+  net_apy_floor: "Yield dries",
+  capacity_shrink: "Capacity shrinks",
+  funding_p25_streak: "Funding turns",
+  gate_flip: "Gate fails",
+  basis_early_warn: "Basis drifts",
+  better_elsewhere: "Better lane",
 };
 
 const METRIC_TRIGGER: Record<OrchRule["metric"], (r: OrchRule) => string> = {

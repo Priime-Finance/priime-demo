@@ -180,6 +180,24 @@ export const FAMILY_LABEL: Record<LaneFamily, string> = {
  * bars, and the label the publish writes onto the record) and the publish had
  * the only copy of the rule.
  */
+/**
+ * A LANE'S NAME WHERE IT OPENS A ROW OR A SENTENCE.
+ *
+ * `FAMILY_LABEL` words are lower case because they were written to sit INSIDE
+ * a sentence: `the loop lane`, `moves everything to the treasury floor`. The
+ * plate's bars, the dock's bars and the vault instrument's cascade rows all
+ * put the same word at the START of a line, where lower case reads as a typo
+ * rather than as a register. It is one function rather than three inline
+ * `charAt(0).toUpperCase()` calls, which is what the instrument was already
+ * doing on its own.
+ *
+ * It capitalises the FIRST character and touches nothing else, so a name the
+ * builder typed keeps its own casing and `USDC lending` stays `USDC lending`.
+ */
+export function openingCase(label: string): string {
+  return label.length === 0 ? label : label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 export function laneDisplayLabel(
   label: string,
   family: LaneFamily,

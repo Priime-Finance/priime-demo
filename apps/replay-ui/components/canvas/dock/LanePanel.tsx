@@ -57,7 +57,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } 
 import type { CSSProperties } from "react";
 import type { LoopGraph, LoopId, ParamValue, PortfolioGraph } from "@/lib/canvas/types";
 import { FLOOR_PAIR_TURNOVER_PCT_WEEK } from "@/lib/canvas/floor-pair";
-import { laneDisplayLabel, laneFamily, nodeFor } from "@/lib/canvas/graph-ops";
+import { laneDisplayLabel, laneFamily, nodeFor, openingCase } from "@/lib/canvas/graph-ops";
 import { pricingParamsFor } from "@/lib/canvas/pricing-params";
 import { seatedPortfolioAllocationsBps, withSeatedAllocations } from "@/lib/canvas/floor-pair-seat";
 import { fmtCapacityUsd, vaultCapacity } from "@/lib/canvas/capacity";
@@ -2205,7 +2205,11 @@ export function PortfolioVariant({
               {/* THE LANE'S NAME, OR WHAT IT IS (item 9), through the one owner
                   the publish also uses. `Lane 2` names nothing to a reader. */}
               <span>{(() => {
-                const n = laneDisplayLabel(l.loop.label, laneFamily(l.loop.nodes), pricingParamsFor(l.loop).candidateId);
+                /* OPENING CASE, same owner the plate reads: the family words
+                   are written to sit inside a sentence and this is a row head. */
+                const n = openingCase(
+                  laneDisplayLabel(l.loop.label, laneFamily(l.loop.nodes), pricingParamsFor(l.loop).candidateId),
+                );
                 return n.length > 13 ? `${n.slice(0, 12)}…` : n;
               })()}</span>
               {/* F.3 / F.5 — the SAME track the plate draws. The tick is the
@@ -2263,12 +2267,15 @@ export function PortfolioVariant({
           four sentences with commas in them and the founder read the pair of
           surfaces as one component that talks too much. */}
       <div style={{ marginTop: 10 }}>
+        {/* SENTENCE CASE, AND NOT LETTERSPACED (fix wave 2, ruling 3). It was
+            `textTransform: "uppercase"` at .08em, which printed `DESTINATION`
+            over a block whose own rows are sentence case: the founder read the
+            pair as one component in two registers. */}
         <div
           style={{
             fontFamily: "var(--fm)",
             fontSize: 9,
-            letterSpacing: ".08em",
-            textTransform: "uppercase",
+            letterSpacing: ".02em",
             color: "var(--bc-faint)",
             marginBottom: 3,
           }}
@@ -2307,12 +2314,15 @@ export function PortfolioVariant({
               className="rt-rule"
               style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "2px 10px", alignItems: "baseline" }}
             >
-              <b style={{ letterSpacing: ".06em", fontSize: "10px" }}>
+              {/* .02em, not .06em: the letterspacing was there to hold an
+                  uppercase name apart, and the name is sentence case now
+                  (`METRIC_NAME`, the one owner). */}
+              <b style={{ letterSpacing: ".02em", fontSize: "10px" }}>
                 {row.name}
                 {row.scope ? (
                   <span
                     className="rt-scope"
-                    style={{ marginLeft: 6, fontSize: "8.5px", letterSpacing: ".06em", opacity: 0.65, fontWeight: 500 }}
+                    style={{ marginLeft: 6, fontSize: "8.5px", letterSpacing: ".02em", opacity: 0.65, fontWeight: 500 }}
                   >
                     {row.scope}
                   </span>
@@ -2334,20 +2344,13 @@ export function PortfolioVariant({
               <span style={{ gridColumn: "1 / -1", opacity: 0.85 }}>{row.trigger}</span>
             </div>
           ))}
-          {/* ONE NUMBER FOR A MOVE (item 8d). The table derives its own
-              `maxMovePct` from the rule set it renders, which is now the demo's
-              own, so this line and the run panel below it state one size. At
-              the whole lane it is a word rather than a number: `100% of the
-              book per move` is arithmetically the same claim and reads as a
-              cap when it is an evacuation. */}
-          <div className="rt-floor">
-            Every rule:{" "}
-            {table.maxMovePct >= 100
-              ? "the whole lane per move"
-              : `at most ${table.maxMovePct.toFixed(0)}% of the book per move`}{" "}
-            · one failing observation never moves capital · an emergency pauses the loop,
-            bypassing cooldowns. {ORCH_HONESTY_LINE}
-          </div>
+          {/* THE TRAILING PARAGRAPH IS GONE (fix wave 2, ruling 3). It carried
+              four clauses under a table that already states each of them: the
+              move size is in every row's own trigger, the sustain is the
+              patience column, and the emergency rule is a row. The honesty tag
+              stays where it is, above the rows, as the register of the whole
+              block; it was the only thing in this paragraph that was not a
+              second telling. */}
         </div>
       ) : null}
 

@@ -27,6 +27,7 @@
 import { useMemo, useState } from "react";
 import type { LoopGraph, ParamValue } from "@/lib/canvas/types";
 import { orchDialDefs, ORCHESTRATOR_DEF, type LaneSignal } from "@/lib/canvas/orchestrator";
+import { openingCase } from "@/lib/canvas/graph-ops";
 import OrchDial from "./dock/OrchDial";
 import {
   AllocationTrack,
@@ -177,7 +178,13 @@ export default function OrchestratorPlate({
                       12 characters and the row has to hold it, because a bar
                       labelled `LANE 2` names nothing a reader of this rack
                       recognises. */}
-                  <span>{s.label.length > 14 ? `${s.label.slice(0, 13)}…` : s.label}</span>
+                  <span>{(() => {
+                    /* OPENING CASE, through the one owner: the family words are
+                       written to sit inside a sentence (`the loop lane`) and
+                       this is the head of a row. */
+                    const n = openingCase(s.label);
+                    return n.length > 14 ? `${n.slice(0, 13)}…` : n;
+                  })()}</span>
                   {/* F.3 / F.5 — the shared track. The tick is the derived
                       floor `max(0, 1 − (N−1)·maxWeight)`, which restates a
                       bound `validateOrchestrator` already enforces, so drawing
@@ -212,9 +219,16 @@ export default function OrchestratorPlate({
             <div style={{ marginTop: 6 }}>
               <DestinationLine route={route} variant="plate" />
             </div>
-            <div className="hm-sb">
-              {quoting ? "quoting" : noQuote ? "quote gap" : `governs ${loops.length} lane${loops.length === 1 ? "" : "s"}`}
-            </div>
+            {/* THE STATUS LINE SPEAKS ONLY WHEN IT HAS SOMETHING TO SAY (fix
+                wave 2, ruling 3). `governs 2 lanes` was a count of the bars
+                directly above it: the reader can see two bars, each named, and
+                the line spent three words restating them on a plate the
+                founder had already read as talking too much. `quoting` and
+                `quote gap` stay, because they are states the bars cannot
+                show. */}
+            {quoting || noQuote ? (
+              <div className="hm-sb">{quoting ? "quoting" : "quote gap"}</div>
+            ) : null}
           </div>
           <div className="hm-acts">
             {/* ── THE FLOOR CAPTION AND THE WEEK STRIP ARE GONE (item 9) ──

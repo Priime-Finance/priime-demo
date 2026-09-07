@@ -81,6 +81,7 @@ import {
   recordModuleNames,
   riskGrade,
   routerMaxMoveFrac,
+  routerRearmStopText,
   shareValueAt,
   VAULT_STAGE_LABEL,
   vaultDescription,
@@ -588,7 +589,12 @@ export default function VaultDetail({ slug }: { slug: string }) {
     const rows: ParamRow[] = [
       { label: "Move bar", value: `${(r.thresholdApy * 100).toFixed(2)}pp` },
       { label: "Sustain", value: `${r.sustainHours}h` },
-      { label: "Re-arm", value: `${(r.rearmApy * 100).toFixed(2)}pp` },
+      /* THE SAME STRING THE INSTRUMENT'S BAND STOP PRINTS, through the one
+         owner. This row was `${(rearmApy * 100).toFixed(2)}pp`, which prints the
+         raw improvement level with an ASCII hyphen: two spellings and two signs
+         for one quantity on one page, and both wrong the moment the re-arm went
+         negative. */
+      { label: "Re-arm", value: routerRearmStopText(r.rearmApy) },
       /* THE WHOLE LANE (G1), stated as the size it is AT THIS RECORD'S OWN
          SEAT. It used to say `from an even split`, which stopped being true
          when a switch started seating the whole book in the lane the rule
