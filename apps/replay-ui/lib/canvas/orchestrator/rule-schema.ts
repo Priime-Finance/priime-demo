@@ -1207,6 +1207,12 @@ const METRIC_NAME: Record<OrchRule["metric"], string> = {
   better_elsewhere: "Better lane",
 };
 
+/** The metric's name as the rule table prints it (sentence case), for any
+ *  surface that would otherwise print the raw field name. */
+export function metricName(metric: OrchRule["metric"]): string {
+  return METRIC_NAME[metric];
+}
+
 const METRIC_TRIGGER: Record<OrchRule["metric"], (r: OrchRule) => string> = {
   net_apy_floor: (r) => `net APY below ${pct(r.threshold, 0)} (re-arms above ${pct(r.rearmLevel, 0)})`,
   capacity_shrink: (r) =>

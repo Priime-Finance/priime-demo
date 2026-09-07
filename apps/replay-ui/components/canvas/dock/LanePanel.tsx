@@ -98,6 +98,7 @@ import {
    `node:crypto` through `hl-scan`; `regime-ids.ts` is deliberately import-free
    so a client control can name the six regimes without dragging any of that
    into the browser bundle. WP-4 wrote that instruction for this switcher. */
+import { metricName } from "@/lib/canvas/orchestrator/rule-schema";
 import {
   DEFAULT_REGIME,
   isRegimeId,
@@ -2683,7 +2684,7 @@ function RouterRunSection() {
                       color: lit ? "var(--bc-ink)" : "var(--bc-muted)",
                     }}
                   >
-                    {`tick ${d.scenarioRef.tick} · ${d.rule.metric}`}
+                    {`tick ${d.scenarioRef.tick} · ${metricName(d.rule.metric)}`}
                   </button>
                 );
               })}
