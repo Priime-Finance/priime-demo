@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@priime-demo/journal-schema": "workspace:*",
     "next": "15.4.10",
     "react": "19.2.1",
