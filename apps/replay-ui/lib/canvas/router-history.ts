@@ -373,6 +373,54 @@ export function floorPublishedApyByDay(): readonly RouterApyPoint[] {
 }
 
 /**
+ * THE MEASURED DAY, as chrome prints it: `Sep 7, 2026`.
+ *
+ * Derived from the last aligned row's own `date`, never typed, and read in UTC
+ * because UTC midnight is the clock all three sources publish on (see the
+ * duplicate-point note in the header). Every surface that says when the pair
+ * was measured says it with this string.
+ */
+export const ROUTER_MEASURED_ON: string = (() => {
+  const day = ROUTER_HISTORY_ALIGNED[ROUTER_HISTORY_ALIGNED.length - 1];
+  if (!day) return "";
+  return new Date(`${day.date}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+})();
+
+/**
+ * THE LAST ALIGNED DAY, the one every "today" on every surface reads.
+ *
+ * Exported because three owners need the same day and none of them may pick
+ * its own: `routerPublishedToday` below, `floorRowToday` beside it, and
+ * `demoMarketRates` in lib/demo/market.ts, which substitutes this day's two
+ * loop rates into the demo row so the canvas and the router price one lane.
+ */
+export function routerLastAlignedDay(): RouterHistoryAlignedRow | null {
+  return ROUTER_HISTORY_ALIGNED[ROUTER_HISTORY_ALIGNED.length - 1] ?? null;
+}
+
+/**
+ * THE FLOOR LANE'S ROW AS THE DEMO SERVES IT, priced at the last aligned day's
+ * Aave supply APY.
+ *
+ * The shipped `TREASURY_CANDIDATES` row carries its own `apyMean30d`,
+ * 3.70119% captured 2026-09-03, and this capture reads 3.71% on 2026-09-07.
+ * Both are honest and they are four days apart, which is 0.01pp of published
+ * APY: invisible at the canvas's one decimal and visible at the router
+ * instrument's two. So the catalog serves THIS row, the capture's own, and the
+ * dock card, the lane, the published record and the instrument all read one
+ * number. `lib/canvas/catalog-server.ts` is the consumer.
+ */
+export function floorRowToday(): HandAuthoredCandidate | null {
+  const day = routerLastAlignedDay();
+  return day ? floorRowForRate(day.aaveUsdcSupplyApy) : null;
+}
+
+/**
  * The pair a surface prints as "today", on ONE clock: the last aligned day.
  *
  * Not the capture instant. The Aave series publishes one point per day and
@@ -384,11 +432,11 @@ export function routerPublishedToday(L: number = HERO_SEED_LEVERAGE): {
   readonly loop: number | null;
   readonly floor: number | null;
 } | null {
-  const day = ROUTER_HISTORY_ALIGNED[ROUTER_HISTORY_ALIGNED.length - 1];
+  const day = routerLastAlignedDay();
   if (!day) return null;
   return {
     date: day.date,
     loop: publishedNetApy(repriceAtLeverage(loopRowForDay(day), L), false),
-    floor: publishedNetApy(floorRowForRate(day.aaveUsdcSupplyApy), false),
+    floor: publishedNetApy(floorRowToday(), false),
   };
 }

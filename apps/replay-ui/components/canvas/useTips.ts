@@ -69,10 +69,13 @@ import { DEMO_SCOPE, isLiveModule } from "@/lib/demo-scope";
  * subject is a module this build does not seat, or whose action would seat
  * one, is not shown: proposing the hedge on a lane that cannot install it is
  * a card the shelf contradicts. Tips at portfolio scope exist only for a
- * second lane (the allocation and the shared funding stream), and a second
- * lane is the capital router, which is coming soon, so they are withheld
- * while one strategy is live. `deriveTips` stays the one owner of what is
- * TRUE; this only decides what is SHOWN, which is this hook's job.
+ * second lane (the allocation, the shared funding stream, the router), and a
+ * second lane exists exactly when a second STRATEGY does, so the portfolio
+ * clause reads the same register the add-a-lane key reads. With `loop` and
+ * `treasury` both live (router lane plan R1) the add-a-lane tip and the
+ * router tips are shown; a build back down to one strategy withholds them
+ * again with no edit here. `deriveTips` stays the one owner of what is TRUE;
+ * this only decides what is SHOWN, which is this hook's job.
  */
 function inScope(tip: Tip): boolean {
   if (tip.moduleKey && !isLiveModule(tip.moduleKey)) return false;

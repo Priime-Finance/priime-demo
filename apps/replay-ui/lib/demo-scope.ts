@@ -10,10 +10,12 @@
  * (`CanvasVenueId`, `ModuleKey`, `StrategyKind`), spelled as strings here;
  * `tests/demo-scope.test.ts` pins them against the kit.
  *
- * LIVE is exactly one workflow: the USDe/USDC recursive loop on Morpho Blue,
- * Base, composed from Liquidity source + Dynamic leverage + Auto-compound and
- * published onto the ONE record at `HERO_SLUG`. Everything else the kit ships
- * is COMING SOON, and it says so in this register.
+ * LIVE is one vault with two lanes: the USDe/USDC recursive loop on Morpho
+ * Blue, Base (Liquidity source + Dynamic leverage + Auto-compound) and the
+ * USDC lending floor on Aave v3 Base (Liquidity source + Redemption route),
+ * with the capital router between them, published onto the ONE record at
+ * `HERO_SLUG`. Everything else the kit ships is COMING SOON, and it says so in
+ * this register.
  *
  * docs/plans/LATEST_UI_PORT_SPEC.md A.2, B.1.
  */
@@ -28,6 +30,18 @@ export const HERO_SLUG = "verifiable-usde-loop";
 export const HERO_MARKET_ID = "morpho-blue-base:8453:USDe-USDC:0x54cf9be5";
 
 /**
+ * THE FLOOR LANE'S MARKET (router lane plan R1): the Aave v3 Base USDC
+ * reserve, the hand-authored treasury issuer row `TREASURY_CANDIDATES` already
+ * ships. It is a MODELED row and belongs to no venue document, so it reaches
+ * the dock through `modeledRows()` rather than through the scan payload, and
+ * the same id is `ROUTER_FLOOR_CANDIDATE_ID` in lib/canvas/router-history.ts,
+ * which prices the floor series from it. Spelled here as a string because this
+ * module is a leaf; `tests/catalog-server.test.ts` pins the two against each
+ * other so a rename in templates.ts cannot leave this stale.
+ */
+export const FLOOR_MARKET_ID = "template:treasury-floor:treasury-ausdc-base:ausdc";
+
+/**
  * The register, exact. `label` is the tag (sentence case, two words, no dot);
  * `prose` is the form a sentence uses. Never `Soon`, never `Not yet`, never
  * `(coming soon)`, never `Incubating · modeled` (a different truth).
@@ -35,7 +49,10 @@ export const HERO_MARKET_ID = "morpho-blue-base:8453:USDe-USDC:0x54cf9be5";
 export const COMING_SOON = { label: "Coming soon", prose: "coming soon" } as const;
 
 export interface DemoScope {
+  /** The loop lane's market. The record's own market, and the copilot's. */
   liveMarketId: string;
+  /** Every market a lane may pin: the loop's and the router floor's. */
+  liveMarketIds: readonly string[];
   /** `CanvasVenueId` values. */
   liveVenues: readonly string[];
   /** `ModuleKey` values. */
@@ -47,14 +64,15 @@ export interface DemoScope {
 
 export const DEMO_SCOPE: DemoScope = {
   liveMarketId: HERO_MARKET_ID,
-  liveVenues: ["morpho-blue-base"],
-  liveModules: ["liquidity-source", "safety-buffer", "auto-compound"],
-  liveStrategies: ["loop"],
+  liveMarketIds: [HERO_MARKET_ID, FLOOR_MARKET_ID],
+  liveVenues: ["morpho-blue-base", "treasury-ausdc-base"],
+  liveModules: ["liquidity-source", "safety-buffer", "auto-compound", "redemption-route"],
+  liveStrategies: ["loop", "treasury"],
   liveSlug: HERO_SLUG,
 };
 
 export function isLiveMarket(id: string): boolean {
-  return id === DEMO_SCOPE.liveMarketId;
+  return DEMO_SCOPE.liveMarketIds.includes(id);
 }
 
 export function isLiveVenue(id: string): boolean {
@@ -85,14 +103,15 @@ function plural(n: number, one: string, many: string): string {
 }
 
 /**
- * THE SHELF COUNT, scoped. `1 source, 2 modules, 1 strategy · 10 coming soon`
+ * THE SHELF COUNT, scoped. `1 source, 3 modules, 2 strategies · 8 coming soon`
  * over the shelf the kit ships, derived from the kit's own totals (the number
  * of module keys in `DISPLAY_ORDER` and of strategy kinds in `STRATEGIES`,
  * passed in by the non-leaf owner `lib/canvas/shelf-count.ts`) and from the
  * live lists above. Nothing here is typed as a figure.
  *
  * `liquidity-source` is the shelf's one source row; every other key is a
- * module. The live shelf's own count (`shelfCountLabel`, GhostSlot.tsx) reads
+ * module, so a second live VENUE adds no source row (the floor lane pins its
+ * market on the same Liquidity source plate the loop does). The live shelf's own count (`shelfCountLabel`, GhostSlot.tsx) reads
  * the module definitions for that split; this leaf cannot, so it reads the
  * key.
  */

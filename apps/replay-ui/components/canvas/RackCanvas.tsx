@@ -159,7 +159,17 @@ import { composedRoute, type DockLaneView } from "./dock/LanePanel";
    validator sees (`slotsFromPortfolio`), the dials it clamps
    (`dialsFromParams`) and the honest per-lane plate signals
    (`deriveLaneSignals`, whose two most useful fields were hard-coded here). */
-import { deriveLaneSignals, dialsFromParams, slotsFromPortfolio } from "@/lib/canvas/orchestrator";
+import { deriveLaneSignals, dialsFromParams, ORCHESTRATOR_DEF, slotsFromPortfolio } from "@/lib/canvas/orchestrator";
+/* ⚠ IMPORT ORDER IS LOad-BEARING, and it is not this file's fault.
+   `rule-schema.ts` and `capacity.ts → templates.ts → graph-ops.ts →
+   orchestrator/index.ts` form a pre-existing evaluation cycle, and the working
+   order is the one where `orchestrator/index` is entered FIRST. Importing
+   `published-lanes` (which reads `rule-schema` for `decodeOrchRule`) at the
+   top of this file entered `rule-schema` first instead, and the whole /build
+   route 500'd on `Cannot access 'CONCENTRATION_BASE_FLOOR_PCT' before
+   initialization`. Kept directly under the orchestrator import so the order is
+   stated rather than accidental. The cycle itself is not WP-1's to unpick. */
+import { publishedRouter, type PublishedLane } from "@/lib/canvas/published-lanes";
 import CopilotPanel from "./CopilotPanel";
 import {
   discoverAbsence,
@@ -1695,7 +1705,30 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
     return Math.max(0, Math.floor((oppData.nowMs - oldest) / 86_400_000));
   }, [oppData, laneComputed]);
 
-  // ── One-shot ADD A LOOP pulse after the first lane completes (§5). ──
+  /* THE ROUTER PLATE'S ARRIVAL (design item 20). It is the one plate the user
+     does not place, and it mounted with no beat while the whole rack snapped
+     38% smaller in the same frame (`zoom` is in no transition list). The rack
+     shrink is cushioned by `.rk-rack--multi .rk-lane` in build.css; this is
+     the plate landing in the room after it has finished rearranging, through
+     the same `markSnap` every module plate takes. Fires on the false → true
+     edge only, so re-renders at two lanes do not re-fire it. */
+  const orchWasOn = useRef(false);
+  useEffect(() => {
+    if (orchOn && !orchWasOn.current) markSnap(["orchestrator"]);
+    orchWasOn.current = orchOn;
+  }, [orchOn, markSnap]);
+
+  /* ── One-shot ADD A LANE pulse after the first lane completes (§5). ──
+     ⚠ THE STANDING BAN, RESTATED HERE BECAUSE THE GHOST IS LIVE NOW.
+     `.rk-addlane.want` was moot while the bay carried the coming-soon
+     register; with the second strategy open it is a live invite, so the ban at
+     build.css:2065 (no tip may apply `.want` to a ghost slot) and the
+     animation-budget ruling at build.css:2747 apply to it. The trigger below
+     is a USER ACT and is neither of the two the ruling forbids: it fires once,
+     when the builder's OWN first lane becomes reviewable, never on mount,
+     never on scroll, and never because the copilot mentioned the floor lane.
+     Anything else that wants to pulse this bay is WP-4's accepted proposal or
+     a review gate that failed on a missing lane, and nothing else. */
   useEffect(() => {
     if (addPulsedRef.current) return;
     if (laneComputed.length === 1 && laneComputed[0].laneReviewable) {
@@ -1838,11 +1871,15 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
     [orchSlots, laneComputed],
   );
 
-  // the ghost add-a-loop lane appears only once every lane is launch-shaped
+  // the ghost add-a-lane bay appears only once every lane is launch-shaped
   const showAddLane = laneComputed.length > 0 && laneComputed.every((l) => l.graphOk);
-  /* A second lane is the capital router, and with one live strategy the
-     router is coming soon (docs/plans/LATEST_UI_PORT_SPEC.md A.2): the ghost
-     keeps its live show-predicate and takes the register instead of a press. */
+  /* A second lane is the capital router, and the router opens exactly when a
+     SECOND strategy does: with one live strategy there is nothing a second
+     lane could be, so the ghost keeps its live show-predicate and takes the
+     register instead of a press. The register now holds `loop` and
+     `treasury` (the USDC lending floor, router lane plan R1), so the press is
+     live and this reads false. One owner, `lib/demo-scope.ts`; the twin in
+     ComposePanel reads the same expression. */
   const addLaneSoon = DEMO_SCOPE.liveStrategies.length === 1;
 
   // ── Publish draft (founder brief item 7): the Review and Publish input.
@@ -1970,8 +2007,15 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
       }
     }
     if (orchOn) {
-      moduleNames.push("Yield router");
-      moduleLines.push({ name: "Yield router", line: "Routes deposits across loops toward modeled yield" });
+      /* ONE SPELLING, FROM THE MODULE'S OWN OWNER. This pushed the literal
+         `Yield router`, a retired name `MODULE_ALIASES` in lib/vaults/store.ts
+         still has to translate on every read; `ORCHESTRATOR_DEF` is where the
+         router's name and its one-line tagline live, and the plate has always
+         printed them. The line is the def's own, not a second sentence about
+         the same machine and not the `toward modeled yield` claim the
+         measurement refuses (design item 2). */
+      moduleNames.push(ORCHESTRATOR_DEF.name);
+      moduleLines.push({ name: ORCHESTRATOR_DEF.name, line: ORCHESTRATOR_DEF.tagline });
     }
     /* ⚠ THE OVERLAY'S OWN STATE, INTO THE RECORD (recette 2026-08-27, track 1).
        -------------------------------------------------------------------------
@@ -2290,8 +2334,8 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                      all one family keeps the sentence it has always had, so
                      nothing moves on a record that was already true. */
                   mixedFamily
-                  ? `${lanes.length} lanes, ${familiesPhrase}, with the router following modeled yield.`
-                  : `${lanes.length} loops with the router following modeled yield.`,
+                  ? `${lanes.length} lanes, ${familiesPhrase}, with the router holding the better lane inside the published concentration cap.`
+                  : `${lanes.length} loops with the router holding the better lane inside the published concentration cap.`,
             };
     return {
       ...record,
@@ -2327,8 +2371,33 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
       // The pinned catalog ids, for the publish-success beacon only
       // (copilot loop B-1); PublishFlow peels them before the record is written.
       publishedMarketIds: lanes.map((l) => l.p.candidateId).filter((id) => typeof id === "string" && id.length > 0),
+      /* ── THE TWO-LANE RECORD (router lane plan R5, seam 1) ─────────────
+         The router instrument on the vault page reads the lanes and the
+         dials off the RECORD, not off a canvas it cannot see, so the publish
+         carries both. Written only where a router is actually on: a
+         single-lane publish carries neither field and the record it writes is
+         byte for byte the one it wrote before.
+
+         Shapes declared in `lib/canvas/published-lanes.ts` (WP-1) until
+         WP-3's `VaultRecord` declares them; nothing here computes a figure.
+         `l.netApy` is the lane's own published number, `allocationsBps` is the
+         orchestrator's, and `publishedRouter` decodes the rules from the same
+         dials and slots the plate draws. */
+      ...(orchOn
+        ? {
+            lanes: lanes.map((l): PublishedLane => ({
+              label: l.loop.label,
+              venue: l.p.venue,
+              market: l.p.pairLabel || "…",
+              family: l.family,
+              publishedApy: l.netApy,
+              allocationBps: portfolio.orchestrator.allocationsBps[l.loop.id] ?? 0,
+            })),
+            router: publishedRouter(orchDials, orchSlots),
+          }
+        : {}),
     };
-  }, [laneComputed, orchOn, portfolio, portfolioApy, vaultCap]);
+  }, [laneComputed, orchDials, orchOn, orchSlots, portfolio, portfolioApy, vaultCap]);
 
   // ── IT4 focus/discover wiring (trigger table §2.3) ──
 
@@ -2375,7 +2444,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
     [openDock],
   );
 
-  const addLoopAndDiscover = useCallback(() => {
+  const addLaneAndDiscover = useCallback(() => {
     setAddPulse(false);
     const freshId = newLoopId(portfolio.loops.map((l) => l.id));
     dispatch({ type: "add-loop" });
@@ -3577,6 +3646,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                     turnoverCeiling={orchDials.turnoverBudgetPctWeek / 100}
                     params={portfolio.orchestrator.params}
                     focused={focus?.kind === "orchestrator"}
+                    snap={snapKeys.has("orchestrator")}
                     onFocus={focusOrchestrator}
                     onParam={(field, value) => dispatch({ type: "orch-param", field, value })}
                     onAlloc={(loopId, bps) => dispatch({ type: "set-allocation", loopId, bps })}
@@ -3668,7 +3738,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                         cursor: "default",
                       }}
                     >
-                      ＋ Add a loop
+                      ＋ Add a lane
                     </button>
                     <span className="soon-tag">{COMING_SOON.label}</span>
                   </div>
@@ -3677,10 +3747,10 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                     className={`rk-addlane${addPulse ? " want" : ""}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      addLoopAndDiscover();
+                      addLaneAndDiscover();
                     }}
                   >
-                    ＋ Add a loop
+                    ＋ Add a lane
                   </button>
                 ) : null}
               </div>
@@ -3798,7 +3868,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
           scanRowFor={scanRowFor}
           onFocusModule={focusModule}
           onFocusOrchestrator={focusOrchestrator}
-          onAddLane={addLoopAndDiscover}
+          onAddLane={addLaneAndDiscover}
           onAddModule={composeAdd}
           onEjectModule={(loopId, key) => composeEject(loopId, key)}
           onRemoveLoop={removeLoop}

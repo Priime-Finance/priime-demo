@@ -44,6 +44,7 @@ import { apyCaption, feeRows } from "@/lib/canvas/fees";
 import { SEED_SLUGS } from "@/lib/vaults/seeds";
 import { heroNavUsd } from "@/lib/vaults/rows";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
+import type { PublishedLane, PublishedRouter } from "@/lib/canvas/published-lanes";
 
 /** How long the done card holds before the router opens the vault page. */
 const DONE_BEAT_MS = 900;
@@ -72,6 +73,21 @@ export interface PublishDraft extends Omit<PublishInput, "name"> {
    * Review-card state, peeled; the record carries it as a param row instead.
    */
   apyCompanion?: string | null;
+  /**
+   * ── THE TWO-LANE RECORD (router lane plan R5, seam 1) ──────────────────
+   * The lanes and the router this publish writes ONTO the record, so the
+   * vault page's Capital router instrument reads what the canvas showed
+   * rather than re-deriving it from a canvas it cannot see. Present only on a
+   * multi-lane publish; absent, the record written is byte for byte the one
+   * this flow has always written.
+   *
+   * ⚠ SEAM, NOT A LOCAL FIELD. `lib/vaults/store.ts` (WP-3) declares
+   * `VaultRecord.lanes` and `.router`; WP-1 writes them under these names and
+   * `lib/canvas/published-lanes.ts` holds the shapes until it does. They are
+   * NOT peeled below: they belong to the record.
+   */
+  lanes?: readonly PublishedLane[];
+  router?: PublishedRouter | null;
   /**
    * The catalog ids of the lanes this vault publishes (copilot loop B-1).
    * Carried by the publish-success beacon so the funnel's strict tier can
@@ -237,14 +253,22 @@ export default function PublishFlow({
           publishedMarketIds: _publishedMarketIds, // beacon payload, never a record field
           ...record
         } = draft;
-        const rec = publishVault(
-          {
-            ...record,
-            name: name.trim() || draft.defaultName,
-            automations: deriveAutomations(draft),
-          },
-          SEED_SLUGS,
-        );
+        /* THE RECORD, PLUS THE TWO FIELDS WP-3 DECLARES. Typed as a widening
+           of `PublishInput` so this worktree compiles before
+           `lib/vaults/store.ts` carries `lanes` and `router`; assigned through
+           a variable rather than written inline so the extra members are a
+           structural widening and not an excess-property claim about a shape
+           this package does not own. When WP-3's declaration lands, the
+           annotation collapses to `PublishInput`. */
+        const input: PublishInput & {
+          lanes?: readonly PublishedLane[];
+          router?: PublishedRouter | null;
+        } = {
+          ...record,
+          name: name.trim() || draft.defaultName,
+          automations: deriveAutomations(draft),
+        };
+        const rec = publishVault(input, SEED_SLUGS);
         // G2: `write()` returns false when the record did not land (private
         // mode, quota, a disabled store). Reporting success there is how the
         // flow came to offer "Open your vault" for a vault that does not
