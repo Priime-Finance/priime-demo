@@ -292,8 +292,17 @@ export const DEMO_BAR_ONE_WAY_BREAKEVEN = Number(
  *  own hysteresis is symmetric. */
 export const DEMO_BAR_ROUND_TRIP_BREAKEVEN = Number((2 * DEMO_BAR_ONE_WAY_BREAKEVEN).toFixed(5));
 
-/** The register floor, through the shipped owner: never advertise a bar under
- *  3pp. `UPGRADE_THRESHOLD_FLOOR` itself is not edited. */
+/**
+ * The third candidate: what the SHIPPED owner answers on this pair's measured
+ * profile, which is its own `UPGRADE_THRESHOLD_FLOOR` of 3pp, because the raw
+ * arithmetic (0.754%) lands under it.
+ *
+ * It is kept and exported, but it is NOT the bar any more: G2 licensed a
+ * demo-scoped owner to sit under that floor by name, and the measurement below
+ * ties it with the round-trip break-even on the window G2 rules by. Computed
+ * rather than typed, so what it is a floor OVER stays readable.
+ * `UPGRADE_THRESHOLD_FLOOR` itself is not edited.
+ */
 export const DEMO_BAR_REGISTER_FLOOR = upgradeThreshold(demoExitProfile());
 
 /**
