@@ -100,6 +100,7 @@ import {
   validateDemoRouter,
 } from "@/lib/canvas/orchestrator/demo-rules";
 import {
+  FLOOR_LANE_LABEL,
   FLOOR_PAIR_MAX_CONCENTRATION_PCT,
   FLOOR_PAIR_MAX_WEIGHT,
   FLOOR_PAIR_MIN_WEIGHT,
@@ -606,10 +607,10 @@ export function foldRouterRun(regimeParam: string | null): RunAnswer {
         slotId: FLOOR_SLOT,
         candidateId: ROUTER_FLOOR_CANDIDATE_ID,
         venue: cfg.loops.find((l) => l.slotId === FLOOR_SLOT)?.venue ?? "",
-        /* Plan R1's lane label, which is what a reader calls this lane. The
-           row's own `collateralSymbol` is the receipt token, aUSDC, and the
-           band key is a lane key rather than a token key. */
-        book: "USDC lending",
+        /* Plan R1's lane label, through its one owner. The row's own
+           `collateralSymbol` is the receipt token, aUSDC, and the band key is
+           a lane key rather than a token key. */
+        book: FLOOR_LANE_LABEL,
         capacityUsd: FLOOR_ROW.economics.capacityUsd ?? 0,
         settlementDays,
         sourceEligible: FLOOR_ROW.eligible === true,

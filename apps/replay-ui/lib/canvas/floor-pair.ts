@@ -74,6 +74,19 @@ export function isDemoFloorPair(candidateIds: readonly string[]): boolean {
 }
 
 /**
+ * WHAT A READER CALLS THE FLOOR LANE, and it is not its family word.
+ *
+ * `FAMILY_LABEL.treasury` is `treasury floor`, which is what the lane IS in the
+ * composition grammar and is not what a depositor calls it: plan R1 named this
+ * lane `USDC lending` and the replay's own lane key has said so since it was
+ * built. Two names for one lane on one page is the defect; this is the name.
+ * Every surface that labels the lane asks here: the plate's bar, the dock's
+ * bar, the label the publish writes onto the record, and the route's own
+ * `book` field.
+ */
+export const FLOOR_LANE_LABEL = "USDC lending";
+
+/**
  * The concentration ceiling this pair publishes, in percent.
  *
  * 100 is outside the dial's own [35, 80] range, which is exactly why

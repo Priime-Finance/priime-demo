@@ -76,7 +76,24 @@ export default function OrchestratorPlate({
   onOpenRules: () => void;
 }) {
   const [helpOpen, setHelpOpen] = useState(false);
-  const dialDefs = useMemo(() => orchDialDefs(loops.length), [loops.length]);
+  /* THE DIALS THAT STILL BIND (G1). On the floor pair the band is [0, 1] and
+     the week admits one full move, both by ruling and both published onto the
+     record, so a slider offering a 60% ceiling would be a control that changes
+     nothing while stating a policy the machine does not keep. The tempo stays:
+     it scales every rule's cooldown and the cooldown is unchanged. Any other
+     composition gets all three back. `bands` is the switch's own evidence
+     here: only the floor pair is banded to the whole book. */
+  const wholeBook = signals.every((s) => {
+    const b = bands[s.loopId];
+    return b?.minWeight === 0 && b?.maxWeight === 1;
+  });
+  const dialDefs = useMemo(
+    () =>
+      orchDialDefs(loops.length).filter(
+        (d) => !wholeBook || d.field === "reactivity",
+      ),
+    [loops.length, wholeBook],
+  );
   /* D9 — the badge tells the truth about the quote, and green stays
      semantic. A lane mid-reprice is not a failure and not a success; it is
      QUOTING, and the badge says so instead of holding a green policy name
@@ -160,7 +177,7 @@ export default function OrchestratorPlate({
                       12 characters and the row has to hold it, because a bar
                       labelled `LANE 2` names nothing a reader of this rack
                       recognises. */}
-                  <span>{s.label.length > 13 ? `${s.label.slice(0, 12)}…` : s.label}</span>
+                  <span>{s.label.length > 14 ? `${s.label.slice(0, 13)}…` : s.label}</span>
                   {/* F.3 / F.5 — the shared track. The tick is the derived
                       floor `max(0, 1 − (N−1)·maxWeight)`, which restates a
                       bound `validateOrchestrator` already enforces, so drawing

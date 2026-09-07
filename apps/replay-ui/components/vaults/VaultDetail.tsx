@@ -467,8 +467,17 @@ export default function VaultDetail({ slug }: { slug: string }) {
   const heroRegister = useMemo(() => {
     const r = vault?.automations?.router ?? null;
     if (!r || r.lanes.length < 2) return null;
-    const lev = vault?.automations?.leverage?.targetLeverage ?? null;
-    return lev === null ? "published on this record, modeled" : `published at ${lev.toFixed(2)}x, modeled`;
+    /* THE RECORD'S OWN APPLIED LEVERAGE, AND WHY A ROUTED RECORD OFTEN HAS
+       NONE. `publishedModelRecord` publishes `appliedLeverage` only where the
+       lanes AGREE on it (MTX-2), and this pair does not: the loop runs at
+       2.50x and the lending lane at 1.00x. So the number above is the vault AS
+       COMPOSED, both lanes at their own leverages, and the line says that
+       rather than naming one lane's dial over a blended figure. A record that
+       does state one leverage names it, which is the single-lane shape. */
+    const lev = vault?.appliedLeverage ?? vault?.automations?.leverage?.targetLeverage ?? null;
+    return typeof lev === "number" && Number.isFinite(lev)
+      ? `published at ${lev.toFixed(2)}x, modeled`
+      : "published as composed, modeled";
   }, [vault]);
 
   const strikes = useMemo(() => (attested ? heroStrikes() : []), [attested]);

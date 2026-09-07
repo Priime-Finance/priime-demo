@@ -323,6 +323,9 @@ describe("the router's copy carries the ban and the register", () => {
     expect(
       readFileSync(join(process.cwd(), "components/vaults/VaultDetail.tsx"), "utf8"),
     ).toContain("published at ${lev.toFixed(2)}x, modeled");
+    expect(
+      readFileSync(join(process.cwd(), "components/vaults/VaultDetail.tsx"), "utf8"),
+    ).toContain("published as composed, modeled");
     // One heartbeat per surface: `.vxe-live` belongs to the polled readings.
     const card = automations.slice(
       automations.indexOf("function RouterInstrument"),

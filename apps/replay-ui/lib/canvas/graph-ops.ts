@@ -41,6 +41,9 @@ import { descriptorsFor, DISPLAY_ORDER, getDef, MODULE_DEFS, type ParamContext }
    which is why it is imported rather than re-spelled here. */
 import { familiesForCandidateId, fundingClassCandidateId } from "./templates";
 import { newLoopId, nodeId } from "./ids";
+/* A LEAF, one import deep (`lib/demo-scope.ts`, which imports nothing). */
+import { FLOOR_LANE_LABEL } from "./floor-pair";
+import { FLOOR_MARKET_ID } from "@/lib/demo-scope";
 /* Type-only, so the store ↔ canvas boundary carries no runtime edge: the graph
    adopts the store's own strategy word (`StrategyKind`) rather than minting a
    second enum for the same four products. */
@@ -161,6 +164,36 @@ export const FAMILY_LABEL: Record<LaneFamily, string> = {
      word on the same rack. The floor is what this lane is FOR. */
   treasury: "treasury floor",
 };
+
+/**
+ * WHAT TO CALL A LANE ON SCREEN, and it is not its ordinal.
+ *
+ * `Lane 2` is the canvas's own default and it means nothing to anyone who did
+ * not build the rack: the plate drew `LANE 1` and `LANE 2` over two bars, the
+ * founder read it as a component naming nothing, and the vault page's rule
+ * sentence would have read `Moves everything to Lane 2`. An unrenamed lane
+ * therefore shows its FAMILY, through `FAMILY_LABEL`, the one owner of that
+ * word; a lane the builder actually named keeps the name they gave it,
+ * because that name is a decision and this is not.
+ *
+ * It lives here because THREE surfaces ask it (the plate's bars, the dock's
+ * bars, and the label the publish writes onto the record) and the publish had
+ * the only copy of the rule.
+ */
+export function laneDisplayLabel(
+  label: string,
+  family: LaneFamily,
+  candidateId?: string | null,
+): string {
+  if (!/^Lane \d+$/.test(label.trim())) return label;
+  /* THE FLOOR LANE HAS A NAME OF ITS OWN, and it is not its family word: plan
+     R1 called it `USDC lending` and the replay's lane key has said so since it
+     was built, so a plate bar reading `treasury floor` beside a run panel
+     reading `USDC lending` would be two names for one lane. Every other family
+     falls through to its family word, which is what it is. */
+  if (candidateId && candidateId === FLOOR_MARKET_ID) return FLOOR_LANE_LABEL;
+  return FAMILY_LABEL[family];
+}
 
 /**
  * What a lane of this family must place before it is FINISHED, as OR-GROUPS:

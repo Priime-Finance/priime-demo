@@ -520,8 +520,12 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
           className="vxe-labels"
           style={{ gridTemplateColumns: `${zMove}fr ${zRearm}fr ${zHold}fr ${zMove}fr` }}
         >
+          {/* THE BAND'S STOPS SAY WHAT HAPPENS AT THEM, in the cascade's own
+              words: `Move to the USDC lending` is what an article welded to a
+              lane label produces, and the cascade three rows down already
+              spells the action. Same two verbs, same two lanes. */}
           <div className="vxe-lab vxe-lab--del">
-            <i>Move to the {floorLabel}</i>
+            <i>Move all to {floorLabel}</i>
             <b>
               &lt; {MINUS}
               {ppMagnitude(r.thresholdApy)}
@@ -539,7 +543,7 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
             <b>{read.gapText}</b>
           </div>
           <div className="vxe-lab vxe-lab--del">
-            <i>Move to the {loopLabel}</i>
+            <i>Rebuild the {loopLabel}</i>
             <b>&gt; +{ppMagnitude(r.thresholdApy)}</b>
           </div>
         </div>

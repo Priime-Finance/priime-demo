@@ -56,7 +56,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type { LoopGraph, LoopId, ParamValue, PortfolioGraph } from "@/lib/canvas/types";
-import { laneFamily, nodeFor } from "@/lib/canvas/graph-ops";
+import { FLOOR_PAIR_TURNOVER_PCT_WEEK } from "@/lib/canvas/floor-pair";
+import { laneDisplayLabel, laneFamily, nodeFor } from "@/lib/canvas/graph-ops";
 import { pricingParamsFor } from "@/lib/canvas/pricing-params";
 import { fmtCapacityUsd, vaultCapacity } from "@/lib/canvas/capacity";
 import {
@@ -806,6 +807,11 @@ export function routerRows(route: ComposedRoute, variant: "plate" | "panel"): Ro
     { k: "Rule", v: "holds" },
   ];
   if (variant === "panel") {
+    /* THE BOUND THAT STILL BINDS. The concentration band is [0, 1] on this
+       pair and its readouts are gone with it; the weekly budget is what
+       refuses a second whole-book move, and the panel has room to say so.
+       One row, three words, no meter. */
+    rows.push({ k: "Moves", v: `${Math.floor(FLOOR_PAIR_TURNOVER_PCT_WEEK / 100)} per week` });
     rows.push({
       k: "Move cost",
       v:
@@ -2094,7 +2100,19 @@ export function PortfolioVariant({
     [slots, lanes],
   );
 
-  const dialDefs = useMemo(() => orchDialDefs(portfolio.loops.length), [portfolio.loops.length]);
+  /* THE DIALS THAT STILL BIND (G1), the same filter the plate applies and for
+     the same reason: on the floor pair the concentration ceiling and the
+     weekly budget are the switch's, published onto the record, and a slider
+     that cannot move them is a trap. The tempo scales the cooldown, which the
+     switch does not touch, so it stays. */
+  const wholeBookBand = slots.length > 0 && slots.every((s) => s.minWeight === 0 && s.maxWeight === 1);
+  const dialDefs = useMemo(
+    () =>
+      orchDialDefs(portfolio.loops.length).filter(
+        (d) => !wholeBookBand || d.field === "reactivity",
+      ),
+    [portfolio.loops.length, wholeBookBand],
+  );
 
   const bySlot = useMemo(() => new Map(slots.map((s) => [s.slotId, s])), [slots]);
 
@@ -2107,7 +2125,7 @@ export function PortfolioVariant({
         deriveLaneSignals(
           lanes.map((l) => ({
             loopId: l.loop.id,
-            label: l.loop.label,
+            label: laneDisplayLabel(l.loop.label, laneFamily(l.loop.nodes), pricingParamsFor(l.loop).candidateId),
             eligible: l.reprice?.ok === true ? (l.reprice.candidate?.eligible ?? null) : null,
             netApy: l.netApy,
             /* `pricingParamsFor` is the one owner of "which market is this
@@ -2166,7 +2184,12 @@ export function PortfolioVariant({
           const s = bySlot.get(l.loop.id);
           return (
             <div key={l.loop.id} className="rk-orchrow">
-              <span>{l.loop.label.length > 10 ? `${l.loop.label.slice(0, 9)}…` : l.loop.label}</span>
+              {/* THE LANE'S NAME, OR WHAT IT IS (item 9), through the one owner
+                  the publish also uses. `Lane 2` names nothing to a reader. */}
+              <span>{(() => {
+                const n = laneDisplayLabel(l.loop.label, laneFamily(l.loop.nodes), pricingParamsFor(l.loop).candidateId);
+                return n.length > 13 ? `${n.slice(0, 12)}…` : n;
+              })()}</span>
               {/* F.3 / F.5 — the SAME track the plate draws. The tick is the
                   derived floor; the lift behind the fill is headroom to this
                   lane's own ceiling. A composed portfolio holds no weight in

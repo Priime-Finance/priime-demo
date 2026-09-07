@@ -385,13 +385,21 @@ export function demoDeriveAllRouterRules(
  * Exported so a test can assert the list rather than trust the filter, and so
  * a reader of the module can see the whole deviation in one object.
  */
-export const DEMO_ROUTER_RELAXATIONS = [
+export const DEMO_ROUTER_RELAXATIONS: readonly {
+  readonly invariant: string;
+  readonly rule: string;
+  readonly scope: string;
+  readonly reason: string;
+  /** The scope above, as the predicate the validator actually applies. */
+  readonly matches: (v: OrchViolation, wholeLaneRuleIds: ReadonlySet<string>) => boolean;
+}[] = [
   {
     invariant: "per-tick-and-budget-caps",
     rule: "R15 move cap",
     scope: "the `:upgrade` rule of a floor-pair lane, and no other rule",
     reason:
       "one firing carries the whole lane, because between a lane and its floor the router evacuates and rebuilds rather than shifting inside a band",
+    matches: (v, ids) => [...ids].some((id) => v.detail.startsWith(`${id}:`)),
   },
   {
     invariant: "dial-range",
@@ -399,8 +407,9 @@ export const DEMO_ROUTER_RELAXATIONS = [
     scope: "maxConcentrationPct on a two-lane floor pair, and no other dial",
     reason:
       "the pair's band is [0, 1], and the published ceiling has to state the same policy the slots carry",
+    matches: (v) => v.detail.startsWith("maxConcentrationPct "),
   },
-] as const;
+];
 
 /**
  * The full validator, with R38 re-checked against the demo's own derivation
@@ -428,18 +437,15 @@ export function validateDemoRouter(
   const wholeLaneRuleIds = new Set(
     cfg.rules.filter((r) => r.metric === "better_elsewhere" && r.moveWeight === FLOOR_PAIR_MOVE_WEIGHT).map((r) => r.ruleId),
   );
+  /* THE LIST IS THE FILTER, not a second copy of it. `DEMO_ROUTER_RELAXATIONS`
+     is what this module publishes as its deviation and what the test asserts,
+     so a relaxation nobody wrote down cannot be applied and one that is written
+     down cannot be silently skipped. */
   return violations.filter((v) => {
     if (v.invariant === "derived-only") return false;
     if (!pair) return true;
-    if (
-      v.invariant === "per-tick-and-budget-caps" &&
-      [...wholeLaneRuleIds].some((id) => v.detail.startsWith(`${id}:`))
-    ) {
-      return false; // R15 move cap, cleared: see DEMO_ROUTER_RELAXATIONS[0]
-    }
-    if (v.invariant === "dial-range" && v.detail.startsWith("maxConcentrationPct ")) {
-      return false; // the concentration band, cleared: see DEMO_ROUTER_RELAXATIONS[1]
-    }
-    return true;
+    return !DEMO_ROUTER_RELAXATIONS.some(
+      (r) => r.invariant === v.invariant && r.matches(v, wholeLaneRuleIds),
+    );
   });
 }

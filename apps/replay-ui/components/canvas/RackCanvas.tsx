@@ -50,6 +50,7 @@ import {
   committedStrategy,
   emptyPortfolio,
   FAMILY_LABEL,
+  laneDisplayLabel,
   laneFamily,
   laneSteps,
   loopById,
@@ -1827,7 +1828,10 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
       deriveLaneSignals(
         laneComputed.map((l) => ({
           loopId: l.loop.id,
-          label: l.loop.label,
+          /* THE LANE'S NAME, OR WHAT IT IS (item 9). The same rule the publish
+             writes onto the record, from the one owner, so the plate's bars
+             and the record's lanes cannot be named two different things. */
+          label: laneDisplayLabel(l.loop.label, l.family, l.p.candidateId),
           eligible: l.ok?.candidate?.eligible ?? null,
           netApy: l.netApy,
           hasMarket: !!l.p.candidateId,
@@ -2406,7 +2410,7 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                  FAMILY, through `FAMILY_LABEL`, the one owner of that word;
                  a lane the builder actually named keeps the name they gave
                  it, because that name is a decision and this is not. */
-              label: /^Lane \d+$/.test(l.loop.label) ? FAMILY_LABEL[l.family] : l.loop.label,
+              label: laneDisplayLabel(l.loop.label, l.family, l.p.candidateId),
               venue: l.p.venue,
               venueLabel: venueLabel(l.p.venue),
               market: l.p.pairLabel || "…",
