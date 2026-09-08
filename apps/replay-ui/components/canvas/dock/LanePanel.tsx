@@ -864,10 +864,12 @@ export function DestinationLine({
 }) {
   const plate = variant === "plate";
   const rows = routerRows(route, variant);
+  /* On the plate the rows are printed ink and keep the mono; in the dock
+     they are chrome and take the sans (type ruling, 2026-09-08). */
   const label: CSSProperties = {
-    fontFamily: "var(--fm)",
+    fontFamily: plate ? "var(--fm)" : "var(--fx)",
     fontSize: plate ? 8 : 9,
-    letterSpacing: ".06em",
+    letterSpacing: plate ? ".06em" : "normal",
     color: plate ? HW.label : "var(--bc-muted)",
     lineHeight: 1.5,
   };
@@ -973,9 +975,9 @@ export function TurnoverStrip({
       <div
         style={{
           marginTop: 3,
-          fontFamily: "var(--fm)",
+          fontFamily: plate ? "var(--fm)" : "var(--fx)",
           fontSize: plate ? 8 : 9,
-          letterSpacing: ".06em",
+          letterSpacing: plate ? ".06em" : "normal",
           lineHeight: 1.45,
           overflowWrap: "anywhere",
           /* THE PLATE PLACEMENT DRAWS ON THE PLATE'S CREAM FACE, not on its
@@ -1419,9 +1421,8 @@ function LaneBands({
           unit is asking the reader to assume one. */}
       <div
         style={{
-          fontFamily: "var(--fm)",
-          fontSize: 9,
-          letterSpacing: ".06em",
+          fontFamily: "var(--fx)",
+          fontSize: 9.5,
           color: "var(--bc-faint)",
           marginBottom: 2,
         }}
@@ -1694,7 +1695,7 @@ function LaneBands({
       {groupRefusals(run.refusals).map((r) => (
         <div
           key={`${r.ruleId}:${r.code}:${r.ticks[0]}`}
-          style={{ marginTop: 4, fontFamily: "var(--fm)", fontSize: 9, color: "var(--bc-muted)" }}
+          style={{ marginTop: 4, fontFamily: "var(--fx)", fontSize: 9, color: "var(--bc-muted)" }}
         >
           {`${r.ticks.length === 1 ? "tick" : "ticks"} ${r.ticks.join(", ")} · ${r.reason}`}
         </div>
@@ -1746,9 +1747,8 @@ function BandKey({
         display: "flex",
         alignItems: "center",
         gap: 6,
-        fontFamily: "var(--fm)",
-        fontSize: 9.5,
-        letterSpacing: ".04em",
+        fontFamily: "var(--fx)",
+        fontSize: 10,
         color: strong ? "var(--bc-ink)" : "var(--bc-body)",
       }}
     >
@@ -1818,7 +1818,7 @@ function RegimeSwitcher({ regime, degraded }: { regime: RegimeId; degraded: bool
         <div
           style={{
             marginTop: 6,
-            fontFamily: "var(--fm)",
+            fontFamily: "var(--fx)",
             fontSize: 9,
             lineHeight: 1.5,
             color: "var(--bc-muted)",
@@ -1916,7 +1916,7 @@ function AttestationCard({
         background: "var(--bc-panel)",
         display: "grid",
         gap: 4,
-        fontFamily: "var(--fm)",
+        fontFamily: "var(--fx)",
         fontSize: 9.5,
         lineHeight: 1.5,
       }}
@@ -2273,9 +2273,8 @@ export function PortfolioVariant({
             pair as one component in two registers. */}
         <div
           style={{
-            fontFamily: "var(--fm)",
-            fontSize: 9,
-            letterSpacing: ".02em",
+            fontFamily: "var(--fx)",
+            fontSize: 9.5,
             color: "var(--bc-faint)",
             marginBottom: 3,
           }}
@@ -2519,7 +2518,7 @@ function RouterRunSection() {
       {phase === "loading" ? (
         <div
           className="rk-runstate"
-          style={{ marginTop: 10, fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--bc-faint)" }}
+          style={{ marginTop: 10, fontFamily: "var(--fx)", fontSize: 9.5, color: "var(--bc-faint)" }}
         >
           folding the scenario through the evaluator
         </div>
@@ -2541,7 +2540,7 @@ function RouterRunSection() {
             alignItems: "center",
             justifyContent: "space-between",
             gap: 10,
-            fontFamily: "var(--fm)",
+            fontFamily: "var(--fx)",
             fontSize: 9.5,
             color: "var(--bc-warn)",
           }}
@@ -2669,7 +2668,7 @@ function RouterRunSection() {
                     onFocus={() => setHoverId(d.decisionId)}
                     onBlur={() => setHoverId(null)}
                     style={{
-                      fontFamily: "var(--fm)",
+                      fontFamily: "var(--fx)",
                       fontSize: 9,
                       padding: "2px 6px",
                       borderRadius: 4,
@@ -2690,7 +2689,7 @@ function RouterRunSection() {
               })}
             </div>
           ) : (
-            <div style={{ marginTop: 10, fontFamily: "var(--fm)", fontSize: 9.5, color: "var(--bc-muted)" }}>
+            <div style={{ marginTop: 10, fontFamily: "var(--fx)", fontSize: 9.5, color: "var(--bc-muted)" }}>
               {`${run.firings} rules fired over ${T} ticks, so nothing moved`}
             </div>
           )}

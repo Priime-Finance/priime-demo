@@ -74,6 +74,10 @@ export function paramKind(label: string, value: string): "reading" | "phrase" | 
   if (READING_LABELS.has(label)) return "reading";
   if (PROSE_LABELS.has(label)) return "prose";
   if (PHRASE_LABELS.has(label)) return "phrase";
+  // A hash or a digest is a reading however long it runs: a sha256 is 71
+  // characters and would otherwise stack as prose (seen on the Attestation
+  // table, 2026-09-08). It wraps inside its column instead.
+  if (/^(0x|sha256:)/.test(value.trimStart())) return "reading";
   // A row added after this pass. Length decides prose; otherwise the same
   // first-character rule the unlabelled surfaces use.
   if (value.length > PROSE_CHARS) return "prose";
@@ -92,6 +96,9 @@ export function valueKind(value: string): "reading" | "phrase" {
   const head = value.trimStart();
   if (head.length === 0) return "reading";
   if (head.startsWith("0x") || head.startsWith("sha256:")) return "reading";
+  // A calendar date is a timestamp, and timestamps are data: `Sep 8, 2026`
+  // (the page's own date format) and an ISO day both read in mono.
+  if (/^[A-Z][a-z]{2} \d{1,2}, \d{4}\b/.test(head) || /^\d{4}-\d{2}-\d{2}\b/.test(head)) return "reading";
   const c = head[0] ?? "";
   if (c >= "0" && c <= "9") return "reading";
   if (c === "$" || c === "€" || c === "£" || c === "¥") return "reading";

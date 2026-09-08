@@ -39,6 +39,7 @@ import {
 } from "@/lib/vaults/store";
 import { useCountUp } from "./useCountUp";
 import { useInView } from "./useInView";
+import { MarketWord } from "./MarketWord";
 
 /** `incubating` joins the two non-strategy cohorts. Like `mine`, its chip is
  *  rendered only while at least one record is in it, so the bar never offers
@@ -193,7 +194,7 @@ function ComingSoonCard({ v, i }: { v: VaultRecord; i: number }) {
         </span>
       </div>
       <span className="vx-card-mkt">
-        <span className="pair">{v.market}</span> · {recordVenueLine(v)}
+        <MarketWord market={v.market} /> · {recordVenueLine(v)}
       </span>
       {apyOk ? (
         <div className="vx-card-apy">
@@ -261,7 +262,7 @@ function LiveCard({ v, i, live }: { v: VaultRecord; i: number; live: boolean }) 
         <span className={`vx-tag${v.mine ? " vx-tag--mine" : ""}`}>{v.strategyLabel}</span>
       </div>
       <span className="vx-card-mkt">
-        <span className="pair">{v.market}</span> · {recordVenueLine(v)}
+        <MarketWord market={v.market} /> · {recordVenueLine(v)}
       </span>
       <ApyHero apy={v.modeledApy} ok={apyOk} live={live} inView={inView} />
       {forfeit ? <span className="vx-card-forfeit">{collarForfeitLine(forfeit)}</span> : null}

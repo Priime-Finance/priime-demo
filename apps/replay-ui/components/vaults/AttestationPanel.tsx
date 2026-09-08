@@ -14,7 +14,7 @@
 
 import { truncateAddress, truncateHash } from "@/lib/format";
 import { formatAttestedNav, type StrikeRow } from "@/lib/vaults/attested";
-import { valueKind } from "@/lib/vaults/param-kind";
+import { paramKind } from "@/lib/vaults/param-kind";
 import { captureJournal } from "@/lib/vaults/pipeline";
 import { heroStrikes } from "@/lib/vaults/rows";
 
@@ -98,12 +98,17 @@ export function AttestationPanel({ strikes }: { strikes: readonly StrikeRow[] })
           operator, a block and a NAV are data and stay in the mono; a row
           that reads `USDC, 6 decimals`, `no quorum formed` or `awaiting
           strike` is words, and words are the sans. */}
-      {rows.map((r) => (
-        <div key={r.label} className="vx-kv">
-          <span>{r.label}</span>
-          <b data-kind={valueKind(r.value)}>{r.value}</b>
-        </div>
-      ))}
+      {rows.map((r) => {
+        /* Labelled, so `Settled` (a 60-character enumeration of two blocks)
+           stacks as prose instead of running as a right-aligned reading. */
+        const kind = paramKind(r.label, r.value);
+        return (
+          <div key={r.label} className={`vx-kv${kind === "prose" ? " vx-kv--prose" : ""}`}>
+            <span>{r.label}</span>
+            <b data-kind={kind}>{r.value}</b>
+          </div>
+        );
+      })}
       <p className="vxd-desc vxd-desc--note">{ATTESTATION_NOTE}</p>
     </div>
   );

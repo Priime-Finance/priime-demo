@@ -65,6 +65,7 @@ import {
 } from "@/lib/canvas/param-schema";
 import { HERO_SLUG } from "@/lib/demo-scope";
 import { type ParamKind, paramKind, withParamKinds } from "@/lib/vaults/param-kind";
+import { MarketWord } from "./MarketWord";
 import { AWAITING_LABEL, HERO_SHARES_OUTSTANDING } from "@/lib/vaults/attested";
 import type { Capture } from "@/lib/vaults/pipeline";
 import { heroNavPerShare, heroNavUsd, heroStrikes } from "@/lib/vaults/rows";
@@ -561,7 +562,7 @@ export default function VaultDetail({ slug }: { slug: string }) {
     }
     if (a?.compound) {
       push("Compound cadence", `${a.compound.cadenceHours}h`);
-      push("Harvest threshold", `${a.compound.thresholdUsd}`);
+      push("Harvest threshold", `$${a.compound.thresholdUsd}`);
     }
     if (a?.redemption) {
       /* The exit, in the instrument's own two strings. `Exit` heads both rows
@@ -720,7 +721,7 @@ export default function VaultDetail({ slug }: { slug: string }) {
               names and a chain are words and keep their native casing in the
               sans. */}
           <span className="vx-card-mkt">
-            <span className="pair">{vault.market}</span> ·{" "}
+            <MarketWord market={vault.market} /> ·{" "}
             {routed ? `${venue} · ${chain}` : vault.venue}
           </span>
           <span className="vx-dmeta-cur">

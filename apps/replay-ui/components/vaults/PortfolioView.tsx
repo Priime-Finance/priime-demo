@@ -54,6 +54,7 @@ import {
   type PositionRecord,
   type VaultRecord,
 } from "@/lib/vaults/store";
+import { MarketWord } from "./MarketWord";
 
 /** |P&L| under half a cent is flat, not a gain: no plus sign, no green. */
 const FLAT = 0.005;
@@ -395,7 +396,7 @@ export function PositionCard({ c, i, now }: { c: CardModel; i: number; now: numb
       </div>
       {c.vault ? (
         <span className="vx-card-mkt">
-          <span className="pair">{c.vault.market}</span> · {recordVenueLine(c.vault)}
+          <MarketWord market={c.vault.market} /> · {recordVenueLine(c.vault)}
         </span>
       ) : null}
       <div className="vx-pf-val">
