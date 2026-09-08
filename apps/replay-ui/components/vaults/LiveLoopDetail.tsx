@@ -234,8 +234,14 @@ export default function LiveLoopDetail({ id }: { id: string }) {
               so the dollar sign is never read as a currency claim. */}
           <b>{nav === null ? AWAITING_LABEL : fmtUsd(nav.value)}</b>
           <small>
+            {/* HONESTY PASS: this caption used to open with "attested" in
+                BOTH branches, so a loop whose first strike had not landed
+                printed "awaiting strike" over the word attested. Nothing has
+                been attested at that point; the quorum has not signed
+                anything. The word is earned only by the branch that has a
+                settled strike behind it. */}
             {nav === null
-              ? "attested, no settled strike yet"
+              ? "no strike has settled yet"
               : `attested in ${nav.asset}, newest settled strike`}
           </small>
         </div>
