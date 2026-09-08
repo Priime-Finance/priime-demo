@@ -1,35 +1,40 @@
 #!/usr/bin/env bash
 # M3-4: the vault WAVS service on the pinned Base fork.
 #
-# One service, one manager, one operator set (the production topology): a
-# single POA service manager backs the whole service, and the vault NAV
-# workflow (cron -> vault-nav component -> aggregator -> PriimeVault) runs
-# under it. Attestations are scoped to the vault by payload binding: the
-# component signs (handler, nav, inputsBlock) and the vault rejects payloads
-# not bound to its own address.
+# THREE operators, 2-of-3 quorum: three independent WAVS nodes each register
+# their own operator on the shared POA service manager, each with its own
+# signing key. Every strike the vault sees carries the multi-sig from the
+# quorum WAVS's aggregator collected across nodes (SignatureData.signers /
+# .signatures arrays; see IWavsServiceHandler.sol). The nodes discover each
+# other via hyperswarm (WAVS's built-in Hypercore peer transport) so no
+# extra topology config is needed for the local case: three containers on
+# --network host see each other and gossip signatures until the aggregator
+# role sees threshold and submits ONE tx.
 #
-#   1. deploys the POA service manager (quorum 1/1 today; Phase 2 raises it
-#      to 2-of-3 on this same topology),
+#   1. deploys the POA service manager (quorum 2/3, threshold-weight 2000
+#      over three 1000-weight operators),
 #   2. deploys PriimeVault against it and asserts the wiring,
 #   3. builds + pins the vault-nav and aggregator components to IPFS,
 #   4. assembles service.json: cron trigger -> vault-nav (market/pool/vault
 #      config from fork.config.json) -> aggregator submit -> PriimeVault,
-#   5. registers an operator with EPHEMERAL per-run keys (on a Base fork the
-#      well-known anvil addresses carry EIP-7702 delegations and cannot be
-#      ECDSA signers; fresh random keys are code-free),
+#   5. registers three operators with EPHEMERAL per-run keys (on a Base fork
+#      the well-known anvil addresses carry EIP-7702 delegations and cannot
+#      be ECDSA signers; fresh random keys are code-free),
 #   6. ensures the Aerodrome pool's observation cardinality covers the TWAP
 #      window across the loop-entry swaps (permissionless, standard call),
-#   7. starts the WAVS node against the fork, deploys the service, and waits
-#      for the first cron strike to land in the vault (updateCount >= 1).
+#   7. starts THREE WAVS nodes against the fork, deploys the service to
+#      each, and waits for the first cron strike to land in the vault
+#      (updateCount >= 1).
 #
 # Writes $STATE_DIR/vault-service.json for enter-loop.sh (vault, manager,
 # strategist). Strategy numbers stay in fork.config.json (LOOP-03), which is
 # shared by every target because the fork IS Base at a pinned block.
 #
 # Target-aware: TARGET=fork (default) is the pinned anvil fork and behaves
-# exactly as it always has; TARGET=mainnet is Base itself, where the operator
-# is funded by a real transfer instead of anvil_setBalance and a block is
-# waited for instead of mined. See deploy/target.sh.
+# exactly as it always has apart from the three-operator topology;
+# TARGET=mainnet is Base itself, where operators are funded by real
+# transfers instead of anvil_setBalance and blocks are waited for instead
+# of mined. See deploy/target.sh.
 #
 # Prereqs:
 #   deploy/fork.sh                                   # TARGET=fork only: pinned Base fork on :8545
@@ -46,10 +51,16 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # priime-demo
 DEPLOY="$ROOT/deploy"
 source "$DEPLOY/target.sh"                        # TARGET, RPC, CHAIN, STATE_DIR, CRON_SCHEDULE, helpers
 FORKDIR="$STATE_DIR"
-HOME_DIR="$FORKDIR/wavs-vault"                    # node home (wavs.toml, service.json)
+HOME_BASE="$FORKDIR/wavs-vault"                   # per-node home dirs: wavs-vault-1, -2, -3
 WAVS_IMG="ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15"
 POA_IMG="ghcr.io/lay3rlabs/poa-middleware:1.0.1"
-NODE="wavs-vault"
+NODE_BASE="wavs-vault"                            # per-node containers
+NODE_COUNT=3
+# Each node exposes its own admin/HTTP port on the host (--network host); the
+# three ports are consecutive from NODE_PORT_BASE. libp2p peer listens on
+# NODE_P2P_PORT_BASE + i (also on the host loopback via --network host).
+NODE_PORT_BASE=8041
+NODE_P2P_PORT_BASE=9000
 GATEWAY="http://127.0.0.1:8080/ipfs/"
 
 # --- 0. config + keys -------------------------------------------------------
@@ -76,15 +87,19 @@ OPERATOR_GAS=$(tcfg_req .funding.operator_gas_wei)
 # strategist is the only account vault.execute() accepts.
 K0=$(role_key owner)
 STRATEGIST=$(role_addr strategist)
-# Ephemeral per-run node mnemonic: operator = index 0, signing key = index 1
-# (same layout deploy.sh uses on plain anvil). Both fresh, so code-free EOAs.
-# Target-independent: fresh keys are correct on Base too, they just have to be
-# funded for real (see fund_account below) instead of conjured.
-NODE_MNEMONIC=$(cast wallet new-mnemonic | sed -n '/Phrase:/{n;p;}' | xargs)
-[ "$(echo "$NODE_MNEMONIC" | wc -w | xargs)" = "12" ] || { echo "FATAL: could not generate node mnemonic"; exit 1; }
-OPERATOR=$(cast wallet address --mnemonic "$NODE_MNEMONIC" --mnemonic-index 0)
-K_OP=$(cast wallet private-key --mnemonic "$NODE_MNEMONIC" --mnemonic-index 0)
-SIGNING=$(cast wallet address --mnemonic "$NODE_MNEMONIC" --mnemonic-index 1)
+# One ephemeral mnemonic PER NODE: operator = index 0, signing key = index 1.
+# Three fresh, code-free EOAs per node; on a live chain they still have to be
+# funded (see fund_account below). Arrays are 0-indexed but node ids are
+# 1-indexed in filenames and container names.
+declare -a NODE_MNEMONICS OPERATORS K_OPS SIGNINGS
+for i in $(seq 0 $((NODE_COUNT - 1))); do
+  m=$(cast wallet new-mnemonic | sed -n '/Phrase:/{n;p;}' | xargs)
+  [ "$(echo "$m" | wc -w | xargs)" = "12" ] || { echo "FATAL: could not generate node mnemonic #$((i+1))"; exit 1; }
+  NODE_MNEMONICS[$i]="$m"
+  OPERATORS[$i]=$(cast wallet address --mnemonic "$m" --mnemonic-index 0)
+  K_OPS[$i]=$(cast wallet private-key --mnemonic "$m" --mnemonic-index 0)
+  SIGNINGS[$i]=$(cast wallet address --mnemonic "$m" --mnemonic-index 1)
+done
 
 # --- 1. preconditions -------------------------------------------------------
 say "preconditions (TARGET=$TARGET, chain $CHAIN_ID)"
@@ -140,14 +155,37 @@ say "build components (wasm32-wasip2) + contracts"
 ( cd "$ROOT/components/vault-nav"        && cargo build --release --target wasm32-wasip2 >/dev/null )
 ( cd "$ROOT/components/hello-aggregator" && cargo build --release --target wasm32-wasip2 >/dev/null )
 ( cd "$ROOT/contracts" && forge build >/dev/null )
-mkdir -p "$HOME_DIR" "$FORKDIR/nodes-vault" "$FORKDIR/.docker"
+# Per-node home dirs (each holds wavs.toml, service.json, .env). Node 1's
+# home doubles as the wavs-cli home for service.json assembly; the assembled
+# service.json is copied into the other node homes before start.
+declare -a HOME_DIRS NODE_NAMES NODE_PORTS
+for i in $(seq 0 $((NODE_COUNT - 1))); do
+  HOME_DIRS[$i]="$HOME_BASE-$((i+1))"
+  NODE_NAMES[$i]="$NODE_BASE-$((i+1))"
+  NODE_PORTS[$i]=$(( NODE_PORT_BASE + i ))
+  mkdir -p "${HOME_DIRS[$i]}"
+done
+CLI_HOME="${HOME_DIRS[0]}"                # service.json assembly runs here
+mkdir -p "$FORKDIR/nodes-vault" "$FORKDIR/.docker"
 cp "$ROOT/components/vault-nav/target/wasm32-wasip2/release/priime_vault_nav.wasm"               "$FORKDIR/vault_nav.wasm"
 cp "$ROOT/components/hello-aggregator/target/wasm32-wasip2/release/priime_hello_aggregator.wasm" "$FORKDIR/aggregator.wasm"
+# ------------------------------------------------------------------------
+# wavs.toml is written in TWO PHASES:
+#   phase A: node 1 gets an EMPTY bootstrap_nodes list so it starts as the
+#   libp2p bootstrap. We start it, scrape its deterministic peer_id from
+#   the startup log ("Using P2P identity derived from signing_mnemonic
+#   (peer_id: 12D3KooW...)"), then in phase B write nodes 2 and 3 with
+#   bootstrap_nodes pointing at node 1's multiaddr and boot them. Same
+#   topology `hodlers-app/DEPLOY.md` §3-4 documents, adapted for three
+#   nodes on one host (all peers reach each other via 127.0.0.1).
+# ------------------------------------------------------------------------
 
-# Node + CLI config up front: wavs-cli reads wavs.toml from its home dir for
-# every subcommand, so it must exist before service.json assembly. The empty
-# .env keeps the CLI's dotenv autoload from choking.
-cat > "$HOME_DIR/wavs.toml" <<EOF
+# One tiny helper so both phases emit identical config apart from
+# listen_port and bootstrap_nodes.
+write_wavs_toml() {  # $1=index (0-based), $2=bootstrap_nodes TOML expression
+  local i="$1" nodes="$2"
+  local port="${NODE_PORTS[$i]}" p2p="${NODE_P2P_PORTS[$i]}"
+  cat > "${HOME_DIRS[$i]}/wavs.toml" <<EOF
 [default]
 [default.chains.evm.$FORK_CHAIN_ID]
 ws_endpoints = ["$DOCKER_WS"]
@@ -155,17 +193,59 @@ http_endpoint = "$DOCKER_RPC"
 
 [wavs]
 ipfs_gateway = "$GATEWAY"
-port = 8041
+port = $port
 host = "0.0.0.0"
 dev_endpoints_enabled = true
-signing_mnemonic = "$NODE_MNEMONIC"
+signing_mnemonic = "${NODE_MNEMONICS[$i]}"
 mcp_chain_credential = "$K0"
 aggregator_evm_credential = "$K0"
+
+# libp2p peer discovery over the loopback: node 1 is the bootstrap
+# (bootstrap_nodes=[]) and nodes 2/3 dial its multiaddr. Every WAVS node
+# derives a stable peer_id from signing_mnemonic (m/44'/60'/0'/0/0) so the
+# multiaddrs are known once node 1 has started once. Without this section
+# WAVS logs "P2P networking is disabled" and every node submits its own
+# single signature; the service manager reverts with 0xe121632f
+# (insufficient stake) because a 1000-weight sig can't clear the
+# 2000-weight 2-of-3 threshold.
+[wavs.p2p.remote]
+listen_port = $p2p
+bootstrap_nodes = $nodes
 
 [cli]
 evm_credential = "$K0"
 EOF
-: > "$HOME_DIR/.env"
+  : > "${HOME_DIRS[$i]}/.env"
+}
+
+# Small helper: start one node in the background and wait for its HTTP admin.
+start_node() {  # $1=index (0-based)
+  local i="$1"
+  local name="${NODE_NAMES[$i]}"
+  local port="${NODE_PORTS[$i]}"
+  local home="${HOME_DIRS[$i]}"
+  docker rm -f "$name" >/dev/null 2>&1 || true
+  docker run -d --name "$name" --network host -v "$home:/root/wavs" "$WAVS_IMG" \
+    wavs --home /root/wavs --ipfs-gateway "$GATEWAY" --host 0.0.0.0 --log-level info >/dev/null
+  local ready=0
+  for _ in $(seq 1 30); do
+    curl -sf "http://localhost:$port/services" >/dev/null 2>&1 && { ready=1; break; }
+    sleep 1
+  done
+  [ "$ready" = "1" ] || { echo "FATAL: $name never became ready on :$port (docker logs $name)"; exit 1; }
+  echo "  $name ready on :$port"
+}
+
+# Populate ports arrays used by both phases.
+declare -a NODE_P2P_PORTS
+for i in $(seq 0 $((NODE_COUNT - 1))); do
+  NODE_P2P_PORTS[$i]=$(( NODE_P2P_PORT_BASE + i ))
+done
+
+# Write node 1's config now (empty bootstrap) so service.json assembly can
+# still run out of CLI_HOME which is HOME_DIRS[0]. Nodes 2/3 get their
+# wavs.toml after we know node 1's peer_id.
+write_wavs_toml 0 "[]"
 
 # --- 3. POA service manager (THE service manager: one per service) ----------
 say "deploy POA service manager"
@@ -180,8 +260,12 @@ SM=$(jq -r '.addresses.POAStakeRegistry' "$FORKDIR/nodes-vault/poa_deploy.json")
 # The deploy container has returned but its last transaction may not be in a
 # block the next reader sees. On the fork we mine one; on a live chain we wait.
 mine_or_wait
-"${POA[@]}" owner_operation updateStakeThreshold 1 >/dev/null
-"${POA[@]}" owner_operation updateQuorum 1 1 >/dev/null
+# Quorum: three operators each register with weight 1000 (total 3000); the
+# stake threshold requires 2000 (2-of-3) and the quorum fraction (2/3)
+# codifies the same rule as a percentage. Either bound alone would suffice
+# for equal weights; both track the demo's spec ("2-of-3 quorum") verbatim.
+"${POA[@]}" owner_operation updateStakeThreshold 2000 >/dev/null
+"${POA[@]}" owner_operation updateQuorum 2 3 >/dev/null
 echo "service manager: $SM"
 
 # --- 4. deploy PriimeVault --------------------------------------------------
@@ -208,9 +292,9 @@ NAV_CID=$(ipfs add -Q --pin=true "$FORKDIR/vault_nav.wasm")
 AGG_CID=$(ipfs add -Q --pin=true "$FORKDIR/aggregator.wasm")
 echo "vault-nav=$NAV_CID aggregator=$AGG_CID"
 
-CLI=(docker run --rm --network host -w /data -v "$HOME_DIR:/data" "$WAVS_IMG" wavs-cli service \
+CLI=(docker run --rm --network host -w /data -v "$CLI_HOME:/data" "$WAVS_IMG" wavs-cli service \
   --json true --home /data --file /data/service.json --ipfs-gateway "$GATEWAY")
-rm -f "$HOME_DIR/service.json"
+rm -f "$CLI_HOME/service.json"
 START=$(date +%s%N); END=$(( START + 3600000000000 ))
 "${CLI[@]}" init --name priime-vault >/dev/null
 WID=$("${CLI[@]}" workflow add | jq -r '.workflow_id')
@@ -226,7 +310,7 @@ jq -n \
   --arg morpho_address "$MORPHO" --arg market_id "$MKT" --arg lltv "$LLTV" \
   --arg pool_address "$POOL" --arg twap_window_secs "$TWAP_WINDOW" \
   --arg inputs_block_lag "$BLOCK_LAG" \
-  '$ARGS.named' > "$HOME_DIR/component-config.json"
+  '$ARGS.named' > "$CLI_HOME/component-config.json"
 "${CLI[@]}" workflow component --id "$WID" config --config-file /data/component-config.json >/dev/null
 "${CLI[@]}" workflow submit    --id "$WID" set-aggregator >/dev/null
 "${CLI[@]}" workflow submit    --id "$WID" component set-source-uri --uri "ipfs://$AGG_CID" >/dev/null
@@ -234,36 +318,77 @@ jq -n \
 "${CLI[@]}" workflow submit    --id "$WID" component config --values "$CHAIN=$VAULT" >/dev/null
 "${CLI[@]}" manager set-evm --chain "$CHAIN" --address "$SM" >/dev/null
 "${CLI[@]}" validate >/dev/null || true   # warns on registry availability; IPFS-sourced, safe
-SVC_CID=$(ipfs add -Q --pin=true "$HOME_DIR/service.json")
+SVC_CID=$(ipfs add -Q --pin=true "$CLI_HOME/service.json")
+# Every node reads the SAME service.json from IPFS on start, but wavs-cli's
+# init also writes a local copy into whichever home it ran from. Copy that
+# assembled document to the other node homes so their CLI/deploy-service
+# invocations see the same fixture.
+for i in $(seq 1 $((NODE_COUNT - 1))); do
+  cp "$CLI_HOME/service.json" "${HOME_DIRS[$i]}/service.json"
+  cp "$CLI_HOME/component-config.json" "${HOME_DIRS[$i]}/component-config.json"
+done
 echo "service cid: $SVC_CID"
 
-# --- 7. register the operator (ephemeral keys) ------------------------------
-say "register operator + signing key"
-[ "$(cast code "$SIGNING" --rpc-url "$RPC")" = "0x" ] \
-  || { echo "FATAL: signing key $SIGNING has code on chain $CHAIN_ID"; exit 1; }
-# The operator pays for its own updateOperatorSigningKey below, so it needs
-# gas. On the fork that is anvil_setBalance; on a live chain it is a real
-# transfer from the treasury key. funding.operator_gas_wei is per target.
-fund_account gas "$OPERATOR" "$OPERATOR_GAS"
-cast send "$SM" "registerOperator(address,uint256)" "$OPERATOR" 1000 --private-key "$K0" --rpc-url "$RPC" >/dev/null
-# Signing-key registration signs the raw keccak (no EIP-191 prefix) -> --no-hash.
-ENC=$(cast abi-encode "f(address)" "$OPERATOR"); MSG=$(cast keccak "$ENC")
-SIG=$(cast wallet sign --no-hash --mnemonic "$NODE_MNEMONIC" --mnemonic-index 1 "$MSG")
-cast send "$SM" "updateOperatorSigningKey(address,bytes)" "$SIGNING" "$SIG" --private-key "$K_OP" --rpc-url "$RPC" >/dev/null
+# --- 7. register the three operators (ephemeral keys, one per node) ---------
+say "register $NODE_COUNT operators + signing keys"
+for i in $(seq 0 $((NODE_COUNT - 1))); do
+  op="${OPERATORS[$i]}"; kop="${K_OPS[$i]}"; sign="${SIGNINGS[$i]}"; m="${NODE_MNEMONICS[$i]}"
+  [ "$(cast code "$sign" --rpc-url "$RPC")" = "0x" ] \
+    || { echo "FATAL: signing key $sign for node $((i+1)) has code on chain $CHAIN_ID"; exit 1; }
+  # Each operator pays for its own updateOperatorSigningKey below, so it needs
+  # gas. On the fork that is anvil_setBalance; on a live chain it is a real
+  # transfer from the treasury key. funding.operator_gas_wei is per target
+  # and applies to each operator independently.
+  fund_account gas "$op" "$OPERATOR_GAS"
+  cast send "$SM" "registerOperator(address,uint256)" "$op" 1000 --private-key "$K0" --rpc-url "$RPC" >/dev/null
+  # Signing-key registration signs the raw keccak (no EIP-191 prefix) -> --no-hash.
+  ENC=$(cast abi-encode "f(address)" "$op"); MSG=$(cast keccak "$ENC")
+  SIG=$(cast wallet sign --no-hash --mnemonic "$m" --mnemonic-index 1 "$MSG")
+  cast send "$SM" "updateOperatorSigningKey(address,bytes)" "$sign" "$SIG" --private-key "$kop" --rpc-url "$RPC" >/dev/null
+  echo "  operator $((i+1))/$NODE_COUNT: $op (signing $sign)"
+done
 cast send "$SM" "setServiceURI(string)" "ipfs://$SVC_CID" --private-key "$K0" --rpc-url "$RPC" >/dev/null
-echo "operator $OPERATOR registered, signing key $SIGNING"
 
-# --- 8. start the node ------------------------------------------------------
-say "start WAVS node"
-docker rm -f "$NODE" >/dev/null 2>&1 || true
-docker run -d --name "$NODE" --network host -v "$HOME_DIR:/root/wavs" "$WAVS_IMG" \
-  wavs --home /root/wavs --ipfs-gateway "$GATEWAY" --host 0.0.0.0 --log-level info >/dev/null
-for i in $(seq 1 30); do curl -sf http://localhost:8041/services >/dev/null 2>&1 && break; sleep 1; done
+# --- 8. start the three WAVS nodes (libp2p bootstrap topology) --------------
+# Node 1 is the libp2p bootstrap (`bootstrap_nodes = []`). We start it, wait
+# for the "Using P2P identity derived from signing_mnemonic (peer_id: ...)"
+# line, and use that PeerId to write nodes 2 and 3's wavs.toml with a
+# multiaddr pointing at node 1. Same procedure hodlers-app/DEPLOY.md §3-4
+# uses on Hetzner, collapsed here to one host via 127.0.0.1.
+say "start bootstrap node (${NODE_NAMES[0]})"
+start_node 0
 
-say "deploy service to node"
-docker run --rm --network host -v "$HOME_DIR:/data" "$WAVS_IMG" wavs-cli deploy-service \
-  --service-uri "ipfs://$SVC_CID" --log-level=info --data /data/.docker --home /data \
-  --wavs-endpoint http://localhost:8041 --ipfs-gateway "$GATEWAY"
+# libp2p emits its identity once, near the top of the log. Poll until it
+# lands or give up (peer-id derivation is fast, so 20s is generous).
+PEER_ID=""
+for _ in $(seq 1 40); do
+  # WAVS peer_ids use secp256k1 keys (prefix "16Uiu2HAm"); regex accepts any
+  # multibase-encoded PeerId of the length libp2p emits (~52 chars).
+  line=$(docker logs "${NODE_NAMES[0]}" 2>&1 | grep -oE 'peer_id: [A-Za-z0-9]{40,64}' | head -1)
+  if [ -n "$line" ]; then
+    PEER_ID="${line#peer_id: }"
+    break
+  fi
+  sleep 0.5
+done
+[ -n "$PEER_ID" ] || { echo "FATAL: could not read peer_id from ${NODE_NAMES[0]} logs (check: docker logs ${NODE_NAMES[0]})"; exit 1; }
+BOOTSTRAP_ADDR="/ip4/127.0.0.1/tcp/${NODE_P2P_PORTS[0]}/p2p/$PEER_ID"
+echo "  bootstrap: $BOOTSTRAP_ADDR"
+
+say "start follower nodes (${NODE_NAMES[1]}, ${NODE_NAMES[2]})"
+for i in $(seq 1 $((NODE_COUNT - 1))); do
+  write_wavs_toml "$i" "[\"$BOOTSTRAP_ADDR\"]"
+  start_node "$i"
+done
+
+say "deploy service to each node"
+for i in $(seq 0 $((NODE_COUNT - 1))); do
+  name="${NODE_NAMES[$i]}"; port="${NODE_PORTS[$i]}"; home="${HOME_DIRS[$i]}"
+  docker run --rm --network host -v "$home:/data" "$WAVS_IMG" wavs-cli deploy-service \
+    --service-uri "ipfs://$SVC_CID" --log-level=info --data /data/.docker --home /data \
+    --wavs-endpoint "http://localhost:$port" --ipfs-gateway "$GATEWAY" >/dev/null
+  echo "  $name: service deployed"
+done
 
 # --- 9. wait for the first cron strike --------------------------------------
 # The budget is per target because the cadence is: 90s covers the fork's
@@ -277,14 +402,21 @@ for i in $(seq 1 "$STRIKE_TRIES"); do
   if [ "$UPDATES" != "0" ]; then
     NAV=$(cast call "$VAULT" 'nav()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
     IB=$(cast call "$VAULT" 'lastInputsBlock()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
-    jq -n --arg vault "$VAULT" --arg sm "$SM" --arg strategist "$STRATEGIST" --arg node "$NODE" --arg template_workflow_id "$WID" \
+    # Emit the whole node list in vault-service.json so downstream scripts
+    # (loop-server, enter-loop.sh) can address any of them; keep the "node"
+    # field for compatibility with the single-node consumers.
+    NODE_LIST=$(printf '%s\n' "${NODE_NAMES[@]}" | jq -R . | jq -s .)
+    jq -n --arg vault "$VAULT" --arg sm "$SM" --arg strategist "$STRATEGIST" \
+      --arg node "${NODE_NAMES[0]}" --argjson nodes "$NODE_LIST" \
+      --arg template_workflow_id "$WID" \
       --arg target "$TARGET" --arg chain_id "$CHAIN_ID" \
-      '{vault: $vault, service_manager: $sm, strategist: $strategist, node: $node, template_workflow_id: $template_workflow_id, target: $target, chain_id: $chain_id}' \
+      --arg quorum_threshold 2 --arg quorum_total 3 \
+      '{vault: $vault, service_manager: $sm, strategist: $strategist, node: $node, nodes: $nodes, template_workflow_id: $template_workflow_id, target: $target, chain_id: $chain_id, quorum_threshold: ($quorum_threshold|tonumber), quorum_total: ($quorum_total|tonumber)}' \
       > "$FORKDIR/vault-service.json"
     echo "SUCCESS: updateCount=$UPDATES nav=$NAV inputsBlock=$IB"
-    echo "vault=$VAULT  serviceManager=$SM  node=$NODE (docker logs $NODE)"
+    echo "vault=$VAULT  serviceManager=$SM  nodes=${NODE_NAMES[*]} (docker logs ${NODE_NAMES[0]})"
     exit 0
   fi
   echo "  t+$((i*5))s: no strike yet"
 done
-echo "FAILED: no strike landed; inspect: docker logs $NODE"; exit 1
+echo "FAILED: no strike landed; inspect: docker logs ${NODE_NAMES[0]} (or ${NODE_NAMES[1]}, ${NODE_NAMES[2]})"; exit 1
