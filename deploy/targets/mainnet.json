@@ -1,0 +1,43 @@
+{
+  "_comment": "TARGET=mainnet: Base itself, chain id 8453. The Morpho Blue USDe/USDC market, the tokens, the Aerodrome pool and the strategy parameters are the SAME as TARGET=fork and stay in fork.config.json, because the fork is a fork of this chain at a pinned block. What changes is that nothing here is free and nothing here is guessed: no impersonation, no minted gas, no forced blocks, and no defaults for anything secret. Every private key and the RPC URL come from the environment, and a missing one is fatal (same rule as required() in apps/loop-server/src/env.ts). Nothing in this file is a secret; nothing in this file may ever become one.",
+  "name": "mainnet",
+  "description": "Base mainnet",
+  "protocol_config": "fork.config.json",
+
+  "chain_id": 8453,
+  "chain": {
+    "_comment": "kind=live means deploy/target.sh takes the no-cheat-code branch everywhere: fund_account() does real transfers, mine_or_wait() waits for a real block, and there is no anvil.pid to check.",
+    "kind": "live"
+  },
+  "state_dir": ".mainnet",
+
+  "rpc": {
+    "_comment": "No default, deliberately. A defaulted RPC URL is how a live run ends up pointed somewhere nobody chose. Set PRIIME_RPC_URL in the environment and do NOT commit it: provider URLs usually carry an API key in the path. If your provider serves websockets on a different host, set PRIIME_WS_URL too; otherwise vault-service.sh derives wss:// from this URL.",
+    "mode": "env",
+    "url_env": "PRIIME_RPC_URL"
+  },
+
+  "service": {
+    "_comment": "Hourly, not the fork's 10 seconds, and this is a deliberate choice rather than an oversight. A NAV strike is an on-chain submission: */10 * * * * * is 8,640 transactions a day, each paying Base gas, to re-mark a NAV that moves with Morpho interest accrual and a 30-minute Aerodrome TWAP. Hourly is the starting default. Change it here, per target, once someone has priced a strike and decided what NAV staleness the vault can carry; the fork cadence must never be inherited implicitly. The two timeouts follow from it: 4500s (75 minutes) is one hourly cron period plus slack, so bring-up waits for a real strike instead of declaring failure 90 seconds in. Shorten them if you shorten the cadence.",
+    "cron_schedule": "0 0 * * * *",
+    "first_strike_timeout_secs": 4500,
+    "strike_timeout_secs": 4500
+  },
+
+  "keys": {
+    "_comment": "Environment only. No mnemonic, no default, no fallback. Each role names an env var that must hold a 0x-prefixed 32-byte private key; a missing or malformed value stops the run before anything is signed. owner deploys and owns the service manager and the vault, strategist is the only account vault.execute() accepts, depositor is the account whose USDC enters the vault, and treasury is the funded account fund_account() transfers ETH and USDC from. They may be four distinct keys or fewer; that is an operational decision, not a config one.",
+    "source": "env",
+    "roles": {
+      "owner": "PRIIME_OWNER_KEY",
+      "strategist": "PRIIME_STRATEGIST_KEY",
+      "depositor": "PRIIME_DEPOSITOR_KEY",
+      "treasury": "PRIIME_TREASURY_KEY"
+    }
+  },
+
+  "funding": {
+    "_comment": "Real transfers from the treasury key, which must already hold the ETH and the USDC. fund_account() reads the balance first and fails loudly on a shortfall rather than half-funding an account. operator_gas_wei is 0.002 ETH: Base fees are small, the operator key only pays for its own signing-key registration, and it is ephemeral per run, so anything left over is stranded.",
+    "mode": "transfer",
+    "operator_gas_wei": "2000000000000000"
+  }
+}

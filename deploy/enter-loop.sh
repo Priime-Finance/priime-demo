@@ -22,29 +22,34 @@
 # All strategy numbers come from fork.config.json (LOOP-03), never hardcoded.
 # Decimals: USDC 6, USDe 18, Morpho oracle price scale 1e24 (36 + 6 - 18).
 #
+# Target-aware: the market, the route and every strategy number are the same
+# on TARGET=fork and TARGET=mainnet, because the fork IS Base at a pinned
+# block. The one thing that is not the same is step 2, where the depositor's
+# USDC comes from: impersonation on the fork, a real transfer on Base. That
+# branch lives in fund_account() in deploy/target.sh and nowhere else.
+#
 # Prereqs:
-#   deploy/fork.sh                                # pinned Base fork on :8545
+#   deploy/fork.sh                                # TARGET=fork only: pinned Base fork on :8545
 #   deploy/vault-service.sh                       # service + node + first strike
+#   TARGET=mainnet: PRIIME_RPC_URL + the role keys named in
+#                   deploy/targets/mainnet.json, with a treasury holding the
+#                   deposit in USDC.
 #
 # Re-runnable against a fresh vault-service.sh run (one seed per vault).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # priime-demo
 DEPLOY="$ROOT/deploy"
-CFG="$DEPLOY/fork.config.json"
-FORKDIR="$DEPLOY/.fork"
+source "$DEPLOY/target.sh"                        # TARGET, RPC, STATE_DIR, say(), cfg(), helpers
+FORKDIR="$STATE_DIR"
 SVC="$FORKDIR/vault-service.json"
-MNEMONIC="test test test test test test test test test test test junk"   # anvil default
 
-say() { echo; echo "== $* =="; }
-cfg() { jq -r "$1" "$CFG"; }
 ibc() { echo "$1" | bc; }                          # integer bc (big-number math)
 fbc() { echo "scale=$1; $2" | bc; }                # fixed-scale bc (display only)
 
 # --- 0. config + keys -------------------------------------------------------
-FORK_PORT="${FORK_PORT:-$(cfg .fork.fork_port)}"
-FORK_CHAIN_ID=$(cfg .fork.fork_chain_id)
-RPC="http://localhost:$FORK_PORT"
+FORK_PORT="$RPC_PORT"
+FORK_CHAIN_ID="$CHAIN_ID"
 
 USDC=$(cfg .tokens.usdc.address)
 USDE=$(cfg .tokens.usde.address)
@@ -53,6 +58,7 @@ MKT=$(cfg .morpho.market.id)
 ORACLE=$(cfg .morpho.market.params.oracle)
 IRM=$(cfg .morpho.market.params.irm)
 LLTV=$(cfg .morpho.market.params.lltv)             # 1e18 scale
+POOL=$(cfg .swap_route.pool)                       # read by pool_p() below
 ROUTER=$(cfg .swap_route.router)
 TICK_SPACING=$(cfg .swap_route.tick_spacing)
 MKT_PARAMS="($USDC,$USDE,$ORACLE,$IRM,$LLTV)"      # Morpho MarketParams tuple
@@ -75,23 +81,21 @@ LLTV6=$(ibc "$LLTV / 1000000000000")               # LLTV in 1e6
 # lltv / health_factor_floor. Config-derived; no separate margin knob.
 U6=$(ibc "$LLTV6 * 1000000 / $HF6")
 
-# Mnemonic accounts originate transactions only: 4 = strategist, 5 = depositor.
-key()  { cast wallet private-key --mnemonic "$MNEMONIC" --mnemonic-index "$1"; }
-addr() { cast wallet address     --mnemonic "$MNEMONIC" --mnemonic-index "$1"; }
-STRATEGIST=$(addr 4); K_STRAT=$(key 4)
-DEPOSITOR=$(addr 5);  K_DEP=$(key 5)
+# Role keys come from the target: mnemonic indices on the fork (where accounts
+# originate transactions only), named env vars on a live chain.
+STRATEGIST=$(role_addr strategist); K_STRAT=$(role_key strategist)
+DEPOSITOR=$(role_addr depositor);   K_DEP=$(role_key depositor)
 
-# --- 1. preconditions: fork + vault service must be live --------------------
-say "preconditions"
-[ -f "$FORKDIR/anvil.pid" ] && kill -0 "$(cat "$FORKDIR/anvil.pid")" 2>/dev/null \
-  || { echo "FATAL: no running fork; start it with: deploy/fork.sh"; exit 1; }
-[ "$(cast chain-id --rpc-url "$RPC")" = "$FORK_CHAIN_ID" ] \
-  || { echo "FATAL: chainId mismatch on :$FORK_PORT; is this the fork.sh anvil?"; exit 1; }
+# --- 1. preconditions: chain + vault service must be live -------------------
+say "preconditions (TARGET=$TARGET, chain $CHAIN_ID)"
+require_chain_up            # fork: anvil pidfile + chain id; live: chain id
 [ -f "$SVC" ] || { echo "FATAL: $SVC missing; run deploy/vault-service.sh first"; exit 1; }
 VAULT=$(jq -r .vault "$SVC")
 SM=$(jq -r .service_manager "$SVC")
 [ "$(jq -r .strategist "$SVC" | tr 'A-F' 'a-f')" = "$(echo "$STRATEGIST" | tr 'A-F' 'a-f')" ] \
-  || { echo "FATAL: service strategist != mnemonic index 4"; exit 1; }
+  || { echo "FATAL: service strategist != this target's strategist role"; exit 1; }
+require_gas strategist "$STRATEGIST"   # no-op on the fork; anvil pre-funds
+require_gas depositor  "$DEPOSITOR"
 [ "$(cast code "$VAULT" --rpc-url "$RPC")" != "0x" ] \
   || { echo "FATAL: vault $VAULT has no code; rerun deploy/vault-service.sh"; exit 1; }
 U0=$(cast call "$VAULT" 'updateCount()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
@@ -101,15 +105,16 @@ U0=$(cast call "$VAULT" 'updateCount()(uint256)' --rpc-url "$RPC" | awk '{print 
 echo "vault $VAULT live: updateCount=$U0 (cron strikes landing)"
 
 # --- 2. seed capital: fund depositor, requestDeposit ------------------------
-# FORK-TRACK-ONLY FUNDING SCAFFOLDING: the depositor is funded by anvil-
-# impersonating Morpho Blue itself (largest USDC holder at the pinned block).
-# Never a mainnet pattern.
-say "seed depositor with $DEPOSIT_USDC USDC (fork-only impersonation) + requestDeposit"
-cast rpc anvil_impersonateAccount "$MORPHO" --rpc-url "$RPC" >/dev/null
-cast rpc anvil_setBalance "$MORPHO" 0xde0b6b3a7640000 --rpc-url "$RPC" >/dev/null
-cast send "$USDC" "transfer(address,uint256)(bool)" "$DEPOSITOR" "$DEPOSIT" \
-  --from "$MORPHO" --unlocked --rpc-url "$RPC" >/dev/null
-cast rpc anvil_stopImpersonatingAccount "$MORPHO" --rpc-url "$RPC" >/dev/null
+# Where the depositor's USDC comes from is the ONE genuinely target-specific
+# step in this script, and it is fenced off in fund_account() (deploy/target.sh):
+#   fork     FORK-TRACK-ONLY FUNDING SCAFFOLDING. anvil-impersonates the
+#            pinned block's largest USDC holder (Morpho Blue itself) and takes
+#            the deposit. Never a mainnet pattern.
+#   mainnet  a plain transfer from the target's funded treasury key, which
+#            must already hold the USDC or the run stops.
+# Everything after this line is identical on both.
+say "seed depositor with $DEPOSIT_USDC USDC (TARGET=$TARGET funding) + requestDeposit"
+fund_account "$USDC" "$DEPOSITOR" "$DEPOSIT"
 cast send "$USDC" "approve(address,uint256)(bool)" "$VAULT" "$DEPOSIT" --private-key "$K_DEP" --rpc-url "$RPC" >/dev/null
 cast send "$VAULT" "requestDeposit(uint256,address,address)" "$DEPOSIT" "$DEPOSITOR" "$DEPOSITOR" \
   --private-key "$K_DEP" --rpc-url "$RPC" >/dev/null
@@ -121,9 +126,14 @@ echo "pending deposit escrowed: $PENDING"
 # The running pipeline attests the pre-fold NAV (0: empty position, escrow
 # excluded) and the zero-supply fulfillment folds the deposit in. No script
 # signature anywhere: this is the live service settling the vault.
-say "await bootstrap strike (real pipeline fulfills the deposit)"
+#
+# The wait budget follows the target's cadence (targets/<target>.json):
+# 60s covers the fork's 10-second cron many times over, an hourly mainnet
+# cron needs more than an hour.
+STRIKE_TRIES=$(( $(tcfg_req .service.strike_timeout_secs) / 5 ))
+say "await bootstrap strike (real pipeline fulfills the deposit, up to $((STRIKE_TRIES * 5))s)"
 FULFILLED=0
-for i in $(seq 1 12); do
+for i in $(seq 1 "$STRIKE_TRIES"); do
   sleep 5
   PENDING=$(cast call "$VAULT" 'totalPendingDepositAssets()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
   if [ "$PENDING" = "0" ]; then FULFILLED=1; break; fi
@@ -298,10 +308,10 @@ echo "escrow floor       : idle USDC $IDLE >= floor $FLOOR"
 # share math, so the attested NAV must land within 10 bps of the position
 # value read here at oracle par (the TWAP sits just under peg at the pinned
 # state; the bound only widens under a real depeg).
-say "await post-entry strike (NAV re-marks to the levered position)"
+say "await post-entry strike (NAV re-marks to the levered position, up to $((STRIKE_TRIES * 5))s)"
 ENTRY_BLOCK=$(cast block-number --rpc-url "$RPC")
 REMARKED=0
-for i in $(seq 1 12); do
+for i in $(seq 1 "$STRIKE_TRIES"); do
   sleep 5
   IB=$(cast call "$VAULT" 'lastInputsBlock()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
   if [ "$(ibc "$IB >= $ENTRY_BLOCK")" = "1" ]; then REMARKED=1; break; fi

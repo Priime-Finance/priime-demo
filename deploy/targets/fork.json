@@ -1,0 +1,43 @@
+{
+  "_comment": "TARGET=fork (the default): an anvil fork OF BASE MAINNET at the block pinned in fork.config.json, served on chain id 31337. Everything that matters -- the Morpho Blue USDe/USDC market, the tokens, the Aerodrome route, the strategy parameters -- is shared with TARGET=mainnet and lives in fork.config.json, because this fork IS Base. Only what is genuinely local is below. This file reproduces the pre-TARGET behaviour of the deploy scripts exactly; changing a value here changes what the fork run does.",
+  "name": "fork",
+  "description": "anvil fork of Base mainnet at a pinned block",
+  "protocol_config": "fork.config.json",
+
+  "chain_id": 31337,
+  "chain": {
+    "_comment": "kind=anvil-fork is what unlocks the cheat-code branches in deploy/target.sh (impersonation funding, anvil_setBalance, anvil_mine) and the anvil.pid liveness check. No other target may set it.",
+    "kind": "anvil-fork"
+  },
+  "state_dir": ".fork",
+
+  "rpc": {
+    "_comment": "The anvil we start ourselves. FORK_PORT has always been the override and still is; apps/loop-server defaults VAULT_SERVICE_JSON to deploy/.fork/vault-service.json, which is why state_dir stays .fork.",
+    "mode": "local",
+    "port_env": "FORK_PORT",
+    "port": 8545
+  },
+
+  "service": {
+    "_comment": "Every 10 seconds. Right for a fork: blocks are free, gas is free, and a demo has to show an attested strike inside a minute. This number does not travel to a live chain; see targets/mainnet.json. The two timeouts are how long the scripts wait for a strike to land, and they follow the cadence: 90s is vault-service.sh's original 18 x 5s budget, 60s is enter-loop.sh's original 12 x 5s.",
+    "cron_schedule": "*/10 * * * * *",
+    "first_strike_timeout_secs": 90,
+    "strike_timeout_secs": 60
+  },
+
+  "keys": {
+    "_comment": "The well-known anvil mnemonic: public, worthless, pre-funded on every anvil. Override with FORK_MNEMONIC if you want a different one. The role -> account-index map is the layout the scripts have always used: index 0 funds and owns, 4 is the strategist, 5 is the depositor. Mnemonic accounts on a Base fork originate transactions only (the well-known addresses carry EIP-7702 delegation code, which is inert for origination but makes them unusable as ECDSA signers, hence the ephemeral node keys in vault-service.sh). treasury shares index 0 and is unused on this target: fork funding impersonates instead.",
+    "source": "mnemonic",
+    "mnemonic_env": "FORK_MNEMONIC",
+    "mnemonic_default": "test test test test test test test test test test test junk",
+    "roles": { "owner": 0, "strategist": 4, "depositor": 5, "treasury": 0 }
+  },
+
+  "funding": {
+    "_comment": "FORK-TRACK-ONLY FUNDING SCAFFOLDING, fenced behind fund_account() in deploy/target.sh. Tokens are taken by anvil-impersonating the largest USDC holder at the pinned block, which happens to be Morpho Blue itself; the address is read from fork.config.json via token_whale_config_path rather than duplicated here. Gas is conjured with anvil_setBalance. Never a mainnet pattern.",
+    "mode": "impersonate",
+    "token_whale_config_path": ".morpho.blue",
+    "impersonation_gas_wei": "0xde0b6b3a7640000",
+    "operator_gas_wei": "0xde0b6b3a7640000"
+  }
+}

@@ -8,9 +8,15 @@
 # the fork. All addresses/parameters come from fork.config.json — downstream
 # scripts (loop entry, vault deploy) consume the same file, not constants.
 #
+# This script is the ONE piece of the deploy set that is inherently anvil:
+# starting a fork is the thing it does. It refuses to run against any target
+# whose chain is live, because on Base the chain is already up and the
+# equivalent of this script is reading the same market with `cast`.
+#
 # Env:
+#   TARGET         deploy target (default: fork; only anvil-fork kinds apply)
 #   BASE_RPC_URL   upstream Base RPC to fork from (default: https://mainnet.base.org)
-#   FORK_PORT      local anvil port (default: from fork.config.json, 8545)
+#   FORK_PORT      local anvil port (default: from deploy/targets/fork.json, 8545)
 #
 # Re-runnable: kills any anvil it previously started (pidfile) and restarts.
 # Leaves the fork running for subsequent scripts; logs in deploy/.fork/.
@@ -18,19 +24,20 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # priime-demo
 DEPLOY="$ROOT/deploy"
-CFG="$DEPLOY/fork.config.json"
-FORKDIR="$DEPLOY/.fork"
-mkdir -p "$FORKDIR"
+source "$DEPLOY/target.sh"                        # TARGET, RPC, CHAIN_ID, STATE_DIR, say(), cfg()
+FORKDIR="$STATE_DIR"
 
-say() { echo; echo "== $* =="; }
-cfg() { jq -r "$1" "$CFG"; }
+[ "$IS_FORK" = "1" ] || {
+  echo "FATAL: TARGET=$TARGET is a live chain; there is no fork to start."
+  echo "       Run deploy/vault-service.sh directly against it (see deploy/targets/$TARGET.json)."
+  exit 1
+}
 
 # --- 0. config --------------------------------------------------------------
 BASE_RPC_URL="${BASE_RPC_URL:-$(cfg .fork.rpc_url_default)}"
 FORK_BLOCK=$(cfg .fork.block_number)
-FORK_CHAIN_ID=$(cfg .fork.fork_chain_id)
-FORK_PORT="${FORK_PORT:-$(cfg .fork.fork_port)}"
-RPC="http://localhost:$FORK_PORT"
+FORK_CHAIN_ID="$CHAIN_ID"
+FORK_PORT="$RPC_PORT"
 
 MORPHO=$(cfg .morpho.blue)
 MKT=$(cfg .morpho.market.id)

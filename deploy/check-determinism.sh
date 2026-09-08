@@ -19,21 +19,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # priime-demo
 DEPLOY="$ROOT/deploy"
-CFG="$DEPLOY/fork.config.json"
-FORKDIR="$DEPLOY/.fork"
+source "$DEPLOY/target.sh"                        # TARGET, RPC, STATE_DIR, say(), cfg()
+FORKDIR="$STATE_DIR"
 HOME_DIR="$FORKDIR/wavs-vault"
 WAVS_IMG="ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15"
 NODE="wavs-vault"
 
-say() { echo; echo "== $* =="; }
-cfg() { jq -r "$1" "$CFG"; }
-FORK_PORT="${FORK_PORT:-$(cfg .fork.fork_port)}"
-RPC="http://localhost:$FORK_PORT"
-
 # --- preconditions -----------------------------------------------------------
-say "preconditions"
-[ -f "$FORKDIR/anvil.pid" ] && kill -0 "$(cat "$FORKDIR/anvil.pid")" 2>/dev/null \
-  || { echo "FATAL: no running fork; start it with: deploy/fork.sh"; exit 1; }
+say "preconditions (TARGET=$TARGET, chain $CHAIN_ID)"
+require_chain_up            # fork: anvil pidfile + chain id; live: chain id
 [ -f "$HOME_DIR/component-config.json" ] \
   || { echo "FATAL: no component config; run deploy/vault-service.sh first"; exit 1; }
 docker inspect "$NODE" >/dev/null 2>&1 \
