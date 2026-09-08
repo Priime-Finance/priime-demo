@@ -87,11 +87,16 @@ OPERATOR_GAS=$(tcfg_req .funding.operator_gas_wei)
 # strategist is the only account vault.execute() accepts.
 K0=$(role_key owner)
 STRATEGIST=$(role_addr strategist)
-# One ephemeral mnemonic PER NODE: operator = index 0, signing key = index 1.
+# One ephemeral mnemonic PER NODE. HD indices:
+#   0: operator EOA (registered on the service manager, pays for its own
+#      updateOperatorSigningKey tx)
+#   1: signing key (WAVS signs envelopes with this; verified on-chain)
+#   2: aggregator submitter (sends handleSignedEnvelope; per-node so the
+#      three aggregators do not race a shared nonce for K0)
 # Three fresh, code-free EOAs per node; on a live chain they still have to be
 # funded (see fund_account below). Arrays are 0-indexed but node ids are
 # 1-indexed in filenames and container names.
-declare -a NODE_MNEMONICS OPERATORS K_OPS SIGNINGS
+declare -a NODE_MNEMONICS OPERATORS K_OPS SIGNINGS AGG_ADDRS K_AGGS
 for i in $(seq 0 $((NODE_COUNT - 1))); do
   m=$(cast wallet new-mnemonic | sed -n '/Phrase:/{n;p;}' | xargs)
   [ "$(echo "$m" | wc -w | xargs)" = "12" ] || { echo "FATAL: could not generate node mnemonic #$((i+1))"; exit 1; }
@@ -99,6 +104,8 @@ for i in $(seq 0 $((NODE_COUNT - 1))); do
   OPERATORS[$i]=$(cast wallet address --mnemonic "$m" --mnemonic-index 0)
   K_OPS[$i]=$(cast wallet private-key --mnemonic "$m" --mnemonic-index 0)
   SIGNINGS[$i]=$(cast wallet address --mnemonic "$m" --mnemonic-index 1)
+  AGG_ADDRS[$i]=$(cast wallet address --mnemonic "$m" --mnemonic-index 2)
+  K_AGGS[$i]=$(cast wallet private-key --mnemonic "$m" --mnemonic-index 2)
 done
 
 # --- 1. preconditions -------------------------------------------------------
@@ -198,7 +205,7 @@ host = "0.0.0.0"
 dev_endpoints_enabled = true
 signing_mnemonic = "${NODE_MNEMONICS[$i]}"
 mcp_chain_credential = "$K0"
-aggregator_evm_credential = "$K0"
+aggregator_evm_credential = "${K_AGGS[$i]}"
 
 # libp2p peer discovery over the loopback: node 1 is the bootstrap
 # (bootstrap_nodes=[]) and nodes 2/3 dial its multiaddr. Every WAVS node
@@ -335,17 +342,20 @@ for i in $(seq 0 $((NODE_COUNT - 1))); do
   op="${OPERATORS[$i]}"; kop="${K_OPS[$i]}"; sign="${SIGNINGS[$i]}"; m="${NODE_MNEMONICS[$i]}"
   [ "$(cast code "$sign" --rpc-url "$RPC")" = "0x" ] \
     || { echo "FATAL: signing key $sign for node $((i+1)) has code on chain $CHAIN_ID"; exit 1; }
+  agg="${AGG_ADDRS[$i]}"
   # Each operator pays for its own updateOperatorSigningKey below, so it needs
-  # gas. On the fork that is anvil_setBalance; on a live chain it is a real
-  # transfer from the treasury key. funding.operator_gas_wei is per target
-  # and applies to each operator independently.
-  fund_account gas "$op" "$OPERATOR_GAS"
+  # gas. Same funding for the aggregator submitter, which pays for every
+  # handleSignedEnvelope tx over the loop's lifetime. On the fork that is
+  # anvil_setBalance; on a live chain it is a real transfer from the treasury
+  # key. funding.operator_gas_wei is per target and applies per key.
+  fund_account gas "$op"  "$OPERATOR_GAS"
+  fund_account gas "$agg" "$OPERATOR_GAS"
   cast send "$SM" "registerOperator(address,uint256)" "$op" 1000 --private-key "$K0" --rpc-url "$RPC" >/dev/null
   # Signing-key registration signs the raw keccak (no EIP-191 prefix) -> --no-hash.
   ENC=$(cast abi-encode "f(address)" "$op"); MSG=$(cast keccak "$ENC")
   SIG=$(cast wallet sign --no-hash --mnemonic "$m" --mnemonic-index 1 "$MSG")
   cast send "$SM" "updateOperatorSigningKey(address,bytes)" "$sign" "$SIG" --private-key "$kop" --rpc-url "$RPC" >/dev/null
-  echo "  operator $((i+1))/$NODE_COUNT: $op (signing $sign)"
+  echo "  operator $((i+1))/$NODE_COUNT: op=$op signing=$sign agg=$agg"
 done
 cast send "$SM" "setServiceURI(string)" "ipfs://$SVC_CID" --private-key "$K0" --rpc-url "$RPC" >/dev/null
 
