@@ -121,6 +121,8 @@ pushd "$ROOT/apps/replay-ui" >/dev/null
 [ -d node_modules ] || pnpm install >/dev/null 2>&1
 LOOP_SERVER_URL="http://127.0.0.1:$LS_PORT" \
 LOOP_SERVER_TOKEN="$TOKEN" \
+NEXT_PUBLIC_RPC_URL="http://127.0.0.1:8545" \
+NEXT_PUBLIC_CHAIN_ID="31337" \
   nohup pnpm dev -- -p "$UI_PORT" > "$LOGDIR/replay-ui.log" 2>&1 &
 echo $! > "$PIDFILE_UI"
 popd >/dev/null
@@ -138,13 +140,23 @@ cat <<EOF
 Loop server   : http://127.0.0.1:$LS_PORT
 Replay UI     : http://127.0.0.1:$UI_PORT
 
-Directory     : http://127.0.0.1:$UI_PORT/vault  (scroll to Live loops, use the form)
+Composer      : http://127.0.0.1:$UI_PORT/build   ← pick USDe/USDC, Install defaults, Review & publish
+Directory     : http://127.0.0.1:$UI_PORT/vault
 Raw journals  : http://127.0.0.1:$UI_PORT/api/loops/<id>/journals?limit=5
+
+Wallet (one-time in MetaMask/Brave Wallet):
+  Network     : Custom RPC http://127.0.0.1:8545, chain id 31337
+  Import key  : 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+                (anvil #1 → 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, 10000 ETH on the fork)
 
 Logs          : $LOGDIR/{loop-server,replay-ui,ipfs}.log
 Stop it all   : bash $0 stop
 EOF
 
-say "opening $BROWSER"
-setsid "$BROWSER" --new-window "http://127.0.0.1:$UI_PORT/vault" >/dev/null 2>&1 < /dev/null &
-disown || true
+if [ "${OPEN_BROWSER:-1}" = "1" ]; then
+  say "opening $BROWSER on /build"
+  setsid "$BROWSER" --new-window "http://127.0.0.1:$UI_PORT/build" >/dev/null 2>&1 < /dev/null &
+  disown || true
+else
+  echo "skipping browser (OPEN_BROWSER=0); open http://127.0.0.1:$UI_PORT/build yourself"
+fi
