@@ -1,0 +1,1530 @@
+/* Priime Vaults + Portfolio (mockup register, 2026-08-20).
+   Light dashboard register: cream/ice surfaces, ink text, blue accents
+   (#2B5CFF system), Fraunces serif italic annotations, mono for data.
+   Scoped under .vx-root so nothing leaks into the rest of the app. */
+
+.vx-root{--vx-blue:#2B5CFF;--vx-blue-bright:#4D8BFF;--vx-tint:#B8D9FF;--vx-ice:#E6F4FF;
+  --vx-ink:#141414;--vx-mut:#57534e;--vx-faint:#6f6b63;--vx-line:#e7e4dd;--vx-card:#fbfaf8;
+  --vx-green:#267e50;--vx-red:#c0392b;
+  --vx-ser:var(--font-fraunces),'Fraunces',Georgia,serif;
+  /* Alignment here was carried by the monospaced FACE and by almost no
+     declaration: 3 of the 32 mono selectors in this file ask for tabular
+     figures. Geist is the only face left in the app that ships the tnum
+     feature, so the guard is declared once at the root and every column
+     inherits it. */
+  font-variant-numeric:tabular-nums;
+  color:var(--vx-ink)}
+
+/* ── page header ── */
+.vx-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:22px}
+.vx-kicker{font-family:var(--vx-ser);font-style:italic;font-size:14px;color:var(--vx-blue);display:block;margin-bottom:4px}
+.vx-title{font-size:28px;font-weight:550;letter-spacing:-.03em;line-height:1.1;margin:0}
+.vx-sub{font-family:var(--vx-ser);font-style:italic;font-size:14.5px;color:var(--vx-mut);margin-top:6px;max-width:520px}
+.vx-cta{display:inline-flex;align-items:center;gap:8px;border-radius:999px;background:var(--vx-blue);color:#fff;
+  font-size:13px;font-weight:600;padding:10px 18px;text-decoration:none;transition:transform .15s,box-shadow .2s;
+  box-shadow:0 8px 20px -10px rgba(43,92,255,.55)}
+.vx-cta:hover{transform:translateY(-1px);box-shadow:0 12px 26px -10px rgba(43,92,255,.6)}
+.vx-cta--ghost{background:rgba(43,92,255,.08);color:var(--vx-blue);box-shadow:none}
+.vx-cta--ghost:hover{box-shadow:0 8px 20px -12px rgba(43,92,255,.35)}
+
+/* ── directory grid ── */
+.vx-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.vx-card{display:flex;flex-direction:column;gap:12px;background:var(--vx-card);border:1px solid var(--vx-line);
+  border-radius:16px;padding:18px 18px 16px;text-decoration:none;color:inherit;
+  transition:transform .15s,box-shadow .2s,border-color .2s}
+.vx-card:hover{transform:translateY(-2px);border-color:var(--vx-tint);box-shadow:0 18px 40px -24px rgba(20,18,15,.35)}
+.vx-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.vx-card-name{font-size:16.5px;font-weight:650;letter-spacing:-.01em;line-height:1.25}
+.vx-tag{flex:0 0 auto;font-family:var(--vx-ser);font-style:italic;font-size:11.5px;color:var(--vx-blue);
+  background:rgba(43,92,255,.07);border:1px solid rgba(43,92,255,.18);border-radius:999px;padding:3px 10px;white-space:nowrap}
+.vx-tag--mine{color:#fff;background:var(--vx-blue);border-color:var(--vx-blue)}
+.vx-card-apy{display:flex;align-items:baseline;gap:8px}
+.vx-card-apy b{font-family:var(--font-mono,ui-monospace);font-size:24px;font-weight:600;letter-spacing:-.02em;color:var(--vx-green)}
+.vx-card-apy i{font-family:var(--vx-ser);font-style:italic;font-size:12px;color:var(--vx-faint)}
+/* QNT-3: the collar card's companion fact, in the caption register one line down. */
+.vx-card-forfeit{font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-faint);margin-top:-8px}
+.vx-card-rows{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;border-top:1px solid var(--vx-line);padding-top:12px}
+.vx-cell{display:flex;flex-direction:column;gap:2px}
+.vx-cell i{font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-faint)}
+.vx-cell b{font-family:var(--font-mono,ui-monospace);font-size:12.5px;font-weight:600;color:var(--vx-ink)}
+.vx-card-cur{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--vx-mut)}
+.vx-card-cur b{font-weight:600;color:var(--vx-ink)}
+/* The MARKET PAIR is the ticker and keeps the mono. A count (`2 markets`)
+   and two protocol names in their native casing (`Morpho Blue and Aave v3`)
+   are words. */
+.vx-card-mkt{font-family:inherit;font-size:12px;color:var(--vx-mut)}
+.vx-card-mkt .pair{font-family:var(--font-mono,ui-monospace)}
+/* DL-3: the portfolio card carries the stage chip beside the strategy tag. */
+.vx-card-tags{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+
+/* ── vault detail ── */
+.vx-back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--vx-mut);text-decoration:none;margin-bottom:14px}
+.vx-back:hover{color:var(--vx-blue)}
+.vx-dhead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:6px}
+.vx-dhead h1{font-size:26px;font-weight:550;letter-spacing:-.03em;margin:0 0 4px}
+.vx-dmeta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vx-status{display:inline-flex;align-items:center;gap:6px;font-family:var(--vx-ser);font-style:italic;font-size:12px;
+  color:var(--vx-green);border:1px solid rgba(38,126,80,.3);border-radius:999px;padding:3px 10px}
+.vx-status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--vx-green)}
+.vx-dsummary{font-family:var(--vx-ser);font-style:italic;font-size:15px;color:var(--vx-mut);max-width:640px;margin:8px 0 20px}
+.vx-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.vx-stat{background:var(--vx-card);border:1px solid var(--vx-line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.vx-stat i{font-family:var(--vx-ser);font-style:italic;font-size:12px;color:var(--vx-faint)}
+.vx-stat b{font-family:var(--font-mono,ui-monospace);font-size:20px;font-weight:600;letter-spacing:-.01em}
+.vx-stat b.apy{color:var(--vx-green)}
+.vx-stat small{font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-faint)}
+
+.vx-cols{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+@media(max-width:900px){.vx-cols{grid-template-columns:1fr}}
+.vx-panel{background:var(--vx-card);border:1px solid var(--vx-line);border-radius:16px;padding:18px}
+.vx-panel + .vx-panel{margin-top:16px}
+/* A HEAD NAMES A REGION AND BELONGS TO THE CHROME. Fraunces italic is the
+   kicker/summary/footnote voice; it had crept onto the section heads, which
+   ran two head registers on one page (`Deposit` in blue serif italic beside
+   `Overview` in the sans at 19px/600) and stacked seven blue italic lines
+   into a wash. Blue is punctuation, one loud beat per surface. */
+.vx-panel-h{font-family:inherit;font-style:normal;font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--vx-ink);margin-bottom:12px}
+.vx-spark{width:100%;height:120px;display:block}
+.vx-spark-note{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);margin-top:8px}
+.vx-kv{display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px dashed var(--vx-line);font-size:13px}
+.vx-kv:last-child{border-bottom:0}
+.vx-kv span{color:var(--vx-mut)}
+.vx-kv b{font-family:var(--font-mono,ui-monospace);font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+/* sentence-valued rows (Main risk): prose wraps left in sans — mono stays
+   reserved for data */
+.vx-kv--prose{flex-direction:column;align-items:flex-start;gap:3px}
+.vx-kv--prose b{font-family:inherit;font-weight:500;text-align:left;line-height:1.55;color:var(--vx-ink)}
+/* THE PHRASE REGISTER. Mono stays the DEFAULT above, so no numeric row can
+   ever regress out of the data register; what is granted here is the escape,
+   to the rows whose value is words. The register is decided in ONE place,
+   lib/vaults/param-kind.ts, and arrives as data-kind, so every key/value
+   surface in the app reads one owner. */
+.vx-kv b[data-kind="phrase"],.vxj-row b[data-kind="phrase"],.vxi-foot b[data-kind="phrase"],.vxe-read b[data-kind="phrase"],.vxc-val[data-kind="phrase"]{font-family:var(--font-body);font-weight:500;letter-spacing:-.005em;font-variant-numeric:normal;white-space:normal}
+.vx-mod{display:flex;flex-direction:column;gap:2px;padding:9px 0;border-bottom:1px dashed var(--vx-line)}
+.vx-mod:last-child{border-bottom:0}
+.vx-mod b{font-size:13px;font-weight:600}
+.vx-mod span{font-size:12.5px;color:var(--vx-mut);line-height:1.5}
+
+/* deposit box */
+.vx-dep-row{display:flex;gap:10px;margin-bottom:10px}
+.vx-dep-input{flex:1;min-width:0;font-family:var(--font-mono,ui-monospace);font-size:16px;font-weight:600;
+  padding:11px 14px;border-radius:12px;border:1px solid var(--vx-line);background:#fff;color:var(--vx-ink);outline:none}
+/* THE VALUE IS A NUMBER, THE PLACEHOLDER IS A PHRASE. `Amount, USD` was
+   printing in the mono at 16px/600, which made it the loudest chrome run in
+   the deposit rail and heavier than the `Deposit` key beside it. */
+.vx-dep-input::placeholder{font-family:var(--font-body);font-weight:500;letter-spacing:-.005em;opacity:1}
+.vx-dep-input:focus{border-color:var(--vx-blue)}
+.vx-dep-btn{border:0;border-radius:12px;background:var(--vx-blue);color:#fff;font-size:14px;font-weight:600;
+  padding:0 22px;cursor:pointer;transition:.15s;box-shadow:0 8px 20px -10px rgba(43,92,255,.55)}
+.vx-dep-btn:hover:not(:disabled){background:var(--vx-blue-bright)}
+.vx-dep-btn:disabled{opacity:.45;cursor:default}
+.vx-dep-quick{display:flex;gap:6px;margin-bottom:10px}
+.vx-dep-quick button{font-family:var(--font-mono,ui-monospace);font-size:11.5px;color:var(--vx-mut);background:none;
+  border:1px solid var(--vx-line);border-radius:999px;padding:4px 12px;cursor:pointer;transition:.15s}
+.vx-dep-quick button:hover{border-color:var(--vx-blue);color:var(--vx-blue)}
+.vx-dep-note{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint)}
+.vx-dep-done{display:flex;flex-direction:column;gap:4px;background:rgba(38,126,80,.06);border:1px solid rgba(38,126,80,.25);
+  border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.vx-dep-done b{font-size:13.5px;color:var(--vx-green)}
+.vx-dep-done span{font-size:12.5px;color:var(--vx-mut)}
+.vx-dep-done a{color:var(--vx-blue);font-weight:600;text-decoration:none}
+.vx-dep-done a:hover{text-decoration:underline}
+.vx-pos{display:flex;justify-content:space-between;align-items:baseline;gap:10px;background:var(--vx-ice);
+  border:1px solid var(--vx-tint);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.vx-pos i{font-family:var(--vx-ser);font-style:italic;font-size:12px;color:var(--vx-blue)}
+.vx-pos b{font-family:var(--font-mono,ui-monospace);font-size:14px;font-weight:600}
+
+/* ── portfolio page ── */
+.vx-hero{display:flex;flex-direction:column;gap:4px;background:var(--vx-card);border:1px solid var(--vx-line);
+  border-radius:16px;padding:20px 22px;margin-bottom:18px}
+.vx-hero i{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint)}
+.vx-hero b{font-family:var(--font-mono,ui-monospace);font-size:32px;font-weight:600;letter-spacing:-.02em}
+.vx-hero small{font-family:var(--vx-ser);font-style:italic;font-size:12px;color:var(--vx-faint)}
+.vx-hero .pos{color:var(--vx-green)}
+.vx-hero .neg{color:var(--vx-red)}
+.vx-table{width:100%;border-collapse:collapse}
+.vx-table th{font-family:var(--vx-ser);font-style:italic;font-weight:500;font-size:12px;color:var(--vx-faint);
+  text-align:right;padding:8px 10px;border-bottom:1px solid var(--vx-line)}
+.vx-table th:first-child{text-align:left}
+/* A CELL IS A SENTENCE UNTIL IT SAYS OTHERWISE. The table used to set every
+   cell in the mono and hand the first column back, which put the Detail
+   cell's whole sentence in monospace with a number buried inside it. Words
+   inherit the sans; `.num` is what claims the data register, and it is
+   granted to the figure, not to the cell around it. */
+.vx-table td{font-family:inherit;font-size:13px;text-align:right;padding:11px 10px;border-bottom:1px dashed var(--vx-line)}
+.vx-table td.num,.vx-table td .num{font-family:var(--font-mono,ui-monospace);font-variant-numeric:tabular-nums}
+.vx-table td:first-child{text-align:left}
+.vx-table tr:last-child td{border-bottom:0}
+.vx-table a{color:var(--vx-ink);font-weight:600;text-decoration:none}
+.vx-table a:hover{color:var(--vx-blue)}
+.vx-pnl.pos{color:var(--vx-green)}
+.vx-pnl.neg{color:var(--vx-red)}
+.vx-table-wrap{background:var(--vx-card);border:1px solid var(--vx-line);border-radius:16px;padding:6px 12px;overflow-x:auto}
+.vx-empty{display:flex;flex-direction:column;align-items:center;gap:14px;background:var(--vx-card);
+  border:1px dashed var(--vx-line);border-radius:16px;padding:56px 20px;text-align:center}
+.vx-empty i{font-family:var(--vx-ser);font-style:italic;font-size:16px;color:var(--vx-mut)}
+
+.vx-notfound{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:40px 0}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DESIGN + MOTION PASS 2026-08-20 — additive only.
+   Motion: directory cascade + mine-bloom, sparkline draw, deposit settle,
+   position flash, TVL tick, portfolio hero. Discipline: headline APYs go
+   ink (green survives only where it marks state), Fraunces returns to
+   annotation, quiet-sans labels, pills out of serif. Explicit
+   prefers-reduced-motion fallbacks land every hidden resting state.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── rank 11: green becomes punctuation — headline APYs in ink ── */
+.vx-card-apy b{color:var(--vx-ink)}
+.vx-stat b.apy{color:var(--vx-ink)}
+
+/* ── rank 12: Fraunces back to annotation — quiet sans labels ── */
+.vx-stat i,.vx-stat small,.vx-cell i,.vx-hero i,.vx-hero small,.vx-pos i{
+  font-style:normal;font-family:inherit;font-size:11px;color:var(--vx-faint)}
+.vx-table th{font-style:normal;font-family:inherit;font-size:11px;font-weight:500;color:var(--vx-faint)}
+.vx-tag{font-style:normal;font-family:inherit;font-size:11px;font-weight:500}
+.vx-status{font-style:normal;font-family:inherit;font-size:11px;font-weight:500}
+
+/* ── rank 27: detail meta — curator line in sans, never mono prose ── */
+.vx-dmeta-cur{font-size:12px;color:var(--vx-mut)}
+.vx-dmeta-cur b{font-weight:600;color:var(--vx-ink)}
+
+/* ── rank 26: micro-polish bundle ── */
+/* (1) live heartbeat — the vault page's single ambient animation */
+.vx-status::before{animation:vx-live 2.4s ease-in-out infinite}
+@keyframes vx-live{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(38,126,80,.35)}50%{opacity:.55;box-shadow:0 0 0 4px rgba(38,126,80,0)}}
+/* (2) a disabled control must not glow */
+.vx-dep-btn:disabled{box-shadow:none;opacity:.45}
+/* (3) stat hierarchy: the decision page's headline outranks the card's 24px */
+.vx-stat b{font-size:22px}
+.vx-stat b.apy{font-size:26px;letter-spacing:-.02em}
+/* (4) focus affordance */
+.vx-root a:focus-visible,.vx-root button:focus-visible,.vx-root input:focus-visible{
+  outline:2px solid var(--vx-blue);outline-offset:2px;border-radius:inherit}
+
+/* ── rank 6: directory cascade + one bloom under your vault ── */
+.vx-card{animation:vxrise .42s ease-out both;animation-delay:calc(var(--i,0)*45ms)}
+@keyframes vxrise{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}
+.vx-card--mine{animation:vxrise .42s ease-out both,vxmine 1s ease-out .5s 1;
+  animation-delay:calc(var(--i,0)*45ms),.5s}
+@keyframes vxmine{0%{box-shadow:0 0 0 0 rgba(43,92,255,.35)}100%{box-shadow:0 0 0 16px rgba(43,92,255,0)}}
+
+/* ── rank 19: the ghost invite card ── */
+.vx-card--new{border:1px dashed var(--vx-line);background:transparent;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;min-height:236px;text-align:center}
+.vx-card--new i{font-family:var(--vx-ser);font-style:italic;font-size:14.5px;color:var(--vx-mut)}
+.vx-card--new:hover{border-color:var(--vx-tint);box-shadow:none;transform:none}
+
+/* ── rank 7: the vault page draws its line ── */
+.vx-spark-line{stroke-dasharray:1;stroke-dashoffset:1;animation:vxdraw .9s cubic-bezier(.4,0,.2,1) .15s forwards}
+@keyframes vxdraw{to{stroke-dashoffset:0}}
+.vx-spark-fill{opacity:0;animation:vxfade .4s ease-out .75s forwards}
+@keyframes vxfade{to{opacity:1}}
+.vx-spark-dot{transform-box:fill-box;transform-origin:center;opacity:0;
+  animation:vxping .5s cubic-bezier(.3,1.6,.4,1) 1s forwards}
+@keyframes vxping{0%{opacity:0;transform:scale(0)}60%{opacity:1;transform:scale(1.5)}100%{opacity:1;transform:scale(1)}}
+/* playback gates into view (.vx-spark--in from the chart's own observer):
+   paused at frame 0 with the forwards fills holding the hidden resting
+   states, then the authored stagger plays intact on first scroll-in */
+.vx-spark .vx-spark-line,.vx-spark .vx-spark-fill,.vx-spark .vx-spark-dot{animation-play-state:paused}
+.vx-spark--in .vx-spark-line,.vx-spark--in .vx-spark-fill,.vx-spark--in .vx-spark-dot{animation-play-state:running}
+
+/* ── rank 8: deposit lands, position settles, TVL ticks ── */
+.vx-dep-done{animation:vxdep .45s cubic-bezier(.3,1.2,.4,1) both,vxbloom .7s ease-out,
+  vxdepout .2s ease-out 4.8s forwards}
+@keyframes vxdep{0%{opacity:0;transform:translateY(7px)}100%{opacity:1;transform:none}}
+@keyframes vxbloom{0%{box-shadow:0 0 0 0 rgba(38,126,80,.30)}100%{box-shadow:0 0 0 14px rgba(38,126,80,0)}}
+/* the green band is a moment, not a state: CSS fades at 4.8s, React removes at 5s */
+@keyframes vxdepout{to{opacity:0}}
+.vx-pos{animation:vxposflash .8s ease-out}
+@keyframes vxposflash{0%{background:#d6ebff;border-color:#7FB2FF}100%{background:var(--vx-ice);border-color:var(--vx-tint)}}
+.vx-num-flash{animation:vxnumflash .5s ease-out}
+@keyframes vxnumflash{0%{color:var(--vx-blue)}100%{color:var(--vx-ink)}}
+
+/* ── rank 14: portfolio breathes ── */
+.vx-hero{background:linear-gradient(180deg,rgba(230,244,255,.5),var(--vx-card) 78%)}
+.vx-hero b{font-size:44px}
+.vx-hero small{opacity:0;animation:vxfade .35s ease-out .7s forwards}
+.vx-table tbody tr{animation:vxrise .32s ease-out both;animation-delay:calc(var(--i,0)*35ms)}
+.vx-pnl.flat,.vx-hero .flat{color:var(--vx-faint)}
+.vx-pnl.flat{color:var(--vx-faint);font-weight:500}
+
+/* ── explicit reduced-motion fallbacks: every hidden resting state lands
+      at its final visible state (the global guard shortens durations but
+      not delays — a delayed 'both'/'forwards' animation would otherwise
+      hold elements invisible) ── */
+@media (prefers-reduced-motion: reduce){
+  .vx-spark-line{stroke-dasharray:none;stroke-dashoffset:0;animation:none}
+  .vx-spark-fill,.vx-spark-dot{opacity:1;animation:none}
+  .vx-card,.vx-card--mine,.vx-table tbody tr{animation:none;opacity:1;transform:none}
+  .vx-hero small{opacity:1;animation:none}
+  .vx-dep-done{animation:none;opacity:1;transform:none}
+  .vx-pos,.vx-num-flash{animation:none}
+  .vx-status::before{animation:none;opacity:1}
+  .vx-stat{animation:none;opacity:1;transform:none}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   VAULT PAGE V3 — the asset page (2026-08-20). Morpho anatomy (header,
+   stat band, sticky tabs, two-column body with sticky rail) plus the
+   automation instrument cards in the dashboard's grammar, translated to
+   this page's cream register. Zone bar: soft desaturated red / amber
+   (#C2864E family) / green / blue on cream, hairlines over glows.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── A. header zone ── */
+.vxd-head{margin-bottom:20px}
+@media(max-width:640px){.vxd .vx-stats{grid-template-columns:1fr 1fr}}
+.vxd-title{font-size:clamp(30px,4.6vw,44px);font-weight:550;letter-spacing:-.03em;line-height:1.05;margin:0 0 10px}
+.vxd .vx-dsummary{margin:10px 0 0}
+
+/* ── C. sticky section tabs — the main panel's fixed header (founder
+      chrome call, 2026-08-20). The strip pins under the pill nav on the
+      panel's warm-white ground with the bottom hairline as its only line.
+      While the page is scrolled, a fixed full-bleed cream band (the page
+      ground) covers the nav clearance up to the viewport top, so no
+      content is ever readable behind the pill nav or between the nav and
+      the strip, at any scroll position; the strip itself is opaque and
+      squares its corners while pinned. ── */
+.vxd-tabs{position:sticky;top:64px;z-index:40;background:#FBFAF8;
+  border-bottom:1px solid var(--vx-line);border-radius:15px 15px 0 0;
+  margin:0 calc(-1 * var(--vxp-pad)) 20px;padding:0 calc(var(--vxp-pad) - 13px)}
+.vxd-tabs--stuck{border-radius:0}
+.vxd-tabs--scrolled::before{content:"";position:fixed;top:0;left:0;right:0;height:64px;
+  background:#F5F2EB;z-index:-1}
+.vxd-tabs-scroll{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.vxd-tabs-scroll::-webkit-scrollbar{display:none}
+.vxd-tab{position:relative;flex:0 0 auto;padding:11px 13px;font-size:13.5px;font-weight:500;color:var(--vx-mut);
+  text-decoration:none;transition:color .15s;white-space:nowrap}
+.vxd-tab:hover{color:var(--vx-ink)}
+.vxd-tab.on{color:var(--vx-ink);font-weight:600}
+.vxd-tab.on::after{content:"";position:absolute;left:13px;right:13px;bottom:-1px;height:2px;background:var(--vx-blue);border-radius:2px}
+
+/* ── D. THE PANEL (docs/plans/LATEST_UI_PORT_SPEC.md E.1). One bounded panel
+      spanning the content width; the sticky tab strip is its header across
+      both columns; row 1 = the four modeled sections + the sticky rail;
+      rows 2 and 3 = Verification and Activity spanning both columns. The
+      rail is sticky only within row 1 by construction: it scrolls away
+      exactly when Verification begins and the board takes the whole panel
+      width. `--vxd-strip-h` is measured off the strip by VaultDetail so the
+      stuck rail's first card top sits at the strip's bottom edge. ── */
+.vxd-panel{display:grid;grid-template-columns:minmax(0,1fr);row-gap:0;align-items:start;
+  min-width:0;--vxp-pad:20px;--vxd-strip-h:46px;background:#FBFAF8;border:1px solid var(--vx-line);
+  border-radius:16px;padding:0 var(--vxp-pad) var(--vxp-pad)}
+.vxd-panel>.vxd-tabs{position:sticky;top:64px}                              /* NAV_CLEARANCE_PX, SectionTabs.tsx */
+/* row 1 is its own two-column grid so the rail's sticky containing block is
+   the row (Chrome pins a sticky grid item to the whole grid container, not
+   its area: without this wrapper the rail rode over the Verification panel,
+   measured 2026-09-07); the rail scrolls away exactly when row 1 ends */
+.vxd-panel>.vxd-row{display:grid;grid-template-columns:minmax(0,1fr) 360px;column-gap:18px;align-items:start;min-width:0}
+.vxd-row>.vxd-cols{min-width:0}                                             /* Overview, Automations, Performance, Parameters */
+.vxd-row>.vxd-rail{align-self:start;position:sticky;
+  /* the strip's bottom edge, or, when the rail is taller than the viewport
+     (a position + the Withdraw block), the offset that parks the rail's foot
+     16px above the viewport's, so the whole rail is reachable while stuck */
+  top:min(calc(64px + var(--vxd-strip-h)),calc(100vh - var(--vxd-rail-h,0px) - 16px))}
+.vxd-panel>.vxd-wide{min-width:0}                                           /* Verification, Activity */
+.vxd-wide>.vxd-sec:last-child{margin-bottom:4px}
+.vxd-panel .vx-panel,.vxd-panel .vxi,.vxd-panel .vx-table-wrap{background:#fff}
+.vxd-panel .vxc-rows{background:#FBFAF8}
+@media(max-width:640px){.vxd-panel{--vxp-pad:14px}}
+.vxd-rail-in .vx-panel + .vx-panel{margin-top:16px}
+@media (max-width:900px){.vxd-panel>.vxd-row{grid-template-columns:minmax(0,1fr)} .vxd-row>.vxd-rail{position:static}}
+
+/* ── sections ── */
+.vxd-sec{scroll-margin-top:122px;margin-bottom:32px}
+.vxd-sec-h{font-size:19px;font-weight:600;letter-spacing:-.01em;margin:0 0 12px}
+.vxd-desc{font-size:14px;line-height:1.65;color:var(--vx-ink);margin:0}
+.vxd-desc--note{font-family:var(--vx-ser);font-style:italic;font-size:13.5px;color:var(--vx-faint);margin-top:10px}
+.vxd-note{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);margin:2px 2px 0}
+.vx-kv--chips{align-items:center}
+.vxo-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.vxo-chip{font-size:11px;font-weight:500;color:var(--vx-mut);border:1px solid var(--vx-line);border-radius:999px;padding:2px 9px;background:#fff}
+
+/* ── rail projection + position cards ── */
+.vxj-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px dashed var(--vx-line);font-size:12.5px}
+.vxj-row:last-of-type{border-bottom:0}
+.vxj-row span{color:var(--vx-mut)}
+.vxj-row b{font-family:var(--font-mono,ui-monospace);font-weight:600;font-size:12.5px;text-align:right}
+.vxj-row--lead b{font-size:15px}
+.vxd-rail-in .vx-dep-note{margin-top:8px}
+
+/* ── automation instrument cards ── */
+.vxi{background:var(--vx-card);border:1px solid var(--vx-line);border-radius:16px;margin-bottom:16px;overflow:hidden}
+.vxi-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px 14px;border-bottom:1px solid var(--vx-line)}
+.vxi-kick{font-family:var(--vx-ser);font-style:italic;font-size:12px;color:var(--vx-faint);display:block;margin-bottom:3px}
+.vxi-title{font-size:17px;font-weight:650;letter-spacing:-.01em;margin:0 0 3px}
+.vxi-role{font-size:12.5px;color:var(--vx-mut);margin:0;line-height:1.5}
+.vxi-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;border-radius:999px;padding:4px 11px}
+.vxi-chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.vxi-chip--armed{color:var(--vx-green);border:1px solid rgba(38,126,80,.3);background:rgba(38,126,80,.06)}
+/* Armed is a state, not a heartbeat: the pulse lives only on .vxe-live and
+   the header dot (one synchronized beat per page). */
+.vxi-chip--watch{color:var(--vx-blue);border:1px solid rgba(43,92,255,.28);background:rgba(43,92,255,.06)}
+.vxi-body{padding:16px 18px}
+.vxi-foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 18px;border-top:1px solid var(--vx-line);font-size:11px;color:var(--vx-faint)}
+.vxi-foot b{font-family:var(--font-mono,ui-monospace);font-weight:600;color:var(--vx-mut)}
+
+/* ── envelope band + net-delta gauge ── */
+.vxe-read{display:flex;align-items:baseline;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.vxe-read b{font-family:var(--font-mono,ui-monospace);font-size:22px;font-weight:600;letter-spacing:-.01em}
+.vxe-read span{font-size:12px;color:var(--vx-mut)}
+.vxe-live{margin-left:auto;font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-green);display:inline-flex;align-items:center;gap:5px}
+.vxe-live::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--vx-green);animation:vx-live 2.4s ease-in-out infinite}
+/* ── the router's register tail. It twins .vxe-live's box exactly and drops
+      the two things that make .vxe-live a heartbeat: the ::before dot and the
+      vx-live loop. The page has ONE beat and it is already spent; this
+      reading comes from a modeled replay rather than from a poll, so it is
+      labelled and still. ── */
+.vxe-modeled{margin-left:auto;font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-faint);
+  display:inline-flex;align-items:center;gap:5px}
+
+/* ── the sustain window, drawn as the observations it counts. One cell per
+      hour of the founder's window; filled cells are the hours the trailing
+      lane has actually been behind. Never a bar and never a countdown: a bar
+      claims a continuous quantity and a countdown claims a scheduled event,
+      and this is neither. ── */
+.vxk{margin:2px 0 12px}
+.vxk-cells{display:flex;gap:2px;align-items:flex-end}
+.vxk-cell{flex:1 1 0;min-width:0;height:10px;border-radius:1px;background:var(--vx-line)}
+.vxk-cell--on{background:var(--vx-blue)}
+.vxk-lab{margin-top:6px;font-size:10.5px;color:var(--vx-faint);letter-spacing:.02em}
+/* THE MEASURED STRIP INSIDE AN INSTRUMENT (2026-09-08): a lane's own history
+   under the reading, in the Performance chart's grammar at a third of its
+   height. The chart's dark rules (`.vx-spark line/text/stop`) already reach
+   it, and the caption is the router clock's own register. */
+.vxs{margin:2px 0 14px}
+.vxs .vx-spark{height:64px}
+.vxs-lab{margin-top:6px;font-size:10.5px;color:var(--vx-faint);letter-spacing:.02em}
+
+.vxe-wrap{position:relative;margin:6px 0 8px}
+.vxe-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;gap:2px}
+.vxe-z{display:block;height:100%}
+.vxe-z--em{background:#E5B3A8}
+.vxe-z--del{background:#E8CBA0}
+.vxe-z--tgt{background:#BCD9C6}
+.vxe-z--up{background:#BFD3F0}
+.vxh-gauge{position:relative;height:10px;border-radius:999px;background:linear-gradient(90deg,#E8CBA0,#BCD9C6 32%,#BCD9C6 68%,#E8CBA0)}
+.vxh-center{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--vx-faint);opacity:.6}
+.vxe-needle{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--vx-ink);border-radius:2px;transform:translateX(-1px);
+  transition:left 1.2s linear}
+@keyframes vxneedle{0%{opacity:0;transform:translateX(-1px) scaleY(.4)}100%{opacity:1;transform:translateX(-1px) scaleY(1)}}
+
+/* ── instrument reveal choreography: the draw sequence waits for first
+      intersection (.vxi--in from useInView), so the settle plays in view.
+      Zones and gauge draw left-to-right, labels ride the beat, the needle
+      settles with overshoot just after the last zone lands. ── */
+.vxi .vxe-z,.vxi .vxh-gauge{transform:scaleX(0);transform-origin:left}
+.vxi--in .vxe-z,.vxi--in .vxh-gauge{transform:scaleX(1);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.vxi--in .vxe-z--del{transition-delay:.06s}
+.vxi--in .vxe-z--tgt{transition-delay:.12s}
+.vxi--in .vxe-z--up{transition-delay:.18s}
+.vxi .vxe-needle{animation:none;opacity:0}
+.vxi--in .vxe-needle{animation:vxneedle .5s cubic-bezier(.3,1.2,.4,1) .5s both}
+.vxi .vxe-lab{opacity:0}
+.vxi--in .vxe-lab{opacity:1;transition:opacity .35s ease-out .3s}
+.vxe-labels{display:grid;gap:2px;margin-top:8px}
+.vxe-lab{display:flex;flex-direction:column;gap:1px;min-width:0}
+.vxe-lab i{font-style:normal;font-size:10px;letter-spacing:.02em;color:var(--vx-faint)}
+.vxe-lab b{font-family:var(--font-mono,ui-monospace);font-size:10.5px;font-weight:600;white-space:nowrap}
+.vxe-lab--em b{color:#A65243}
+.vxe-lab--del b{color:#96662F}
+.vxe-lab--tgt b{color:#2F6E4C}
+.vxe-lab--up b{color:#33549C}
+.vxh-scale{display:flex;justify-content:space-between;margin-top:8px}
+.vxh-scale b{font-family:var(--font-mono,ui-monospace);font-size:10.5px;font-weight:600;color:var(--vx-faint)}
+
+/* ── cascade + rules tables ── */
+.vxc{margin-top:16px}
+.vxc-k{font-family:inherit;font-style:normal;font-size:12px;font-weight:600;letter-spacing:-.01em;color:var(--vx-mut);margin-bottom:8px}
+.vxc-rows{border:1px solid var(--vx-line);border-radius:12px;background:#fff;overflow:hidden}
+.vxc-row{display:grid;grid-template-columns:auto minmax(0,auto) auto auto minmax(0,1fr);align-items:center;gap:10px;
+  padding:9px 12px;border-bottom:1px solid var(--vx-line);font-size:12.5px}
+.vxc-row:last-child{border-bottom:0}
+.vxc-dot{width:8px;height:8px;border-radius:50%}
+.vxc-dot--em{background:#C97B6A}
+.vxc-dot--del{background:#C2864E}
+.vxc-dot--tgt{background:#3E8563}
+.vxc-dot--up{background:#5B7FD6}
+.vxc-cond{color:var(--vx-mut)}
+.vxc-val{font-family:var(--font-mono,ui-monospace);font-weight:600;white-space:nowrap}
+.vxc-arr{color:var(--vx-faint)}
+.vxc-act{font-weight:600;text-align:right}
+/* THE PAYBACK LOCK'S OWN LINE, under the cascade. Same annotation register
+   as every other italic note on this page (`.vx-spark-note`, `.vx-dep-note`):
+   the serif italic at --vx-faint, which is redefined in the dark block, so
+   this follows the theme without a twin. */
+.vxc-note{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);margin-top:8px}
+/* THE LIQUIDATION VERDICT, first group in the register. `.vxv-h` is
+   `.vx-kv--prose b`'s prose register at `.vx-kv`'s own size — the page's
+   existing statement-sentence type, not a new one. The blind value drops to
+   --vx-faint at weight 400: `.vxc-val` inks at 600 mono, which is measurement
+   weight, and `not measured` is not a measurement. Both tokens are already
+   redefined in the dark block, so this follows for free. */
+.vxv-h{font-size:13px;line-height:1.55;font-weight:500;color:var(--vx-ink);margin:0}
+@media(max-width:560px){
+  .vxc-row{grid-template-columns:auto minmax(0,1fr) auto;grid-auto-rows:auto}
+  .vxc-val{grid-column:3}
+  .vxc-arr{display:none}
+  .vxc-act{grid-column:2/4;text-align:left;padding-left:18px}
+  /* zone labels wrap under the bar instead of colliding in narrow columns:
+     flex makes the inline grid-template-columns inert */
+  .vxe-labels{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px}
+}
+
+
+/* ══ THE RISK REGISTER AS A TABLE (.vxb-*, 2026-09-02) ══════════════════════
+   Additive. `.vxc-*` is UNTOUCHED because it is shared with the cascade
+   instrument (`.vxc-row--on`, `.vxc-dot--em/del/tgt/up`, the zone-flip
+   cross-fade); the register simply stops being one of its consumers.
+
+   WHAT THIS FIXES, and each is a measured defect rather than a preference:
+
+   1. THE VALUE NEVER FORMED A COLUMN. `.vxc-row` sizes the value track
+      `minmax(0,auto)` — per row — so on one register `24%`, `$19.3K`, `1.00`,
+      `33.3%`, `structural` and `41563811` each landed at a different x, in the
+      middle of the row. Here the reading is a `table-layout:fixed` col of a
+      fixed `ch` width: it is a column whether or not a row fills it.
+   2. LABEL AND VALUE WERE ADJACENT CELLS WITH NO SEPARATOR AND NO HEAD.
+      `Short margin ratio33.3%` is what innerText does to that. A `<thead>` is
+      what makes this a table, and it is the first one this section has had.
+   3. THE VALUE WAS CENTRED AGAINST A TWO-LINE PROSE BLOCK. At 390 the number
+      rendered physically inside the sentence. `align-items:start`, at every
+      width, is the whole of that fix.
+   4. THE READING COLUMN WAS 37% VOCABULARY. `structural` and `not measured`
+      printed in the same mono 600 as `$19.3K`. Mono is the data register: an
+      absence drops to sans at --vx-faint, and a structural constraint prints
+      no figure at all, only its caption. Nothing dims below its own caption
+      ink — dimming an absence is how a gap gets missed.
+
+   SEMANTICS SURVIVE THE BREAKPOINT. The mobile rule turns rows into grids,
+   which strips implicit table roles in most engines, so the markup carries
+   `role="table"/"row"/"columnheader"/"cell"` explicitly. ── */
+.vxb-wrap{margin-top:16px}
+/* the verdict keeps its own caption and its own sentences, and it holds NO
+   table of its own any more: the two rows it used to carry are the register's
+   `short-margin` and `short-line`, which carry a denominator and an as-of the
+   verdict never had (parent ruling, 2026-09-02). `.vxb-verdict .vxb` went with
+   them — there is no nested table left to align.
+   ⚠ AND `.vxb-bridge` WENT (re-review #4, 2026-09-02): it inked `Three things
+   could reach 29% before the trim does.`, a third printing of the cushion the
+   `deposit-line` row carries with its denominator and its as-of. The element
+   is gone from `VaultVerdict`; a rule for it could only style an element that
+   cannot be built. */
+.vxb-verdict{margin-bottom:16px}
+.vxb-note{font-size:12.5px;line-height:1.5;color:var(--vx-mut);margin:5px 0 0}
+.vxb-cap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:0 2px 10px;font-size:12px;color:var(--vx-mut)}
+.vxb-cap i{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--vx-amber,#C2864E)}
+.vxb-cap b{font-family:var(--font-mono,ui-monospace);font-weight:600;color:var(--vx-ink)}
+.vxb-cap em{font-style:normal;color:var(--vx-faint)}
+
+.vxb{width:100%;table-layout:fixed;border-collapse:collapse;
+  border:1px solid var(--vx-line);border-radius:12px;background:#fff;overflow:hidden}
+.vxb-hrow th{padding:8px 14px;border-bottom:1px solid var(--vx-line);
+  font-family:inherit;font-style:normal;font-size:11px;font-weight:500;color:var(--vx-faint);
+  text-align:right;white-space:nowrap}
+.vxb-hrow th:first-child{text-align:left}
+
+.vxb-grprow th{grid-column:1/-1;padding:15px 14px 6px;border-top:1px solid var(--vx-line);
+  font-family:var(--vx-ser);font-style:italic;font-weight:400;font-size:11.5px;
+  color:var(--vx-faint);text-align:left}
+.vxb tbody tr:first-child .vxb-grp{border-top:0;padding-top:11px}
+
+.vxb-row td{padding:10px 14px;border-bottom:1px solid var(--vx-line);
+  font-size:12.5px;line-height:1.45;vertical-align:top}
+.vxb tbody tr:last-child td{border-bottom:0}
+
+/* col 1 — the mechanism, and beneath it the one clause a column cannot hold */
+.vxb-mech{color:var(--vx-ink);font-weight:500;text-align:left}
+.vxb-cl{display:block;margin-top:3px;font-size:11.5px;font-weight:400;line-height:1.4;
+  color:var(--vx-mut)}
+
+/* col 2 — the reading. FOUR STATES, TWO REGISTERS, ONE RIGHT EDGE.
+   A value exists (measured or stated) → mono, ink, tabular. Nothing was read
+   (no-threshold or unmeasured) → body, faint, and the cell says what is
+   missing rather than printing a dash or a rounded zero. The state is a
+   `data-state` attribute off the schema, never a test on the string. */
+.vxb-read{text-align:right;overflow-wrap:anywhere}
+.vxb-val{display:block;font-family:var(--font-mono,ui-monospace);font-size:12.5px;
+  font-weight:600;font-variant-numeric:tabular-nums;color:var(--vx-ink)}
+/* AN ABSENCE IS NOT A NUMBER, so it leaves the data register entirely. It does
+   NOT dim below its own caption: dimming an absence is how a gap gets missed. */
+.vxb-abs{display:block;font-family:var(--font-body,inherit);font-size:12px;font-weight:400;
+  line-height:1.35;color:var(--vx-mut)}
+/* ⚠ TOMBSTONE — `.vxc-val[data-blind="true"]` LIVED HERE AND IS RETIRED
+   (parent ruling, 2026-09-02). It inked the verdict block's two rows,
+   `Short margin ratio` and `Short's own liquidation`, and those rows are gone:
+   the risk table states both facts with a denominator, a field path and an
+   as-of, and the verdict now states which legs can be closed and no readings
+   at all. Nothing on either surface carries `data-blind` any more, so the rule
+   and its dark-plate guard could only match a row that cannot exist.
+   THE LAW IT CARRIED IS NOT RETIRED, it moved one class over: an absence never
+   carries measurement weight, and `.vxb-abs` above is where that is now
+   enforced — off the reading STATE, which is data, never a string test. */
+/* the denominator — never optional on a reading, which is the whole point of
+   the column: `33.3%` and `32.6%` were one number to a reader for as long as
+   neither said which frame it was a fraction of */
+.vxb-den{display:block;margin-top:2px;font-family:var(--font-body,inherit);font-size:10.5px;
+  font-weight:400;line-height:1.35;color:var(--vx-faint);text-align:right}
+/* the per-row as-of, in the product's own `modeled · block n` grammar, and
+   printed ONLY where it differs from the footer stamp — a column of nine
+   identical block numbers is chrome, and a modeled figure printing bare beside
+   a measured one is the defect the word exists to close */
+.vxb-stamp{display:block;margin-top:3px;font-family:var(--font-mono,ui-monospace);
+  font-size:10px;font-weight:400;letter-spacing:.01em;line-height:1.3;
+  font-variant-numeric:tabular-nums;color:var(--vx-faint);text-align:right}
+/* A BROKEN INVARIANT INVERTS TO INK. Not amber, not red: it is a broken
+   promise and it should not look like a warning. Two declarations, and both
+   tokens flip, so dark needs no override — warm ink on cold plate. `clear`
+   gets no chip, because a chip on the normal state turns the column into a
+   scoreboard. */
+.vxb-fail{display:inline-block;background:var(--vx-ink);color:var(--vx-card);
+  font-family:var(--font-body,inherit);font-size:11px;font-weight:600;border-radius:4px;padding:1px 7px}
+
+/* col 3 — the WRITTEN response. The head is honest only under the arming
+   caption above the table, which says nothing is armed. ONE GRAMMAR ON EVERY
+   FAMILY: the quantity the rule moves and the direction it moves it
+   (`margin 6.5% → 23%`), never a bare percentage that collides with three
+   other percentages on the same screen. */
+.vxb-act{text-align:right;font-size:11.5px;color:var(--vx-mut);overflow-wrap:anywhere}
+.vxb-trig{display:block}
+.vxb-act em{display:block;margin-top:2px;font-style:normal;font-size:11px;color:var(--vx-faint)}
+.vxb-act--none{color:var(--vx-faint)}
+/* the head label the cell carries for the width where the head row cannot */
+.vxb-act::before{content:none}
+
+/* ── the counterparty runs: ONE ROUTE SENTENCE PER PARTY, over the classes
+      that belong to it. It was printed per class, so one sentence appeared
+      three times under three names — which is how three class names came to be
+      comma-joined into one label with one `clear` over three different
+      coverage states. ── */
+.vxb-partyrow th{padding:13px 14px 5px;border-top:1px solid var(--vx-line);text-align:left}
+.vxb-party{font-weight:400}
+.vxb-party b{font-family:inherit;font-size:12px;font-weight:500;color:var(--vx-ink)}
+.vxb-party span{display:block;margin-top:2px;font-size:11.5px;line-height:1.4;color:var(--vx-mut)}
+
+/* the parties nothing on this lane reads, said once, at product level */
+.vxb-unwatched{padding:2px 2px 0;font-size:11px;line-height:1.5;color:var(--vx-faint)}
+
+/* the as-of stamp the product already captured on every measured entry and no
+   renderer ever printed, plus the count of readings not taken */
+.vxb-foot{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+  flex-wrap:wrap;padding:9px 2px 0;font-size:11px;color:var(--vx-faint)}
+.vxb-foot-asof{font-size:11px;font-variant-numeric:tabular-nums;text-align:right}
+
+/* hover: ink under the hand only, no fill */
+.vxb-row:hover .vxb-mech,.vxb-row:hover .vxb-val,.vxb-row:hover .vxb-abs{
+  color:var(--vx-ink);transition:color .12s ease-out}
+
+/* entrance: the file's own `--i` stagger (.vx-table tbody tr), capped at six
+   so row 7 is not left behind the way `.vxc-row:nth-child(1..4)` left row 5 */
+.vxi .vxb-row{opacity:0;transform:translateY(6px)}
+.vxi--in .vxb-row{opacity:1;transform:none;
+  transition:opacity .32s ease-out,transform .32s ease-out;
+  transition-delay:calc(.5s + var(--i,0)*45ms)}
+
+/* ── 390: transpose, never scroll. A horizontally scrolling table on a phone
+      is a failure, so the row becomes three areas: mechanism (with its clause)
+      and reading share line one, the response takes line two full width so it
+      never competes with the clause for the same measure. Two heads survive,
+      because a head row is what makes it a table. ── */
+@media(max-width:560px){
+  .vxb,.vxb thead,.vxb tbody{display:block}
+  .vxb colgroup{display:none}
+  .vxb-hrow,.vxb-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(7ch,42%);
+    align-items:start;column-gap:12px;row-gap:3px}
+  .vxb-hrow th,.vxb-row td{border-bottom:0;padding:0}
+  .vxb-hrow{padding:8px 12px;border-bottom:1px solid var(--vx-line)}
+  .vxb-row{padding:10px 12px;border-bottom:1px solid var(--vx-line)}
+  .vxb tbody tr:last-child{border-bottom:0}
+  .vxb-grprow{display:block;padding:0}
+  .vxb-grprow th{display:block;padding:14px 12px 6px}
+  .vxb-mech{grid-area:1/1}
+  .vxb-read{grid-area:1/2}
+  .vxb-partyrow{display:block;padding:0}
+  .vxb-partyrow th{display:block;padding:12px 12px 4px}
+  /* ⚠ THE ORPHAN NUMBER, AND THE WHOLE REASON THIS BREAKPOINT WAS RE-CUT.
+     The head row collapses to Mechanism / Reading here, and the response VALUE
+     kept rendering on line two anyway: `33.3%` and `margin 6.5% → 23%` right
+     aligned under a paragraph with NO LABEL ANYWHERE ABOVE THEM. That is
+     label/value separation — the entire point of the rework — breaking at the
+     width where it matters most, and it is the exact shape the founder pasted.
+     The cell carries its own head as `data-h` and prints it here, so no value
+     on this surface is ever nameless. */
+  .vxb-act{grid-area:2/1/auto/3;padding-top:4px;text-align:left;
+    display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px;row-gap:2px}
+  .vxb-act::before{content:attr(data-h);flex:0 0 auto;font-size:10.5px;color:var(--vx-faint)}
+  .vxb-trig{display:inline}
+  .vxb-act em{display:inline;margin-top:0}
+  .vxb-h--act{display:none}
+  /* the stamp stops hanging off the right edge of a 390 card: at this width
+     the two footer clauses stack and both read from the left margin, so a
+     wrapped provenance sentence is never indented under its own tail */
+  .vxb-foot{flex-direction:column;align-items:flex-start;gap:3px}
+  .vxb-foot-asof{text-align:left}
+  /* `none written` costs a line per row on a phone under a head that is not
+     there to explain it, and on a loop record thirteen of fifteen rows carry
+     it. The wide table states every absence; the narrow one shows the rows
+     that HAVE a written rule, each one labelled. Nothing here is nameless and
+     nothing claims coverage. */
+  .vxb-act--none{display:none}
+}
+
+/* ── cascade rows: staggered entrance riding the reveal, live active-row
+      emphasis connecting the needle to its rulebook. Background rides its
+      own zero-delay transition so a mid-session zone flip cross-fades. ── */
+.vxi .vxc-row{opacity:0;transform:translateY(6px)}
+.vxi--in .vxc-row{opacity:1;transform:none;
+  transition:opacity .32s ease-out,transform .32s ease-out,background .4s ease-out}
+/* THE STAGGER READS ITS INDEX, and the four nth-child rules it replaces are
+   why: spelled as nth-child(1..4) a fifth cascade row landed at t=0, 600ms
+   BEFORE row one, which is the same defect the sibling `.vxb-row` rule was
+   already fixed for. The router instrument ships four rows, so this was one
+   row from breaking. Parity is exact: rows 1 to 4 still land at
+   600 / 645 / 690 / 735ms. Capped at six, matching the directory's own cap. */
+.vxi--in .vxc-row{transition-delay:calc(.6s + min(var(--i,0),6)*45ms),calc(.6s + min(var(--i,0),6)*45ms),0s}
+.vxc-row--on{background:var(--vx-ice);transition:background .4s ease-out}
+.vxc-row--on .vxc-dot{box-shadow:0 0 0 3px rgba(43,92,255,.14)}
+
+/* ── harvest meter ── */
+.vxm-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}
+.vxm-k{font-size:12px;color:var(--vx-mut)}
+.vxm-num{font-family:var(--font-mono,ui-monospace);font-size:22px;font-weight:600;letter-spacing:-.01em}
+.vxm-bar{position:relative;height:8px;border-radius:999px;background:#ECE9E1}
+.vxm-fill{display:block;height:100%;border-radius:999px;background:var(--vx-blue);transition:width .6s cubic-bezier(.4,0,.2,1)}
+/* threshold tick: a hairline on the accrual axis (green stays semantic;
+   the fill stays blue) */
+.vxm-tick{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--vx-ink);opacity:.35}
+.vxm-scale{display:flex;justify-content:space-between;margin-top:6px;font-size:10.5px;color:var(--vx-faint)}
+/* meter fills on the reveal beat: width 0 until .vxi--in lands, then the
+   inline width re-applies through the existing .6s ease, number leading
+   the bar by a beat */
+.vxi:not(.vxi--in) .vxm-fill{width:0!important}
+.vxi--in .vxm-fill{transition-delay:.15s}
+
+/* ── performance ── */
+.vxp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}
+.vxp-sv{font-family:var(--font-mono,ui-monospace);font-size:24px;font-weight:600;letter-spacing:-.01em}
+.vxp-chips{display:flex;gap:5px}
+/* One chip system on this page, not two: `.vx-chip` at :769 is sans 12.5/500
+   at 6px 13px, and these range keys are the same object on a second tab. */
+.vxp-chips button{font-family:inherit;font-size:11.5px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--vx-mut);background:none;border:1px solid var(--vx-line);
+  border-radius:999px;padding:5px 12px;cursor:pointer;transition:.15s}
+.vxp-chips button:hover{border-color:var(--vx-blue);color:var(--vx-blue)}
+.vxp-chips button.on{border-color:var(--vx-blue);color:var(--vx-blue);background:rgba(43,92,255,.07);font-weight:600}
+.vxr-note{font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-faint);margin-left:4px}
+
+/* ── activity ledger ── */
+.vxa-table td{white-space:nowrap}
+.vxa-action{font-weight:600}
+.vxa-detail{color:var(--vx-mut)}
+.vxa-time{color:var(--vx-faint);font-size:12px}
+.vxa-tag{font-family:inherit;font-style:normal;font-size:11px;color:var(--vx-faint);margin-left:7px;font-weight:500}
+.vxa-tag--you{color:var(--vx-blue)}
+.vxa-trunc{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);text-align:center;padding:9px 0 7px}
+/* ── the Verify column (founder feedback, 2026-09-07). One key at the end of
+      every on-chain row, opening the execution on Basescan. The column exists
+      only on a record with a chain ledger; rows without a transaction leave
+      the cell empty rather than printing a dead key. ── */
+.vxa-tag--chain{color:var(--vx-mut)}
+.vxa-col-verify{text-align:right;width:1%;padding-right:4px}
+/* A CONTROL, THEREFORE CHROME. The 1px padding asymmetry compensated a mono
+   side-bearing against what is actually an inline <svg>, so it is
+   unmotivated at any face. */
+.vxa-verify{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:11.5px;font-weight:600;
+  letter-spacing:-.005em;color:var(--vx-ink);background:var(--vx-card);border:1px solid var(--vx-line);border-radius:999px;padding:5px 12px;
+  text-decoration:none;white-space:nowrap;line-height:1;transition:color .15s ease,border-color .15s ease,transform .15s ease}
+.vxa-verify svg{width:10px;height:10px;flex:none;opacity:.75}
+.vxa-verify:hover{color:var(--vx-blue);border-color:var(--vx-blue);transform:translateY(-1px)}
+.vxa-verify:hover svg{opacity:1}
+.vxa-verify:focus-visible{outline:2px solid var(--vx-blue);outline-offset:2px}
+[data-theme="dark"] .vxa-verify{background:var(--p-well,#02040B);border-color:var(--vx-line)}
+[data-theme="dark"] .vxa-verify:hover{color:var(--vx-blue-text,var(--vx-blue-lg));border-color:var(--vx-blue-text,var(--vx-blue-lg))}
+
+
+/* ── directory: the tiny automations fact ── */
+.vx-card-auto{font-family:var(--font-mono,ui-monospace);font-size:11px;color:var(--vx-faint)}
+
+/* ── v3 reduced-motion fallbacks: every hidden resting state of the reveal
+      choreography lands at its final visible state (inView still flips —
+      IO is not motion — so gated counters and fills never stick), the
+      needle and labels land visible, meters snap to their resting width ── */
+@media (prefers-reduced-motion: reduce){
+  .vxe-needle{animation:none;opacity:1;transition:none}
+  .vxm-fill{transition:none}
+  .vxe-live::before{animation:none}
+  .vxd-tab,.vxp-chips button{transition:none}
+  .vxi .vxe-z,.vxi .vxh-gauge{transform:none;transition:none}
+  .vxi .vxe-needle{animation:none;opacity:1}
+  .vxi .vxe-lab{opacity:1;transition:none}
+  .vxi .vxc-row{opacity:1;transform:none;transition:none}
+  .vxi .vxb-row{opacity:1;transform:none;transition:none}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DIRECTORY REDESIGN 2026-08-21 — the discovery floor. Additive only
+   (vx-dir / vx-chip / vx-seg / vx-ds prefixes + .vx-card--dir scope);
+   nothing here touches the vault detail chrome (vxd-/vxi-/vxe-/vxm-/vxc-).
+   Control bar: strategy filter chips with mono counts + sort segmented.
+   Grid: exactly 3 across at >=1100px, 2 at 700-1099, 1 below.
+   Card: ink APY hero, deterministic spark strip, strategy watermark,
+   Live chip (green stays semantic, dot static — one-heartbeat law:
+   no new infinite loops). Motion: re-entry cascade, chip press + count
+   pulse, spark draw on reveal and redraw on hover, all one-shot, all
+   with explicit reduced-motion fallbacks where a resting state hides.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── header stats strip: derived, mono, quiet ── */
+/* `1 live vault · $500 attested NAV · 7 coming soon` is a SENTENCE with
+   three numbers in it, not a datum. The words inherit the sans and each
+   figure claims `.num` back. */
+.vx-dir-stats{font-family:inherit;font-size:12px;color:var(--vx-faint);margin-top:10px}
+.vx-dir-stats .num{font-family:var(--font-mono,ui-monospace);font-variant-numeric:tabular-nums}
+
+/* ── control bar ── */
+.vx-dir-bar{display:flex;align-items:center;justify-content:space-between;gap:10px 18px;flex-wrap:wrap;margin:0 0 18px}
+.vx-dir-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vx-chip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:var(--vx-mut);
+  background:transparent;border:1px solid var(--vx-line);border-radius:999px;padding:6px 13px;cursor:pointer;
+  transition:color .15s,border-color .15s,background .15s,transform .1s}
+.vx-chip:hover{color:var(--vx-ink);border-color:#cfcabf}
+.vx-chip:active{transform:scale(.96)}
+.vx-chip.on{background:var(--vx-blue);border-color:var(--vx-blue);color:#fff}
+/* `min-width:2ch` so a 12-to-3 change cannot reflow the flex row at the
+   exact moment `.vx-chip-n--pulse` plays its 450ms scale beat, which read as
+   the pill collapsing rather than as the count moving. */
+.vx-chip-n{font-family:var(--font-mono,ui-monospace);font-size:10.5px;font-weight:600;color:var(--vx-faint);display:inline-block;font-variant-numeric:tabular-nums;min-width:2ch;text-align:center}
+.vx-chip.on .vx-chip-n{color:rgba(255,255,255,.72)}
+.vx-chip-n--pulse{animation:vxchipn .45s cubic-bezier(.3,1.4,.4,1) 1}
+@keyframes vxchipn{0%{transform:scale(1)}35%{transform:scale(1.3)}100%{transform:scale(1)}}
+.vx-dir-sort{display:flex;align-items:center;gap:9px}
+.vx-dir-sort-k{font-family:var(--vx-ser);font-style:italic;font-size:12px;color:var(--vx-faint)}
+.vx-seg{display:inline-flex;gap:2px;border:1px solid var(--vx-line);border-radius:999px;padding:2px;background:rgba(251,250,248,.7)}
+.vx-seg button{font-size:12px;font-weight:500;color:var(--vx-mut);background:transparent;border:0;border-radius:999px;
+  padding:5px 12px;cursor:pointer;transition:color .15s,background .15s,transform .1s;white-space:nowrap}
+.vx-seg button:hover{color:var(--vx-ink)}
+.vx-seg button:active{transform:scale(.96)}
+.vx-seg button.on{background:#fff;color:var(--vx-ink);font-weight:600;
+  box-shadow:0 1px 3px rgba(20,18,15,.12),0 0 0 1px var(--vx-line)}
+
+/* ── the exact grid: 3 across the floor, 2 mid, 1 narrow ── */
+.vx-grid{grid-template-columns:repeat(3,1fr)}
+@media(max-width:1099px){.vx-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:699px){.vx-grid{grid-template-columns:1fr}}
+
+/* ── card elevation ── */
+.vx-card{position:relative}
+.vx-card:hover{transform:translateY(-3px);border-color:rgba(43,92,255,.4);
+  box-shadow:0 24px 48px -24px rgba(20,18,15,.4)}
+.vx-card--new:hover{transform:none;box-shadow:none;border-color:var(--vx-tint)}
+.vx-card--dir .vx-card-apy b{font-size:30px;color:var(--vx-ink)}
+.vx-card-glyph{position:absolute;top:66px;right:18px;pointer-events:none}
+.vx-card-live{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;color:var(--vx-green);
+  border:1px solid rgba(38,126,80,.3);border-radius:999px;padding:2px 9px;flex:0 0 auto}
+.vx-card-live::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--vx-green)}
+
+/* ── THE LIFECYCLE STAGE (S2 Wave 2 seam, 2026-08-24) ─────────────────────
+   C1 shipped the incubating chip and its record line with no stylesheet of
+   their own — `vaults.css` was in no Wave 2 builder's OWNS list — and left
+   three hooks. These are them.
+
+   THE SHAPE IS THE LIVE CHIP'S SHAPE AND THE DOT IS NOT. `.vx-card-live` is a
+   hairline pill with a green dot; an incubating record takes the SAME pill so
+   the two read as one slot in the card's bottom row, and takes NO dot,
+   because the dot is the only mark on this surface that means "this can take
+   a deposit" and an incubating record cannot. Trading the dot for a colour
+   would have been a second liveness signal in a quieter font.
+
+   LIGHT AND DARK BY CONSTRUCTION, NOT BY INSPECTION. Every value here is
+   `--vx-line`, `--vx-faint` or `--vx-mut`, and all three are re-pointed inside
+   the `[data-theme="dark"] .vx-root` block below (warm ink on cold plate). So
+   these rules follow the theme without a dark twin, and there is no hex here
+   that could go stale against one. That is deliberate: a new hardcoded colour
+   on this surface is exactly the defect the HELIOS block was written to end. */
+.vx-card-stage{display:inline-flex;align-items:center;font-size:11px;font-weight:500;
+  color:var(--vx-faint);border:1px solid var(--vx-line);border-radius:999px;
+  padding:2px 9px;flex:0 0 auto;white-space:nowrap}
+/* The record header's chip. `.vx-tag` is the accent pill (blue ink, blue
+   hairline) and the stage is not an accent: it is the state the record is in.
+   This drops it into the same neutral register the card chip uses, so the
+   directory and the record print one chip in one voice. */
+.vx-tag--stage{color:var(--vx-faint);background:transparent;border-color:var(--vx-line);
+  font-family:inherit;font-style:normal;font-weight:500}
+/* The one line under the chip. `.vxd-desc--note` already sets the serif
+   italic register; this only tightens it to the chip above it, so the line
+   reads as the chip's own sentence rather than as a paragraph of the summary
+   below. */
+.vxd-stage-note{margin-top:6px;max-width:52ch}
+
+/* ── card spark strip: hidden until first reveal, one draw-in, then at
+      rest fully visible; hovering the card redraws the line. The strip
+      mounts client-only into a fixed-height slot (no layout shift). ── */
+.vx-ds-slot{position:relative;height:38px}
+.vx-ds{width:100%;height:38px;display:block}
+/* DS-6 (recette v2, 2026-09-02) — THE STROKE WAS DASHED, NOT DRAWN.
+   `pathLength={1}` normalises stroke-dasharray ALONG the path, but
+   `vector-effect:non-scaling-stroke` moves the dash pattern into the screen
+   coordinate system, and this strip stretches a 100-unit viewBox across
+   ~297px with `preserveAspectRatio="none"`. The two systems then disagree by
+   the x scale and `stroke-dasharray:1` stops covering the path. Measured at
+   rest, no animation running, on a 61-point portfolio series (computed
+   stroke-dasharray 1px, getTotalLength 127.1 user units, box 297x17): the
+   line painted as three disconnected runs over a CONTINUOUS area fill, the
+   fill proving the data was contiguous and the stroke was not. Reproduced on
+   the /vaults directory strip, which shares these rules.
+   DL-3 read this symptom as a day-zero problem and gated two-point series.
+   It is not: a 61-point series fragments too, because the cause is the
+   coordinate mismatch, not the number of points.
+   The reveal is a CLIP now, not a dash: it still draws left to right, it
+   cannot fragment because there is no dash pattern left to scale, and the
+   resting state is a plain unbroken stroke. The -12px insets on the end
+   state expand the clip past the fill-box on all four sides, so the round
+   caps and the 1.6px stroke are never shaved by their own reveal. */
+.vx-ds-line{stroke-dasharray:none}
+.vx-ds--pre .vx-ds-line{clip-path:inset(-12px 100% -12px -12px)}
+.vx-ds--pre .vx-ds-fill{opacity:0}
+.vx-ds--enter .vx-ds-line{animation:vxdsdraw .55s cubic-bezier(.4,0,.2,1) both}
+.vx-ds--enter .vx-ds-fill{opacity:0;animation:vxfade .35s ease-out .3s forwards}
+@keyframes vxdsdraw{
+  from{clip-path:inset(-12px 100% -12px -12px)}
+  to{clip-path:inset(-12px -12px -12px -12px)}}
+.vx-card:hover .vx-ds:not(.vx-ds--pre):not(.vx-ds--enter) .vx-ds-line{
+  animation:vxdsredraw .4s cubic-bezier(.4,0,.2,1)}
+@keyframes vxdsredraw{
+  from{clip-path:inset(-12px 100% -12px -12px)}
+  to{clip-path:inset(-12px -12px -12px -12px)}}
+/* DL-3: the day-zero slot. A two-point flat series under the dash draw-in
+   painted as broken fragments; the slot states the fact in the caption
+   register instead of charting a history that does not exist yet. */
+.vx-ds-none{position:absolute;inset:0;display:flex;align-items:center;gap:10px}
+.vx-ds-none::after{content:"";flex:1 1 auto;border-top:1px solid var(--vx-line)}
+.vx-ds-none i{font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-faint);white-space:nowrap}
+.vx-ds-dotel{position:absolute;right:0;width:5px;height:5px;border-radius:50%;background:var(--vx-blue);
+  transform:translateY(-50%)}
+.vx-ds-dotel--pre{opacity:0}
+.vx-ds-dotel--enter{opacity:0;animation:vxdsdot .4s cubic-bezier(.3,1.6,.4,1) .4s forwards}
+@keyframes vxdsdot{0%{opacity:0;transform:translateY(-50%) scale(0)}
+  60%{opacity:1;transform:translateY(-50%) scale(1.5)}100%{opacity:1;transform:translateY(-50%) scale(1)}}
+
+/* ── re-entry cascade: filter/sort remounts the grid keyed on the view;
+      cards rise again, snappier than first load. The mine bloom stays
+      first-load-only (single-animation override drops vxmine). ── */
+.vx-grid--re .vx-card{animation:vxrise .32s ease-out both;animation-delay:calc(var(--i,0)*30ms)}
+.vx-grid--re .vx-card--mine{animation:vxrise .32s ease-out both;animation-delay:calc(var(--i,0)*30ms)}
+
+/* ── filtered-empty: never a blank wall ── */
+.vx-dir-empty{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:34px 4px;flex-wrap:wrap}
+.vx-dir-empty i{font-family:var(--vx-ser);font-style:italic;font-size:15px;color:var(--vx-mut)}
+
+/* ── directory reduced-motion fallbacks: every hidden resting state lands
+      visible; presses and pulses go still ── */
+@media (prefers-reduced-motion: reduce){
+  .vx-chip,.vx-seg button{transition:none}
+  .vx-chip:active,.vx-seg button:active{transform:none}
+  .vx-chip-n--pulse{animation:none}
+  .vx-grid--re .vx-card,.vx-grid--re .vx-card--mine{animation:none;opacity:1;transform:none}
+  /* DS-6: the hidden resting state is a clip now, so this lands the clip. */
+  .vx-ds--pre .vx-ds-line{clip-path:none}
+  .vx-ds--pre .vx-ds-fill{opacity:1}
+  .vx-ds--enter .vx-ds-line{animation:none;clip-path:none}
+  .vx-ds--enter .vx-ds-fill{animation:none;opacity:1}
+  .vx-card:hover .vx-ds:not(.vx-ds--pre):not(.vx-ds--enter) .vx-ds-line{animation:none}
+  .vx-ds-dotel--pre{opacity:1}
+  .vx-ds-dotel--enter{animation:none;opacity:1}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PORTFOLIO REDESIGN 2026-08-21 — the money room. Additive only (vx-pf
+   prefix); reuses the directory card grammar (.vx-card cascade + hover
+   lift), the vault page's Sparkline draw choreography (vx-spark classes)
+   and the 38px inline spark (vx-ds classes) without touching their rules.
+   Hero: count-up total + portfolio value chart + mono stats strip.
+   Cards: one per vault, value hero + P&L badge (one-shot scale-settle
+   after the count), position spark, deposited / share trajectory /
+   deposits cells, quiet footer links. Empty: serif line + solid CTA +
+   ghost card. No new infinite loops; explicit reduced-motion fallbacks
+   land every hidden resting state.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── hero: the instrument ── */
+.vx-pf-hero{gap:0;padding:22px 22px 16px}
+.vx-pf-hero-read{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
+.vx-pf-hero b{font-size:clamp(30px,6vw,44px)}
+.vx-pf-chart{position:relative;min-height:120px}
+/* DS-6: the hero's inception slot, when the portfolio has no history to
+   chart yet. Same sentence, same hairline and same owner as the 38px card
+   strip (`sparkHasHistory` + SparkInception), one type size up so a 120px
+   box does not read as an empty frame. */
+.vx-pf-chart--none .vx-ds-none i{font-size:13px}
+.vx-pf-strip{font-family:var(--font-mono,ui-monospace);font-size:11.5px;color:var(--vx-faint);
+  border-top:1px solid var(--vx-line);margin:14px 0 0;padding-top:12px}
+.vx-pf-strip .pos{color:var(--vx-green)}
+.vx-pf-strip .neg{color:var(--vx-red)}
+.vx-pf-strip .flat{color:var(--vx-faint)}
+
+/* ── position cards: 2 across, 1 below 1000px (wider than directory) ── */
+.vx-pf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media(max-width:999px){.vx-pf-grid{grid-template-columns:1fr}}
+.vx-pf-val{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.vx-pf-val-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.vx-pf-val-main i{font-style:normal;font-size:11px;color:var(--vx-faint)}
+.vx-pf-val-main b{font-family:var(--font-mono,ui-monospace);font-size:24px;font-weight:600;
+  letter-spacing:-.02em;color:var(--vx-ink)}
+/* content-sized cells so the share trajectory never clips */
+.vx-pf-card .vx-card-rows{grid-template-columns:auto auto auto;justify-content:space-between;gap:8px 14px}
+/* THE EXIT LINE (PO-4 follow-up, 2026-09-02). The card paired a recorded
+   dollar value with a `Deposit more` key and said nothing about the way out;
+   it now prints `fees.withdrawalLine()`, the same string the record's fee
+   schedule and the deposit rail's position panel read. Same voice as the
+   rail's `.vx-dep-note` — serif italic, faint — so one sentence read on two
+   surfaces looks like one sentence. It sits BETWEEN the rows and the footer:
+   the footer is the two action keys, and a line saying an action does not
+   exist is not one of them. The −4px closes the card's 12px flex gap so the
+   sentence reads as a note on the rows above it, not as a third block. */
+.vx-pf-exit{font-family:var(--vx-ser);font-style:italic;font-size:11.5px;color:var(--vx-faint);
+  margin-top:-4px}
+.vx-pf-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  border-top:1px solid var(--vx-line);padding-top:12px;font-size:12.5px}
+.vx-pf-foot-dep{color:var(--vx-blue);font-weight:600}
+.vx-pf-foot-dep:hover{text-decoration:underline}
+.vx-pf-foot-view{color:var(--vx-mut);font-weight:500;transition:color .15s}
+.vx-card:hover .vx-pf-foot-view{color:var(--vx-ink)}
+
+/* ── P&L badge: semantic pill, one-shot scale-settle after the count ── */
+.vx-pf-pnl{flex:0 0 auto;font-family:var(--font-mono,ui-monospace);font-size:12px;font-weight:600;
+  border-radius:999px;padding:4px 11px;border:1px solid;white-space:nowrap;opacity:0}
+.vx-pf-pnl.pos{color:var(--vx-green);border-color:rgba(38,126,80,.3);background:rgba(38,126,80,.06)}
+.vx-pf-pnl.neg{color:var(--vx-red);border-color:rgba(192,57,43,.3);background:rgba(192,57,43,.05)}
+.vx-pf-pnl.flat{color:var(--vx-faint);border-color:var(--vx-line);background:transparent}
+.vx-pf-pnl--in{animation:vxpfsettle .5s cubic-bezier(.3,1.4,.4,1) .95s forwards}
+@keyframes vxpfsettle{0%{opacity:0;transform:scale(.7)}60%{opacity:1;transform:scale(1.06)}100%{opacity:1;transform:scale(1)}}
+
+/* ── empty state: the invitation + ghost card ── */
+.vx-pf-empty{gap:16px}
+.vx-pf-ghost{width:min(400px,100%);display:flex;flex-direction:column;gap:14px;text-align:left;
+  border:1px dashed var(--vx-line);border-radius:16px;padding:18px;margin-top:14px}
+.vx-pf-ghost-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.vx-pf-ghost-bar{display:block;height:10px;border-radius:6px;background:#ECE9E1}
+.vx-pf-ghost-bar--big{height:16px}
+.vx-pf-ghost-pill{display:block;width:84px;height:18px;border-radius:999px;border:1px solid var(--vx-line)}
+.vx-pf-ghost-spark{width:100%;height:30px;display:block}
+.vx-pf-ghost-cells{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;
+  border-top:1px solid var(--vx-line);padding-top:12px}
+.vx-pf-ghost i{font-family:var(--vx-ser);font-style:italic;font-size:11.5px;color:var(--vx-faint);text-align:center}
+
+/* ── funnel CTA row (connect invite + connected-empty), 2026-08-21 ── */
+.vx-pf-acts{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+/* .vx-cta on a <button> (the RainbowKit connect key) matches the anchor. */
+button.vx-cta{border:0;cursor:pointer;font-family:inherit;line-height:normal}
+button.vx-cta:disabled{opacity:.6;cursor:default;transform:none}
+.vx-pf-connect{padding-top:52px;padding-bottom:52px}
+.vx-pf-connect i{font-size:17px}
+
+/* ── portfolio reduced-motion fallbacks: the badge lands visible, still ── */
+@media (prefers-reduced-motion: reduce){
+  .vx-pf-pnl{opacity:1}
+  .vx-pf-pnl--in{animation:none}
+  .vx-pf-foot-view{transition:none}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CAPACITY INSTRUMENT (founder call, 2026-08-22) — how much of a strategy's
+   total capacity its TVL already represents. Headline version on the vault
+   page (rulings, tip label, endpoints, one draw-in); 4px glance version on
+   the directory card.
+
+   AT CAPACITY IS A STATE, NOT AN ERROR. A full vault is a successful vault,
+   so the full modifier changes DENSITY, never hue: no red, no amber, no
+   warning border. Green stays reserved for live dots and armed chips and is
+   nowhere in this instrument.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.vxcap{display:flex;flex-direction:column;gap:8px;
+  background:var(--vx-card);border:1px solid var(--vx-line);border-radius:14px;
+  padding:14px 16px 13px;margin-bottom:18px}
+.vxcap-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.vxcap-head i{font-style:normal;font-size:11px;font-weight:500;color:var(--vx-faint);
+  letter-spacing:.02em;text-transform:none}
+.vxcap-bind{font-size:12px;color:var(--vx-mut)}
+
+/* the track: a ruled instrument, hairlines over fills */
+.vxcap-track{position:relative;height:10px;border-radius:999px;background:#EFEDE7;
+  border:1px solid var(--vx-line);overflow:visible}
+/* rulings sit ABOVE the fill (z 2 over z 1) so the quarters stay readable
+   across the filled half too — a ruled instrument, not a ruled backdrop */
+.vxcap-rule{position:absolute;top:0;bottom:0;width:1px;background:rgba(20,20,20,.16);z-index:2}
+.vxcap-fill{position:absolute;top:0;bottom:0;left:0;border-radius:999px;
+  background:linear-gradient(90deg,var(--vx-blue) 0%,var(--vx-blue-bright) 100%);
+  transform-origin:left center;z-index:1;
+  animation:vxcap-draw .9s cubic-bezier(.22,.68,.24,1) .1s both}
+/* terminal rule: the eye lands on where the reading actually ends */
+.vxcap-fill::after{content:"";position:absolute;right:0;top:-3px;bottom:-3px;width:2px;
+  border-radius:2px;background:var(--vx-ink);opacity:.55}
+@keyframes vxcap-draw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* the terminal value label, riding the fill's own end */
+.vxcap-tip{position:absolute;top:-24px;transform:translateX(-50%);
+  font-family:var(--font-mono,ui-monospace);font-size:11.5px;font-weight:600;
+  color:var(--vx-ink);white-space:nowrap;z-index:3;
+  animation:vxcap-tip .45s ease-out .55s both}
+@keyframes vxcap-tip{from{opacity:0;transform:translateX(-50%) translateY(3px)}
+  to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+.vxcap-ends{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  font-size:12px;color:var(--vx-faint);margin-top:2px}
+.vxcap-ends b{font-family:var(--font-mono,ui-monospace);font-size:12.5px;font-weight:600;color:var(--vx-ink)}
+
+/* full: denser ink, a defined edge. Same family, no alarm. */
+.vxcap--full .vxcap-fill{background:linear-gradient(90deg,var(--vx-blue) 0%,#1E3FA8 100%)}
+.vxcap--full .vxcap-head i{color:var(--vx-ink)}
+
+/* the vault page's headline instrument sits under the stat band */
+.vxd .vxcap{padding:16px 18px 14px;gap:9px}
+.vxd .vxcap-track{height:12px;margin-top:14px}
+
+/* the card's glance version: no rulings, no tip, no draw-in */
+.vxcap--mini{background:transparent;border:0;border-radius:0;padding:0;margin-bottom:0;gap:5px}
+.vxcap--mini .vxcap-track{height:4px;border:0;background:#ECE9E1}
+.vxcap--mini .vxcap-fill{animation:none;border-radius:999px}
+.vxcap--mini .vxcap-fill::after{display:none}
+.vxcap--mini .vxcap-head i{font-size:10px}
+.vxcap--mini .vxcap-bind{font-family:var(--font-mono,ui-monospace);font-size:11px;color:var(--vx-mut)}
+
+/* MOTION FALLBACK, explicit: the resting width is the inline width and the
+   keyframes only scale about the left edge, so killing the animation leaves a
+   correctly-sized bar and a visible tip — never an empty track. */
+@media (prefers-reduced-motion: reduce){
+  .vxcap-fill{animation:none;transform:none}
+  .vxcap-tip{animation:none;opacity:1;transform:translateX(-50%)}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HELIOS DARK — the vault directory, the asset page, the portfolio and the
+   deposit rail. 2026-08-22. ADDITIVE AND DARK-ONLY: every rule below is
+   scoped under [data-theme="dark"], so the light column is a no-op by
+   construction, not by inspection.
+
+   THE RULING. The cream and the navy swap jobs. The page ground drops BELOW
+   the hardware, the hardware hexes never change, and the warm cream #F5F2EB
+   stops being the ground and becomes the ink. Warm ink on cold plate.
+   Enforceable test: if a reviewer can call a surface here "grey" or
+   "blue-grey", a neutral leaked into the ink column and the work is rejected.
+   Every ink value below is warm (#F5F2EB / #C6C0B4 / #A8A398). There is no
+   neutral grey anywhere in this block.
+
+   ROLE NAMES AND VALUES MIRROR site/assets/_theme.py EXACTLY. Each is written
+   as var(--p-role, #LITERAL) so this surface picks up the property-wide token
+   layer the moment it lands, and renders the identical measured value until
+   then. A visitor crossing priime.finance -> build.priime.finance must not see
+   the ground change; the cookie is shared, so the values must agree too.
+
+   THE ELEVATION LADDER ON THIS SURFACE (only ever UP from the ground):
+     page ground   --p-ground #04060F   (owned by the app shell, not here)
+     main column   --p-sunken #070A1C   .vxd-panel, .vxd-tabs
+     cards         --p-panel  #0A0E2A   .vx-card, .vx-panel, .vxi, .vxcap
+     chips/lifted  --p-raised #10173A   .vxo-chip, the sort segment's on key
+     wells         --p-well   #02040B   the capacity track, the rules tables
+   A screen is the deepest thing in its frame: the capacity track and the
+   cascade rules tables recess to --p-well, never to --p-sunken, because a
+   #070A1C readout inside a #0A0E2A card on a #04060F page is BRIGHTER than
+   the page and the read inverts.
+
+   AUTO-FLIP IS OFF, DELIBERATELY. Only an explicit data-theme="dark" reaches
+   these rules. No @media(prefers-color-scheme:dark) block is emitted, which
+   mirrors _theme.py's shipped DARK_AUTO=False: a dark-OS visitor who has
+   never touched the toggle lands in light on every Priime surface. See the
+   handoff note at the foot of this block.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] .vx-root{
+  /* ACCENT. #2B5CFF measures 3.93:1 on the dark ground: it passes for fills
+     and non-text UI and fails for body copy, links and focus rings. One token
+     cannot serve both, so the fill token stays MODE-CONSTANT and a text token
+     is minted. Every color:/stroke: use site is re-pointed below. */
+  --vx-blue:#2B5CFF;                                  /* fills only, never type */
+  --vx-blue-text:var(--p-accent-text,#7FB2FF);        /* 8.76 on panel */
+  --vx-blue-lg:var(--p-accent-lg,#56A8FF);            /* >=24px accent, focus ring */
+  --vx-blue-bright:var(--dv-1,#4D8BFF);               /* the chart line, 5.82 on panel */
+  --vx-tint:rgba(245,242,235,.20);                    /* was #B8D9FF: a pale ice edge
+                                                         is a chalk line on navy */
+  --vx-ice:rgba(86,168,255,.09);                      /* was #E6F4FF: a searchlight */
+
+  /* INK. All warm. Four distinct steps, mirroring the token table. */
+  --vx-ink:var(--p-ink,#F5F2EB);                      /* 16.93 on panel */
+  --vx-mut:var(--p-body,#C6C0B4);                     /* 10.46 on panel */
+  --vx-faint:var(--p-muted,#A8A398);                  /* 7.53 on panel. NOT --p-faint:
+                                                         these carry 10-11px labels and
+                                                         the spec promotes small labels
+                                                         off faint. */
+
+  /* SURFACE + HAIRLINE */
+  --vx-card:var(--p-panel,#0A0E2A);
+  --vx-line:var(--p-line,rgba(245,242,235,.12));
+
+  /* SEMANTIC. The green split, stated so it cannot fail silently.
+     #267E50 on these plates measures 3.77-4.03:1. It CLEARS the 3:1 non-text
+     floor and FAILS the 4.5:1 text floor, so it survives as a DOT and fails
+     as the WORD beside the dot. Two tokens, never one. */
+  --vx-green:var(--p-ok,#3FA96C);                     /* the WORD. 6.40 on panel */
+  --vx-green-mark:var(--p-ok-mark,#267E50);           /* the DOT. fills only, never type */
+  --vx-red:var(--p-danger,#E06A50);                   /* 5.73 on panel; light #c0392b
+                                                         is under 4.5 on navy */
+}
+
+/* ── the two column plates. The main column is a plate, not a card: it is
+      what the cards sit ON, so it takes the step below them. ── */
+[data-theme="dark"] .vxd-panel{background:var(--p-sunken,#070A1C)}
+[data-theme="dark"] .vxd-panel .vx-panel,
+[data-theme="dark"] .vxd-panel .vxi,
+[data-theme="dark"] .vxd-panel .vx-table-wrap{background:var(--p-panel,#0A0E2A)}
+/* the rules tables recess to the WELL, not back to the column tone */
+[data-theme="dark"] .vxc-rows,
+[data-theme="dark"] .vxd-panel .vxc-rows{background:var(--p-well,#02040B)}
+/* THE REGISTER TABLE TAKES THE SAME WELL. Every other token it uses already
+   flips in the block above (--vx-ink, --vx-mut, --vx-faint, --vx-line,
+   --vx-card), so this is the whole of its dark column — including the failing
+   chip, which is `--vx-ink` on `--vx-card` and therefore becomes warm ink on
+   cold plate with no override and no second design. */
+[data-theme="dark"] .vxb,
+[data-theme="dark"] .vxd-panel .vxb{background:var(--p-well,#02040B)}
+
+/* ── the section tab strip. The fixed band that covers the nav clearance is
+      the PAGE GROUND: left at its light #F5F2EB it is a cream bar across the
+      top of the viewport at every scroll position. ── */
+[data-theme="dark"] .vxd-tabs{background:var(--p-sunken,#070A1C)}
+[data-theme="dark"] .vxd-tabs--scrolled::before{background:var(--p-ground,#04060F)}
+[data-theme="dark"] .vxd-tab.on::after{background:var(--vx-blue-lg)}
+/* 2px of #2B5CFF on #070A1C is 3.6:1 and reads as a smudge at that weight.
+   The active-section marker is the page's single most load-bearing state
+   indicator, so it takes the large-accent token, which is what that token is
+   for. The tab LABEL stays --p-ink, so the accent is punctuation, not copy. */
+
+/* ── accent as TEXT. Every color: use of the fill token moves to the text
+      token. Keyed on the property, exactly as the property-wide sweep is. ── */
+[data-theme="dark"] .vx-kicker,
+[data-theme="dark"] .vx-panel-h,
+[data-theme="dark"] .vx-tag,
+[data-theme="dark"] .vx-pos i,
+[data-theme="dark"] .vx-back:hover,
+[data-theme="dark"] .vx-table a:hover,
+[data-theme="dark"] .vx-dep-done a,
+[data-theme="dark"] .vx-dep-quick button:hover,
+[data-theme="dark"] .vxa-tag--you,
+[data-theme="dark"] .vx-pf-foot-dep,
+[data-theme="dark"] .vxp-chips button:hover,
+[data-theme="dark"] .vxp-chips button.on,
+[data-theme="dark"] .vx-ds-dotel,
+[data-theme="dark"] .vxi-chip--watch{color:var(--vx-blue-text)}
+[data-theme="dark"] .vx-ds-dotel{background:var(--vx-blue-bright)}
+
+/* ── washes. On cream a 7% blue tint is a whisper; on navy it is either
+      invisible or muddy, and either way it spends the accent on nothing.
+      Resting tints become hairlines; the wash is permitted under the hand
+      only. ── */
+[data-theme="dark"] .vx-tag{background:transparent;border-color:rgba(127,178,255,.30)}
+/* THE STAGE CHIP IS NOT AN ACCENT (S2 Wave 2 seam, 2026-08-24). The two rules
+   above re-point `.vx-tag` to the accent TEXT token and to an accent hairline;
+   both are `[data-theme="dark"] .vx-tag`, which outranks the single-class
+   `.vx-tag--stage` rule in the light column, so without this pair the record's
+   incubating chip would go blue on dark while the directory card's identical
+   chip — a different class — stayed neutral. One chip, one voice, both modes.
+   Values are the same two tokens the light rule uses, so the two columns are
+   the same rule stated twice, not two designs. */
+[data-theme="dark"] .vx-tag--stage{color:var(--vx-faint);border-color:var(--vx-line)}
+[data-theme="dark"] .vxi-chip--watch{background:transparent;border-color:rgba(127,178,255,.30)}
+[data-theme="dark"] .vxp-chips button.on{background:transparent;border-color:rgba(127,178,255,.45)}
+[data-theme="dark"] .vx-cta--ghost{background:transparent;color:var(--vx-blue-text);
+  box-shadow:inset 0 0 0 1px var(--p-line-strong,rgba(245,242,235,.20))}
+[data-theme="dark"] .vx-cta--ghost:hover{box-shadow:inset 0 0 0 1px rgba(127,178,255,.45),
+  var(--p-glow-hand,0 0 0 4px rgba(127,178,255,.16))}
+
+/* ── glow only under the hand. A blue bloom on a resting control is a bug on
+      dark; it is the fastest route to generic dark UI. The primary fill and
+      its #FFFAF5 label are MODE-CONSTANT (4.96:1 in both modes) and are not
+      touched: the element a user clicks most is byte-identical across the
+      flip. Only the shadow changes. ── */
+[data-theme="dark"] .vx-cta,
+[data-theme="dark"] .vx-dep-btn{box-shadow:none}
+[data-theme="dark"] .vx-cta:hover,
+[data-theme="dark"] .vx-dep-btn:hover:not(:disabled){
+  box-shadow:var(--p-glow-hand,0 0 0 4px rgba(127,178,255,.16))}
+
+/* ── cards. On dark a surface is raised by a lightness step plus a hairline,
+      never by a lighter shadow: lightening a drop shadow manufactures a grey
+      halo around every card. Shadows that survive get DARKER. ── */
+[data-theme="dark"] .vx-card:hover{border-color:rgba(127,178,255,.42);
+  box-shadow:0 24px 48px -24px rgba(0,0,0,.75),0 0 0 1px var(--vx-line)}
+[data-theme="dark"] .vx-card--new:hover,
+[data-theme="dark"] .vx-card--dir.vx-card--new:hover{box-shadow:none;border-color:var(--vx-tint)}
+[data-theme="dark"] .vx-card-glyph path{stroke:var(--p-ink,#F5F2EB);stroke-opacity:.12}
+[data-theme="dark"] .vx-hero{background:linear-gradient(180deg,rgba(86,168,255,.10),var(--vx-card) 78%)}
+
+/* ── the directory control bar ── */
+[data-theme="dark"] .vx-chip:hover{border-color:var(--p-line-hand,rgba(245,242,235,.30))}
+[data-theme="dark"] .vx-seg{background:rgba(245,242,235,.05)}
+[data-theme="dark"] .vx-seg button.on{background:var(--p-raised,#10173A);
+  box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 1px var(--vx-line)}
+[data-theme="dark"] .vxo-chip{background:var(--p-raised,#10173A)}
+
+/* ── GREEN IS STRICTLY SEMANTIC, AND THE MEASURED SPLIT IS HONOURED.
+      The word moves to --p-ok #3FA96C (6.40 on panel, clears 4.5). The dot
+      keeps the brand mark #267E50 (3.77-4.03, clears 3.0, is not type). The
+      chips are already hairline chips, which is the shape the ruling wants,
+      so only the ink inside them changes. ── */
+[data-theme="dark"] .vx-status{border-color:rgba(63,169,108,.34)}
+[data-theme="dark"] .vxi-chip--armed{color:var(--vx-green);background:transparent;
+  border-color:rgba(63,169,108,.34)}
+[data-theme="dark"] .vx-card-live{border-color:rgba(63,169,108,.34)}
+[data-theme="dark"] .vx-status::before,
+[data-theme="dark"] .vxe-live::before,
+[data-theme="dark"] .vx-card-live::before,
+[data-theme="dark"] .vxi-chip--armed::before{background:var(--vx-green-mark)}
+
+/* ── the deposit confirmation. A real confirmation, so green is licensed.
+      On dark a tint is a low alpha of its OWN foreground hue over the current
+      surface, never a lightened version of it. ── */
+[data-theme="dark"] .vx-dep-done{background:rgba(63,169,108,.12);
+  border-color:rgba(63,169,108,.34)}
+
+/* ── the "your position" card ── */
+[data-theme="dark"] .vx-pos{background:var(--vx-ice);border-color:rgba(127,178,255,.28)}
+
+/* ── the deposit rail's dead states. AT CAPACITY IS A STATE, NOT AN ERROR: a
+      full vault is a successful vault. No red, no amber, no warning register
+      anywhere below. On dark a disabled control must not fade toward the
+      ground (it dissolves) — it becomes a dead KEY: sunken fill, muted label,
+      full opacity, no shadow. ── */
+[data-theme="dark"] .vx-dep-btn:disabled{opacity:1;background:var(--p-sunken,#070A1C);
+  color:var(--p-muted,#A8A398);box-shadow:inset 0 0 0 1px var(--vx-line)}
+[data-theme="dark"] .vx-dep-input{background:var(--p-sunken,#070A1C)}
+[data-theme="dark"] .vx-dep-input:disabled{background:var(--p-well,#02040B);
+  color:var(--p-muted,#A8A398);-webkit-text-fill-color:var(--p-muted,#A8A398);opacity:1}
+[data-theme="dark"] .vx-dep-input::placeholder{color:var(--p-muted,#A8A398);opacity:1}
+[data-theme="dark"] .vx-dep-input:focus{border-color:var(--vx-blue-lg)}
+
+/* ── focus. #2B5CFF is 3.93:1 on the ground and 2.91:1 on the bezel: it fails
+      as a focus indicator on the one plate where buttons actually live.
+      #56A8FF measures 6.02:1 on the worst plate, so one ring works
+      everywhere. ── */
+[data-theme="dark"] .vx-root a:focus-visible,
+[data-theme="dark"] .vx-root button:focus-visible,
+[data-theme="dark"] .vx-root input:focus-visible{
+  outline-color:var(--p-focus-ring,#56A8FF)}
+
+/* ══ the automation instruments ══════════════════════════════════════════
+   THE HEALTH-FACTOR BAND. The light zone fills are pale pastels tuned to sit
+   quietly in cream; on #0A0E2A the identical hexes are four chalk bars. They
+   are re-cut as a deep family: same hue identity, same order, re-weighted for
+   the plate. Measured against --p-panel #0A0E2A, all four clear the 3:1
+   non-text floor and none of them exceeds it by much, so the four zones stay
+   equal in voice exactly as they are in light:
+     emergency #9A5443  3.36:1     deleverage #7E5C30  3.13:1
+     target    #2F6E4E  3.13:1     upsize     #43619F  3.11:1
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .vxe-z--em{background:#9A5443}
+[data-theme="dark"] .vxe-z--del{background:#7E5C30}
+[data-theme="dark"] .vxe-z--tgt{background:#2F6E4E}
+[data-theme="dark"] .vxe-z--up{background:#43619F}
+[data-theme="dark"] .vxh-gauge{background:linear-gradient(90deg,#7E5C30,#2F6E4E 32%,#2F6E4E 68%,#7E5C30)}
+
+/* The zone LABELS are 10.5px type, so they take the text-legal end of each
+   hue, not the fill. A light scale that encodes magnitude through DARKNESS
+   must encode it through LIGHTNESS on dark: this is a reflection of the light
+   ladder, not a shift of it. All four measured on --p-panel: */
+[data-theme="dark"] .vxe-lab--em b{color:var(--p-danger,#E06A50)}    /* 5.73 */
+[data-theme="dark"] .vxe-lab--del b{color:var(--p-warn,#D9A063)}     /* 8.27 */
+[data-theme="dark"] .vxe-lab--tgt b{color:var(--p-ok,#3FA96C)}       /* 6.40 */
+[data-theme="dark"] .vxe-lab--up b{color:var(--vx-blue-text)}        /* 8.76 */
+/* The cascade dots are NOT re-cut: measured on --p-panel they are
+   #C97B6A 5.0, #C2864E 6.5, #3E8563 4.28, #5B7FD6 4.92 — every one clears the
+   3:1 mark floor with room, and they carry the same hue identity as the
+   zones above them. A point mark wants punch that an area fill does not. */
+
+/* the live active row: an ice wash on cream becomes an accent alpha on navy */
+[data-theme="dark"] .vxc-row--on{background:var(--vx-ice)}
+[data-theme="dark"] .vxc-row--on .vxc-dot{box-shadow:0 0 0 3px rgba(86,168,255,.18)}
+
+/* the compound meter. The fill lifts off the mode-constant accent because it
+   is a thin bar read against a well, not a control the user clicks; the
+   threshold tick is warm ink and needs a heavier alpha to survive the blue. */
+[data-theme="dark"] .vxm-bar{background:rgba(245,242,235,.09)}
+[data-theme="dark"] .vxm-fill{background:var(--vx-blue-bright)}
+[data-theme="dark"] .vxm-tick{opacity:.5}
+
+/* ══ the capacity instrument ═════════════════════════════════════════════
+   AT CAPACITY IS A STATE, NOT AN ERROR. In light, full is expressed by the
+   fill DEEPENING toward #1E3FA8. On a dark ground deepening is disappearing,
+   so the same magnitude is expressed by the reflection: full reads as a
+   fully-saturated fill that carries all the way to its terminal rule. Hue is
+   untouched, density is what moves. No red, no amber, no warning border.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .vxcap-track{background:var(--p-well,#02040B)}
+[data-theme="dark"] .vxcap-rule{background:rgba(245,242,235,.26)}
+[data-theme="dark"] .vxcap--full .vxcap-fill{
+  background:linear-gradient(90deg,var(--dv-1,#4D8BFF) 0%,var(--p-accent-text,#7FB2FF) 100%)}
+/* the 4px glance bar has no border and no rulings, so its track has to be a
+   warm alpha rather than a well or the remainder reads as nothing at all */
+[data-theme="dark"] .vxcap--mini .vxcap-track{background:rgba(245,242,235,.09)}
+/* the terminal rule and the tip label are already var(--vx-ink) and follow the
+   ink flip on their own: a warm cream marker riding the end of a blue fill. */
+
+/* ══ the charts are instruments ══════════════════════════════════════════
+   Every colour in the sparklines is an SVG PRESENTATION ATTRIBUTE, which is
+   the lowest-specificity source in CSS, so a stylesheet rule beats it without
+   touching the components. Left alone, the #e7e4dd grid rulings become bright
+   bars across the plot and the #fff halo on the terminal label becomes a
+   white slab.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .vx-spark line{stroke:rgba(245,242,235,.10)}
+/* .10 is the matched whisper, not the token minimum: the light ruling #e7e4dd
+   on #fff measures 1.13:1, and this composites to 1.26:1 on --p-panel. At the
+   spec'd --p-line-quiet .07 a 1px non-scaling stroke disappears entirely. */
+[data-theme="dark"] .vx-spark text{fill:var(--p-muted,#A8A398)}
+[data-theme="dark"] .vx-spark text[stroke]{fill:var(--p-accent-text,#7FB2FF);
+  stroke:var(--p-panel,#0A0E2A)}
+/* the halo behind the terminal value is the PLATE it sits on, not white */
+[data-theme="dark"] .vx-spark stop,
+[data-theme="dark"] .vx-ds stop{stop-color:var(--dv-1,#4D8BFF)}
+[data-theme="dark"] .vx-spark-line,
+[data-theme="dark"] .vx-ds-line{stroke:var(--dv-1,#4D8BFF)}
+[data-theme="dark"] .vx-spark-dot{fill:var(--dv-1,#4D8BFF)}
+[data-theme="dark"] .vx-pf-ghost-spark path{stroke:rgba(245,242,235,.16)}
+[data-theme="dark"] .vx-pf-ghost-bar{background:rgba(245,242,235,.09)}
+
+/* ── portfolio P&L. Green here is a real gain, so it is licensed; the badges
+      are already hairline pills and only their ink and edge move. ── */
+[data-theme="dark"] .vx-pf-pnl.pos{background:transparent;border-color:rgba(63,169,108,.34)}
+[data-theme="dark"] .vx-pf-pnl.neg{background:transparent;border-color:rgba(224,106,80,.34)}
+[data-theme="dark"] .vx-pf-pnl.flat{color:var(--p-muted,#A8A398)}
+[data-theme="dark"] .vx-pnl.flat,
+[data-theme="dark"] .vx-hero .flat,
+[data-theme="dark"] .vx-pf-strip .flat{color:var(--p-muted,#A8A398)}
+/* Headline metrics stay in INK and never in green: .vx-card-apy b,
+   .vx-stat b.apy, .vx-pf-val-main b and .vx-hero b all resolve through
+   var(--vx-ink) and flip to warm cream on their own. */
+
+/* ══ mono steps down one notch on dark ═══════════════════════════════════
+   Light type on a dark ground blooms, hardest at small sizes and in monospace
+   where strokes are uniform and dense. Left at 600 the figures read bolder
+   than the headings around them and the hierarchy inverts exactly where the
+   numbers matter. Below 18px, 600 steps to 550. Above 18px the bloom is not
+   dominant and headline metrics stay at 600. letter-spacing is UNCHANGED:
+   tabular figures depend on advance width and any tracking change breaks
+   column alignment.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .vx-cell b,
+[data-theme="dark"] .vxj-row b,
+[data-theme="dark"] .vx-table td,
+[data-theme="dark"] .vxc-val,
+[data-theme="dark"] .vxe-lab b,
+[data-theme="dark"] .vxh-scale b,
+[data-theme="dark"] .vxcap-ends b,
+[data-theme="dark"] .vxcap-tip,
+[data-theme="dark"] .vxi-foot b,
+[data-theme="dark"] .vx-chip-n,
+[data-theme="dark"] .vx-pf-pnl{font-weight:550}
+[data-theme="dark"] .vxj-row--lead b{font-weight:600}
+/* …and the ACTIVITY table's two SANS columns come back out of the step. The
+   rule above catches every `.vx-table td`, so `.vxa-action` went 600 to 550
+   and `.vxa-detail` sat at 550 too: two columns 200 weight units apart in
+   light converge on one weight in dark, and the Action column stops leading
+   its own row. The step exists so FIGURES do not out-shout the headings
+   around them, and neither of these cells is a figure. */
+/* The selectors carry `td` deliberately: the step above is
+   `[data-theme="dark"] .vx-table td`, which is one type selector MORE
+   specific than a bare class, so a re-assertion written as
+   `[data-theme="dark"] .vxa-action` loses and the columns stay converged.
+   Measured in a browser, not assumed. */
+[data-theme="dark"] .vx-table td.vxa-action{font-weight:600}
+[data-theme="dark"] .vx-table td.vxa-detail,
+[data-theme="dark"] .vx-table td.vxa-time{font-weight:400}
+/* …and neither do the rows that left the mono in the phrase pass. Four of the
+   eleven selectors in the step above now carry VALUES that are sans, and a
+   sans phrase has no bloom to correct: left in the step it would render 550
+   on dark against 600 in light. `.vx-table td.vxa-detail` above carries its
+   `td` for the same specificity reason documented there. */
+[data-theme="dark"] .vx-kv b[data-kind="phrase"],
+[data-theme="dark"] .vxj-row b[data-kind="phrase"],
+[data-theme="dark"] .vxi-foot b[data-kind="phrase"],
+[data-theme="dark"] .vxc-val[data-kind="phrase"]{font-weight:500}
+/* …and the register's absence does NOT step with them. It is not a figure, it
+   is the word `not measured`, and an absence carried at measurement weight
+   reads as a measurement. The mono bloom step above is (0,2,0); `.vxb-abs` is
+   not in that list and is not mono, so it never enters the step at all — which
+   is why the guard that used to sit here, `[data-theme="dark"]
+   .vxc-val[data-blind="true"]`, is retired with the verdict rows it protected.
+   The dark sweep in `liquidation-verdict-wiring` §7 is written against
+   `.vxb-abs` now, in both plates. */
+
+/* ── the router's clock and its register tail need NO override, and that is
+      worth writing down rather than leaving as an absence. `.vxk-cell` is
+      --vx-line, `.vxk-cell--on` is --vx-blue (a FILL, which is exactly what
+      the mode-constant accent token above is for and never type), and
+      `.vxk-lab` / `.vxe-modeled` are --vx-faint, which this block already
+      re-points to --p-muted per the ruling three tokens up. All four flip
+      with the plate. `.vxe-modeled` also carries no ::before and no
+      animation, so nothing in the motion section below reaches it. ── */
+
+/* ══ motion: the rings re-hue, nothing new is added ══════════════════════
+   A status LED is passive and the law applies: on dark it is a containment
+   ring, not a bloom. These are the SAME five one-shot/ambient beats already
+   authored above, re-cut for the plate — no new loops, no new beats, and the
+   flip itself is never acknowledged.
+   ═══════════════════════════════════════════════════════════════════════ */
+@keyframes vx-live-d{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(63,169,108,.26)}
+  50%{opacity:.55;box-shadow:0 0 0 4px rgba(63,169,108,0)}}
+@keyframes vxbloom-d{0%{box-shadow:0 0 0 0 rgba(63,169,108,.26)}
+  100%{box-shadow:0 0 0 14px rgba(63,169,108,0)}}
+@keyframes vxmine-d{0%{box-shadow:0 0 0 0 rgba(77,139,255,.32)}
+  100%{box-shadow:0 0 0 16px rgba(77,139,255,0)}}
+@keyframes vxposflash-d{0%{background:rgba(86,168,255,.22);border-color:rgba(127,178,255,.55)}
+  100%{background:var(--vx-ice);border-color:rgba(127,178,255,.28)}}
+@keyframes vxnumflash-d{0%{color:var(--p-accent-text,#7FB2FF)}100%{color:var(--vx-ink)}}
+
+[data-theme="dark"] .vx-status::before,
+[data-theme="dark"] .vxe-live::before{animation-name:vx-live-d}
+[data-theme="dark"] .vx-dep-done{animation-name:vxdep,vxbloom-d,vxdepout}
+[data-theme="dark"] .vx-card--mine{animation-name:vxrise,vxmine-d}
+/* the bloom stays first-load-only: the re-entry cascade drops it in light by
+   source order, and that ordering does not survive the dark override above */
+[data-theme="dark"] .vx-grid--re .vx-card--mine{animation-name:vxrise}
+[data-theme="dark"] .vx-pos{animation-name:vxposflash-d}
+[data-theme="dark"] .vx-num-flash{animation-name:vxnumflash-d}
+
+/* The reduced-motion fallbacks above sit at a LOWER specificity than the five
+   rules immediately preceding, so they have to be re-asserted here or a
+   reduced-motion user in dark would have the animations handed back to them.
+   Reduced motion removes the MOTION, never the INFORMATION: the dot stays
+   lit and static, the confirmation stays visible, the card stays landed. */
+@media (prefers-reduced-motion: reduce){
+  [data-theme="dark"] .vx-status::before,
+  [data-theme="dark"] .vxe-live::before{animation:none;opacity:1}
+  [data-theme="dark"] .vx-dep-done{animation:none;opacity:1;transform:none}
+  [data-theme="dark"] .vx-card--mine,
+  [data-theme="dark"] .vx-grid--re .vx-card--mine{animation:none;opacity:1;transform:none}
+  [data-theme="dark"] .vx-pos,
+  [data-theme="dark"] .vx-num-flash{animation:none}
+}
+
+/* ── HANDOFFS, stated rather than discovered later ──────────────────────────
+   1. No @media(prefers-color-scheme:dark) block is emitted here, mirroring
+      _theme.py's DARK_AUTO=False. Turning auto-flip on is one grouped
+      selector edit in this block, and it must land in the SAME pass as the
+      app shell's and the sibling surfaces', or a dark-OS visitor gets a page
+      that is half flipped.
+   2. --p-*, --dv-* and --p-glow-hand are consumed here as var() with measured
+      literal fallbacks, so this surface is correct with or without the
+      property-wide token layer. When that layer lands, delete nothing: the
+      fallbacks simply stop being reached.
+   3. The page ground (--p-ground #04060F), the scrollbar (which is handled
+      ENTIRELY by color-scheme:dark and by nothing else), ::selection and the
+      nav pill are outside this file.
+   4. The SVG colour attributes in Sparkline.tsx / VaultsDirectory.tsx /
+      PortfolioView.tsx are overridden from CSS here because presentation
+      attributes lose to stylesheet rules. Moving them to var(--dv-N) at the
+      component level is still the right end state and is a separate ticket;
+      until then, any NEW chart element added to those files needs a matching
+      rule in this block or it ships at its light value.
+   ────────────────────────────────────────────────────────────────────────── */

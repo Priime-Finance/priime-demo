@@ -12,8 +12,11 @@
 import { buildUnifiedList, type UnifiedRow } from "./unified-list";
 import type { ProjectedVenue } from "./opportunities";
 import type { ProposalPayload, ProposalLoopSnapshot } from "./copilot/tools";
+import { leverageModuleInstalls } from "./leverage-module";
+import { laneEconomicsFor, strategyForRow } from "./copilot/lane-frame";
+import { proposalLoopComposition } from "./copilot/apply";
 
-type SourcedVenue = ProjectedVenue & { source?: "kv" | "process-cache" | "snapshot" };
+type SourcedVenue = ProjectedVenue & { source?: string };
 
 function snapshotOf(r: UnifiedRow): ProposalLoopSnapshot {
   return {
@@ -23,7 +26,7 @@ function snapshotOf(r: UnifiedRow): ProposalLoopSnapshot {
     cls: r.cls,
     hlCoin: r.hlCoin,
     lt: r.lt,
-    headlineAprPct: typeof r.headlineApr === "number" ? r.headlineApr * 100 : null,
+    loopLeverage: r.economics?.loopLeverage ?? null,
     contentHash: r.contentHash,
     launchable: r.launchable,
     stale: r.stale,
@@ -52,13 +55,30 @@ function pickBest(rows: UnifiedRow[], excludeIds: Set<string>, excludePairs: Set
   );
 }
 
-function toLoop(r: UnifiedRow) {
+function toLoop(r: UnifiedRow): ProposalPayload["loops"][number] {
+  const strategy = strategyForRow(r);
+  const leverageModule = leverageModuleInstalls(r) && strategy === "loop";
+  const hedge = strategy === "collar" ? false : r.cls === "A";
+  const compound = true;
   return {
     candidateId: r.id,
-    riskStop: "balanced" as const,
-    hedge: r.cls === "A",
-    compound: true,
+    strategy,
+    /* No leverage named: the lane lands on the market's own default from
+       `landingLeverage`, which is the leverage the catalog card quotes. */
+    leverage: null,
+    /* THE MODULE RULING, the same owner the validator and the templates read:
+       a demo lane on a subtracting market holds no leverage module. */
+    leverageModule,
+    hedge,
+    compound,
     snapshot: snapshotOf(r),
+    /* The same one owner the copilot's own blueprint reads. The demo card is a
+       product surface, so its number is the PRODUCT number. */
+    lane: laneEconomicsFor(
+      r,
+      { leverage: null, leverageModule, hedge, compound },
+      proposalLoopComposition({ hedge, compound }),
+    ),
   };
 }
 

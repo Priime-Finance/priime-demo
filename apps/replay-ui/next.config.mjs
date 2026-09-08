@@ -31,6 +31,11 @@ const nextConfig = {
     }
     return config
   },
+  // The founder's wording is "the vault page"; the routes are /vaults and
+  // /vaults/[slug] (spec A.3 #35). Old /vault/* links land with a 308.
+  async redirects() {
+    return [{ source: '/vault/:path*', destination: '/vaults/:path*', permanent: true }]
+  },
 }
 
 export default nextConfig

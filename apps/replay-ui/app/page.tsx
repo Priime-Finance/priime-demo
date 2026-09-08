@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
 
 /**
- * Root now belongs to the Priime Build canvas kit's app/layout.tsx +
- * app/globals.css (see priime-build-ui-kit integration). The canvas itself
- * lives at /build (single-host POC — see the kit's own note on middleware.ts,
- * which is deleted here since there is only one host). The legacy replay
- * console is gone: the operator pipeline it used to show is now the
- * verification canvas on /vault/[slug]
- * (`components/vaults/VerificationCanvas.tsx`), replaying the same captures.
+ * The root is the canvas, and it always opens blank. `?new=1` is the same
+ * flag the nav's Create vault key carries (lib/host.ts): without it the
+ * canvas restores whatever composition the builder last left behind, and a
+ * front door that hands you a half-built vault is answering a different
+ * question. The canvas keeps the saved draft reachable through its own
+ * resume affordance, so nothing is lost by opening fresh.
  */
 export default function RootPage() {
-  redirect("/build");
+  redirect("/build?new=1");
 }

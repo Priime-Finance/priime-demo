@@ -56,7 +56,6 @@ export function VintageFooter() {
           </a>
           <div
             style={{
-              fontFamily: "var(--font-mono, 'IBM Plex Mono', monospace)",
               fontSize: 12,
               marginTop: 11,
               color: "#8B94C4",
@@ -69,9 +68,7 @@ export function VintageFooter() {
         {/* RIGHT — copyright + legal links */}
         <div
           style={{
-            fontFamily: "var(--font-mono, 'IBM Plex Mono', monospace)",
             fontSize: 11,
-            letterSpacing: "0.03em",
             color: "rgba(245,242,235,.55)",
           }}
         >
@@ -87,7 +84,6 @@ export function VintageFooter() {
         <div
           style={{
             flexBasis: "100%",
-            fontFamily: "var(--font-mono, 'IBM Plex Mono', monospace)",
             fontSize: 10.5,
             lineHeight: 1.7,
             color: "rgba(255,255,255,.38)",

@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true,
+    "incremental": false
+  },
+  "include": [
+    "lib/journal.ts",
+    "lib/source.ts",
+    "lib/replay.ts",
+    "lib/format.ts",
+    "lib/vaults/attested.ts",
+    "lib/vaults/requests.ts",
+    "lib/vaults/pipeline.ts",
+    "lib/vaults/rows.ts",
+    "lib/demo-scope.ts",
+    "lib/wallet.ts",
+    "tests/replay.test.ts",
+    "tests/pipeline.test.ts",
+    "tests/source.test.ts",
+    "tests/format.test.ts"
+  ]
+}
