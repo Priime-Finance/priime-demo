@@ -89,6 +89,39 @@ export function executionDetail(blockNumber: number): string {
   return `signed packet accepted · block ${blockNumber.toLocaleString("en-US")}`;
 }
 
+/**
+ * THE FIGURES INSIDE A SENTENCE, AND ONLY THOSE.
+ *
+ * A Detail cell is a sentence with numbers in it, not a number: `signed
+ * packet accepted · block 50,208,131`. The table used to set the whole cell
+ * in the mono, which put the words in the data register; setting the whole
+ * cell in the sans would put the figures out of it. So the cell inherits the
+ * sans and each figure claims `.num` back, the same split the canvas tips
+ * already use for an inline mono token inside a sans sentence.
+ *
+ * A digit that follows a LETTER is part of a name, not a figure: `Aave v3`
+ * and `USDe/USDC` keep their native casing and their face. Exported so a
+ * test can hold the split to the strings the ledger actually prints.
+ */
+const DETAIL_FIGURE = /[$+±−-]?\d[\d,]*(?:\.\d+)?(?:%|pp|bps|[dhx])?/g;
+
+export function detailFigureSpans(detail: string): { text: string; num: boolean }[] {
+  const out: { text: string; num: boolean }[] = [];
+  let at = 0;
+  for (const m of detail.matchAll(DETAIL_FIGURE)) {
+    const i = m.index;
+    const raw = m[0];
+    // A run that begins inside a word is part of that word.
+    const before = i > 0 ? detail[i - 1] : "";
+    if (before !== undefined && /[A-Za-z]/.test(before)) continue;
+    if (i > at) out.push({ text: detail.slice(at, i), num: false });
+    out.push({ text: raw, num: true });
+    at = i + raw.length;
+  }
+  if (at < detail.length) out.push({ text: detail.slice(at), num: false });
+  return out;
+}
+
 /** The ledger's word for a router decision. `relocated` is available now and
  *  it was not before: under the switch (G1) a firing carries the whole lane
  *  and the source ends at zero, so the verb that claims a lane was emptied is
@@ -284,8 +317,18 @@ export default function ActivitySection({
                   ) : null}
                   {r.kind === "onchain" ? <span className="vxa-tag vxa-tag--chain">on chain</span> : null}
                 </td>
-                <td className="vxa-detail">{r.detail}</td>
-                <td className="vxa-time">{relTime(r.ms, nowMs)}</td>
+                <td className="vxa-detail">
+                  {detailFigureSpans(r.detail).map((part, j) =>
+                    part.num ? (
+                      <span key={j} className="num">
+                        {part.text}
+                      </span>
+                    ) : (
+                      <span key={j}>{part.text}</span>
+                    ),
+                  )}
+                </td>
+                <td className="vxa-time num">{relTime(r.ms, nowMs)}</td>
                 {verifiable ? (
                   <td className="vxa-col-verify">{r.txHash ? <VerifyKey txHash={r.txHash} /> : null}</td>
                 ) : null}

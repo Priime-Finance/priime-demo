@@ -395,7 +395,7 @@ export function PositionCard({ c, i, now }: { c: CardModel; i: number; now: numb
       </div>
       {c.vault ? (
         <span className="vx-card-mkt">
-          {c.vault.market} · {recordVenueLine(c.vault)}
+          <span className="pair">{c.vault.market}</span> · {recordVenueLine(c.vault)}
         </span>
       ) : null}
       <div className="vx-pf-val">

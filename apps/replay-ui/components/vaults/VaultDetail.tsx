@@ -64,6 +64,7 @@ import {
   PRODUCT_MIN_LEVERAGE,
 } from "@/lib/canvas/param-schema";
 import { HERO_SLUG } from "@/lib/demo-scope";
+import { type ParamKind, paramKind, withParamKinds } from "@/lib/vaults/param-kind";
 import { AWAITING_LABEL, HERO_SHARES_OUTSTANDING } from "@/lib/vaults/attested";
 import type { Capture } from "@/lib/vaults/pipeline";
 import { heroNavPerShare, heroNavUsd, heroStrikes } from "@/lib/vaults/rows";
@@ -213,6 +214,14 @@ function CapacityBar({
 export interface ParamRow {
   label: string;
   value: string;
+  /**
+   * The row's TYPE register, stamped by `withParamKinds` at the end of the
+   * fold and never decided at a call site. `reading` stays in the mono,
+   * `phrase` moves to the sans on the row, `prose` stacks left and wraps.
+   * Optional on the schema because the builders push label/value pairs; every
+   * row this component RENDERS has been through the stamp.
+   */
+  kind?: ParamKind;
 }
 
 /**
@@ -576,7 +585,7 @@ export default function VaultDetail({ slug }: { slug: string }) {
     push("Min deposit", `$${MIN_DEPOSIT_USD.toLocaleString("en-US")}`);
     // The fee schedule closes the block on every record, the same four rows
     // in the same order the review sheet showed before publish.
-    return withFeeRows(dedupeParamRows(rows), vault);
+    return withParamKinds(withFeeRows(dedupeParamRows(rows), vault));
   }, [vault, ceiling, attested]);
 
   /* ── the router's own parameter group ──────────────────────────────────
@@ -625,10 +634,10 @@ export default function VaultDetail({ slug }: { slug: string }) {
           <span>Rule</span>
           <b>{r.ruleSentence}</b>
         </div>
-        {rows.map((row) => (
-          <div key={row.label} className="vx-kv">
+        {withParamKinds(rows).map((row) => (
+          <div key={row.label} className={`vx-kv${row.kind === "prose" ? " vx-kv--prose" : ""}`}>
             <span>{row.label}</span>
-            <b>{row.value}</b>
+            <b data-kind={row.kind}>{row.value}</b>
           </div>
         ))}
       </div>
@@ -707,8 +716,12 @@ export default function VaultDetail({ slug }: { slug: string }) {
               header (a funding vault's `Hyperliquid · funding` resolves to a
               chain of `Hyperliquid L1`), so the routed case is the only one
               that moves. */}
+          {/* The PAIR is the ticker and keeps the mono; a count, two protocol
+              names and a chain are words and keep their native casing in the
+              sans. */}
           <span className="vx-card-mkt">
-            {vault.market} · {routed ? `${venue} · ${chain}` : vault.venue}
+            <span className="pair">{vault.market}</span> ·{" "}
+            {routed ? `${venue} · ${chain}` : vault.venue}
           </span>
           <span className="vx-dmeta-cur">
             Curated by <b>{vault.curator}</b>
@@ -859,25 +872,31 @@ export default function VaultDetail({ slug }: { slug: string }) {
               </div>
               <div className="vx-panel">
                 <div className="vx-panel-h">Vault configuration</div>
+                {/* THE SAME REGISTER OWNER AS THE PARAMETERS TABLE. These rows
+                    are written out rather than folded, so each one asks
+                    `paramKind` directly: a curator, a venue, a chain and a
+                    strategy class are NAMES, and names are words. */}
                 <div className="vx-kv">
                   <span>Curator</span>
-                  <b>{vault.curator}</b>
+                  <b data-kind={paramKind("Curator", vault.curator)}>{vault.curator}</b>
                 </div>
                 <div className="vx-kv">
                   <span>Created</span>
-                  <b>{fmtCreated(vault.createdAt)}</b>
+                  <b data-kind={paramKind("Created", fmtCreated(vault.createdAt))}>
+                    {fmtCreated(vault.createdAt)}
+                  </b>
                 </div>
                 <div className="vx-kv">
                   <span>Venue</span>
-                  <b>{venue}</b>
+                  <b data-kind={paramKind("Venue", venue)}>{venue}</b>
                 </div>
                 <div className="vx-kv">
                   <span>Chain</span>
-                  <b>{chainLine}</b>
+                  <b data-kind={paramKind("Chain", chainLine)}>{chainLine}</b>
                 </div>
                 <div className="vx-kv">
                   <span>Strategy class</span>
-                  <b>{vault.strategyLabel}</b>
+                  <b data-kind={paramKind("Strategy class", vault.strategyLabel)}>{vault.strategyLabel}</b>
                 </div>
                 <div className="vx-kv vx-kv--chips">
                   <span>Modules</span>
@@ -891,7 +910,14 @@ export default function VaultDetail({ slug }: { slug: string }) {
                 </div>
                 <div className="vx-kv">
                   <span>Verification</span>
-                  <b>
+                  <b
+                    data-kind={paramKind(
+                      "Verification",
+                      attested && quorumLabel !== null
+                        ? `Operator quorum (TEN), ${quorumLabel} required · attested`
+                        : "Operator quorum (TEN), every action co-signed · modeled",
+                    )}
+                  >
                     {attested && quorumLabel !== null
                       ? `Operator quorum (TEN), ${quorumLabel} required · attested`
                       : "Operator quorum (TEN), every action co-signed · modeled"}
@@ -913,10 +939,10 @@ export default function VaultDetail({ slug }: { slug: string }) {
                 {paramRows.map((p) => (
                   <div
                     key={p.label}
-                    className={`vx-kv${p.label === "Main risk" ? " vx-kv--prose" : ""}`}
+                    className={`vx-kv${p.kind === "prose" ? " vx-kv--prose" : ""}`}
                   >
                     <span>{p.label}</span>
-                    <b>{p.value}</b>
+                    <b data-kind={p.kind}>{p.value}</b>
                   </div>
                 ))}
               </div>

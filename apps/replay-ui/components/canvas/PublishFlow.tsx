@@ -41,6 +41,7 @@ import { fmtCapacityUsd } from "@/lib/canvas/capacity";
 // that emits an ASCII hyphen on a negative where the ratified glyph is U+2212.
 import { pct } from "@/lib/canvas/format";
 import { apyCaption, feeRows } from "@/lib/canvas/fees";
+import { withParamKinds } from "@/lib/vaults/param-kind";
 import { SEED_SLUGS } from "@/lib/vaults/seeds";
 import { heroNavUsd } from "@/lib/vaults/rows";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
@@ -349,20 +350,27 @@ export default function PublishFlow({
                     and a summary line alone cannot carry them. */}
                 {((draft.laneCount ?? 1) > 1 || draft.reviewParams) && draft.params.length > 0 ? (
                   <div className="pf-lanes" style={{ display: "grid", gap: 6, marginBottom: 16 }}>
-                    {draft.params.map((p) => (
+                    {withParamKinds(draft.params).map((p) => (
                       <div
                         key={p.label}
                         style={{
                           display: "flex",
                           justifyContent: "space-between",
                           gap: 12,
-                          fontFamily: "var(--fm)",
                           fontSize: 11,
                           color: "#B8D9FF",
                         }}
                       >
                         <span style={{ color: "#8B94C4" }}>{p.label}</span>
-                        <span style={{ textAlign: "right" }}>{p.value}</span>
+                        <span
+                          data-kind={p.kind}
+                          style={{
+                            textAlign: "right",
+                            fontFamily: p.kind === "reading" ? "var(--fm)" : undefined,
+                          }}
+                        >
+                          {p.value}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -381,20 +389,27 @@ export default function PublishFlow({
                     (`DEMO_SCOPE.liveSlug`), so the schedule is read for it:
                     the withdrawal row prices the exit that record has. */}
                 <div className="pf-fees" style={{ display: "grid", gap: 6, marginBottom: 16 }}>
-                  {feeRows({ slug: DEMO_SCOPE.liveSlug }).map((f) => (
+                  {withParamKinds(feeRows({ slug: DEMO_SCOPE.liveSlug })).map((f) => (
                     <div
                       key={f.label}
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
                         gap: 12,
-                        fontFamily: "var(--fm)",
                         fontSize: 11,
                         color: "#B8D9FF",
                       }}
                     >
                       <span style={{ color: "#8B94C4" }}>{f.label}</span>
-                      <span style={{ textAlign: "right" }}>{f.value}</span>
+                      <span
+                        data-kind={f.kind}
+                        style={{
+                          textAlign: "right",
+                          fontFamily: f.kind === "reading" ? "var(--fm)" : undefined,
+                        }}
+                      >
+                        {f.value}
+                      </span>
                     </div>
                   ))}
                 </div>

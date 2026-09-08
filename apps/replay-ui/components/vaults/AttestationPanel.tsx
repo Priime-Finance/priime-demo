@@ -14,6 +14,7 @@
 
 import { truncateAddress, truncateHash } from "@/lib/format";
 import { formatAttestedNav, type StrikeRow } from "@/lib/vaults/attested";
+import { valueKind } from "@/lib/vaults/param-kind";
 import { captureJournal } from "@/lib/vaults/pipeline";
 import { heroStrikes } from "@/lib/vaults/rows";
 
@@ -93,10 +94,14 @@ export function AttestationPanel({ strikes }: { strikes: readonly StrikeRow[] })
   return (
     <div className="vx-panel vx-attest">
       <div className="vx-panel-h">Attestation</div>
+      {/* The board's own register owner. A digest, a service id, a vault, an
+          operator, a block and a NAV are data and stay in the mono; a row
+          that reads `USDC, 6 decimals`, `no quorum formed` or `awaiting
+          strike` is words, and words are the sans. */}
       {rows.map((r) => (
         <div key={r.label} className="vx-kv">
           <span>{r.label}</span>
-          <b>{r.value}</b>
+          <b data-kind={valueKind(r.value)}>{r.value}</b>
         </div>
       ))}
       <p className="vxd-desc vxd-desc--note">{ATTESTATION_NOTE}</p>

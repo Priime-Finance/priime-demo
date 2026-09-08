@@ -50,8 +50,13 @@
  * COPY BUDGET (C15, asserted in __tests__/tips.test.ts): title <= 52 chars
  * and <= 8 words, body <= 96 chars and <= 14 words, no em dashes, none of
  * the forbidden vocabulary. At 296px wide with 15px padding the measure is
- * 266px ~ 46 chars of Hanken 11.5px, so the 96-char body cap IS the two-line
- * clamp: any clamped tip is a copy bug and fails CI. (The spec's prose says
+ * 266px, ~43 chars of the sans at 11.5px, so the 96-char body cap IS the
+ * two-line clamp: any clamped tip is a copy bug and fails CI. (The measure
+ * was ~46 chars while the canvas sans was Hanken at 0.504em a lowercase
+ * letter; Geist is 0.534em, 6% wider, so the two-line budget tightened from
+ * ~92 to ~86 characters and the 96-char cap is now above it. The caps are
+ * copy caps and were not moved in the type pass; a tip that clips clips
+ * silently, so treat a clamped tip as the bug it is.) (The spec's prose says
  * "<= 5 words"; its own catalog copy runs to 8 — "Loop 1 holds 72%, the
  * router caps 60%" — so the WORD cap is set at the catalog's real maximum
  * and the CHAR cap, which is the one the layout actually enforces, is hard.)

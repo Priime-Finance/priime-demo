@@ -20,7 +20,7 @@
 
 /* the two faces the board sets, in the root layout's variables (A.3 #33) */
 .vc-wrap, .vc-legend, .vx-ledger {
-  --vm: var(--font-plex-mono), 'IBM Plex Mono', ui-monospace, monospace;
+  --vm: var(--font-mono, ui-monospace);
   --vser: var(--font-fraunces), 'Fraunces', Georgia, serif;
 }
 
@@ -56,10 +56,10 @@
 /* board kicker + crumb: board-ground carriers, sentence case (DL-9; the
    build.css:1506 precedent for the .05em tracking) */
 .vc-kicker { position: absolute; top: 16px; right: 22px; z-index: 5; text-align: right; max-width: 460px; }
-.vc-kicker .vc-lane { font-family: var(--vm); font-size: 10.5px; letter-spacing: 0.05em; text-transform: none; color: var(--p-ink, #141210); font-weight: 600; display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
+.vc-kicker .vc-lane { font-family: var(--font-body); font-size: 11px; letter-spacing: -.005em; text-transform: none; color: var(--p-ink, #141210); font-weight: 500; display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
 .vc-kicker .vc-lane em { font-style: normal; color: var(--vc-signed); }
 .vc-crumb { position: absolute; top: 16px; left: 22px; z-index: 5; }
-.vc-crumb .vc-lane { font-family: var(--vm); font-size: 10.5px; letter-spacing: 0.05em; text-transform: none; color: var(--p-ink, #141210); font-weight: 600; }
+.vc-crumb .vc-lane { font-family: var(--font-body); font-size: 11px; letter-spacing: -.005em; text-transform: none; color: var(--p-ink, #141210); font-weight: 500; }
 .vc-crumb .vc-lane em { font-style: normal; color: var(--vc-signed); }
 .vc-crumb .vc-cap { font-family: var(--vser); font-style: italic; font-size: 12.5px; color: var(--p-muted, #666460); margin-top: 4px; }
 
@@ -80,7 +80,7 @@
 
 /* status chip on the board ground, sentence case */
 .vc-phase {
-  font-family: var(--vm); font-size: 9px; letter-spacing: 0.05em; text-transform: none;
+  font-family: var(--font-body); font-size: 11px; letter-spacing: -.005em; text-transform: none; font-weight: 500;
   color: var(--vx-green, #267e50); border: 1px solid rgba(38, 126, 80, 0.4); border-radius: 30px; padding: 3px 9px; background: var(--vx-card, #fbfaf8);
 }
 
@@ -98,7 +98,7 @@
    component drops the class and the wire rests dashed */
 .vc-wire--rejected.vc-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: vc-drawin 0.55s cubic-bezier(0.3, 1, 0.4, 1) forwards; }
 .vc-plug { fill: #0c0c0c; stroke: #c2beb5; stroke-width: 1.5; }
-.vc-wiretag { font-family: var(--vm); font-size: 9px; letter-spacing: 0.05em; fill: var(--p-faint, #9A968C); text-transform: none; }
+.vc-wiretag { font-family: var(--font-body); font-size: 11px; letter-spacing: -.005em; font-weight: 500; fill: var(--p-faint, #9A968C); text-transform: none; }
 .vc-wiretag--bad { fill: var(--p-danger, #b42318); animation: vc-tagin 0.2s ease-out 0.35s both; }
 
 @keyframes vc-dashflow { to { stroke-dashoffset: -18; } }
@@ -265,4 +265,11 @@
 /* the board's seat inside the Verification section: full panel interior,
    no shadow; the caption above it is the mandatory README line */
 .vx-board-seat { margin: 4px 0 0; }
-.vx-attest .vx-kv b { font-family: var(--vm); font-size: 12px; overflow-wrap: anywhere; text-align: right; }
+/* `--vm` is declared on `.vc-wrap, .vc-legend, .vx-ledger` only, and the
+   Attestation panel is a SIBLING of `.vx-ledger`, so `var(--vm)` here
+   resolved to nothing and the declaration was invalid at computed-value
+   time: the board printed one address in mono and the same address 400px
+   below it in a proportional face. Dropping the declaration lets the row
+   inherit `.vx-kv b`'s mono from vaults.css, which keeps the page on ONE
+   mono rather than adding `--vm` to a second scope. */
+.vx-attest .vx-kv b { font-size: 12px; overflow-wrap: anywhere; text-align: right; }

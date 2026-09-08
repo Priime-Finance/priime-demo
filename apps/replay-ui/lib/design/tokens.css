@@ -181,13 +181,16 @@
   --hairline-strong: rgba(0, 0, 0, 0.14);
   --hairline-soft:   rgba(0, 0, 0, 0.04);
 
-  /* ── 2.1 Fonts — Linear-style: Inter Variable for everything, Geist Mono
-        for tabular/code. Linear pairs Inter (free, variable) with Berkeley
-        Mono (paid); we use Geist Mono as a free geometric-mono substitute.
-        --font-display reuses Inter at a heavier weight rather than a serif
-        — that's how Linear handles editorial titles. ───────────────────── */
-  --font-display: var(--font-geist), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-body:    var(--font-geist), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* ── 2.1 Fonts: one sans, one mono. Geist carries every word: body,
+        heads, labels, chips, controls, the nav pill. Geist Mono carries
+        the data register only. --font-display reuses Geist at a heavier
+        weight rather than a serif, which is how Linear handles editorial
+        titles. Do not chain an undefined var() here: a var() that resolves
+        to nothing makes the whole declaration invalid at computed-value
+        time and drops every inheriting element to the browser's default
+        serif. ────────────────────────────────────────────────────────── */
+  --font-display: var(--font-geist), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body:    var(--font-geist), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono:    var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 
   /* Inter glyph features Linear uses: cv08 (alt single-storey 'a'),

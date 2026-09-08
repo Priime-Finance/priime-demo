@@ -83,7 +83,21 @@ import type { CSSProperties } from "react";
 
 import Sparkline from "./Sparkline";
 import { useCountUp } from "./useCountUp";
+import { valueKind } from "@/lib/vaults/param-kind";
 import { useInView } from "./useInView";
+
+/**
+ * A FOOT READING, with its type register decided by the value and nowhere
+ * else. The feet under an instrument are heads in the sans with their values
+ * beside them, and most of those values are figures with a unit. The ones
+ * that are not, `none since publish`, `every block`, `just now`, `in 13h`,
+ * `app.aave.com`, are words. Printing words in the mono is the defect
+ * this closes (founder, 2026-09-08). `valueKind` is the one owner; a `<b>`
+ * here never decides for itself.
+ */
+function FootVal({ children }: { children: string }) {
+  return <b data-kind={valueKind(children)}>{children}</b>;
+}
 
 const HOUR_MS = 3600e3;
 const DAY_MS = 86400e3;
@@ -648,7 +662,7 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
       </div>
       <div className="vxi-body">
         <div className="vxe-read">
-          <b>{read.gapText}</b>
+          <b data-kind={valueKind(read.gapText)}>{read.gapText}</b>
           <span>{read.readingLine}</span>
           {/* THE REGISTER OF THIS NUMBER, AND IT IS NOT THE HERO'S (G3). The
               hero prints the record's published number at the stored leverage
@@ -746,21 +760,21 @@ function RouterInstrument({ vault, r }: { vault: VaultRecord; r: RouterAutomatio
       </div>
       <div className="vxi-foot">
         <span>
-          Bar · <b>{bar}</b>
+          Bar · <FootVal>{bar}</FootVal>
         </span>
         <span>
-          Sustain · <b>{r.sustainHours}h</b>
+          Sustain · <FootVal>{`${String(r.sustainHours)}h`}</FootVal>
         </span>
         <span>
-          Re-arm · <b>{read.rearmText}</b>
+          Re-arm · <FootVal>{read.rearmText}</FootVal>
         </span>
         {read.allocationText === null ? null : (
           <span>
-            Allocation · <b>{read.allocationText}</b>
+            Allocation · <FootVal>{read.allocationText}</FootVal>
           </span>
         )}
         <span>
-          Last move · <b>{read.lastMoveText}</b>
+          Last move · <FootVal>{read.lastMoveText}</FootVal>
         </span>
       </div>
     </div>
@@ -856,7 +870,7 @@ function LeverageInstrument({
       </div>
       <div className="vxi-body">
         <div className="vxe-read">
-          <b>{fmtHf(hf)}</b>
+          <b data-kind={valueKind(fmtHf(hf))}>{fmtHf(hf)}</b>
           <span>
             health factor · {fmtLev(curLev)} leverage · {zonePhrase}
           </span>
@@ -941,22 +955,22 @@ function LeverageInstrument({
       </div>
       <div className="vxi-foot">
         <span>
-          Liquidation LTV · <b>{(lev.liqLtv * 100).toFixed(1)}%</b>
+          Liquidation LTV · <FootVal>{`${(lev.liqLtv * 100).toFixed(1)}%`}</FootVal>
           {lev.liqLtvInferred ? " (inferred from the pair)" : ""}
         </span>
         {driftText === null ? null : (
           <span>
-            Cascade acts after · <b>{driftText}</b>
+            Cascade acts after · <FootVal>{driftText}</FootVal>
           </span>
         )}
         <span>
-          Applied leverage · <b>{fmtLev(appliedL)}</b>
+          Applied leverage · <FootVal>{fmtLev(appliedL)}</FootVal>
         </span>
         <span>
-          Cadence · <b>{lev.cadence}</b>
+          Cadence · <FootVal>{lev.cadence}</FootVal>
         </span>
         <span>
-          Last rebalance · <b>{relAgo(times.leverage, nowMs)}</b>
+          Last rebalance · <FootVal>{relAgo(times.leverage, nowMs)}</FootVal>
         </span>
       </div>
     </div>
@@ -999,7 +1013,7 @@ function HedgeInstrument({ vault, nowMs }: { vault: VaultRecord; nowMs: number }
       </div>
       <div className="vxi-body">
         <div className="vxe-read">
-          <b>
+          <b data-kind={valueKind(`${sign}${Math.abs(delta).toFixed(2)}%`)}>
             {sign}
             {Math.abs(delta).toFixed(2)}%
           </b>
@@ -1048,23 +1062,23 @@ function HedgeInstrument({ vault, nowMs }: { vault: VaultRecord; nowMs: number }
       </div>
       <div className="vxi-foot">
         <span>
-          Cadence · <b>{h.cadence}</b>
+          Cadence · <FootVal>{h.cadence}</FootVal>
         </span>
         {hedgeLev !== null ? (
           <span>
-            Short leverage · <b>{fmtLev(hedgeLev)}</b>
+            Short leverage · <FootVal>{fmtLev(hedgeLev)}</FootVal>
           </span>
         ) : null}
         {reserve !== null ? (
           <span>
-            Margin reserve · <b>{(reserve * 100).toFixed(0)}%</b>
+            Margin reserve · <FootVal>{`${(reserve * 100).toFixed(0)}%`}</FootVal>
           </span>
         ) : null}
         <span>
-          Margin now · <b>{margin.toFixed(1)}%</b>
+          Margin now · <FootVal>{`${margin.toFixed(1)}%`}</FootVal>
         </span>
         <span>
-          Last check · <b>{relAgo(times.hedge, nowMs)}</b>
+          Last check · <FootVal>{relAgo(times.hedge, nowMs)}</FootVal>
         </span>
       </div>
     </div>
@@ -1145,13 +1159,13 @@ function CompoundInstrument({
       </div>
       <div className="vxi-foot">
         <span>
-          Cadence · <b>{c.cadenceHours}h</b>
+          Cadence · <FootVal>{`${String(c.cadenceHours)}h`}</FootVal>
         </span>
         <span>
-          Last compound · <b>{relAgo(times.compound, nowMs)}</b>
+          Last compound · <FootVal>{relAgo(times.compound, nowMs)}</FootVal>
         </span>
         <span>
-          Next check · <b>{relIn(times.nextCompoundCheck, nowMs)}</b>
+          Next check · <FootVal>{relIn(times.nextCompoundCheck, nowMs)}</FootVal>
         </span>
       </div>
     </div>
@@ -1197,7 +1211,7 @@ function RangeInstrument({
       </div>
       <div className="vxi-body">
         <div className="vxe-read">
-          <b>
+          <b data-kind={valueKind(`${sign}${Math.abs(drift).toFixed(2)}%`)}>
             {sign}
             {Math.abs(drift).toFixed(2)}%
           </b>
@@ -1265,13 +1279,13 @@ function RangeInstrument({
       </div>
       <div className="vxi-foot">
         <span>
-          Range width · <b>±{w.toFixed(1)}%</b>
+          Range width · <FootVal>{`±${w.toFixed(1)}%`}</FootVal>
         </span>
         <span>
-          Recenter trigger · <b>{(cfg.triggerShare * 100).toFixed(0)}% of range</b>
+          Recenter trigger · <FootVal>{`${(cfg.triggerShare * 100).toFixed(0)}% of range`}</FootVal>
         </span>
         <span>
-          Last recenter · <b>{relAgo(last, nowMs)}</b>
+          Last recenter · <FootVal>{relAgo(last, nowMs)}</FootVal>
         </span>
       </div>
     </div>
@@ -1337,7 +1351,7 @@ function CollarInstrument({
       </div>
       <div className="vxi-body">
         <div className="vxe-read">
-          <b>
+          <b data-kind={valueKind(`${sign}${Math.abs(spot).toFixed(1)}%`)}>
             {sign}
             {Math.abs(spot).toFixed(1)}%
           </b>
@@ -1425,16 +1439,16 @@ function CollarInstrument({
       <div className="vxi-foot">
         {rollDays !== null ? (
           <span>
-            Roll cadence · <b>{rollDays}d</b>
+            Roll cadence · <FootVal>{`${String(rollDays)}d`}</FootVal>
           </span>
         ) : null}
         <span>
           {rollDays !== null ? "Last roll · " : "Since · "}
-          <b>{relAgo(last, nowMs)}</b>
+          <FootVal>{relAgo(last, nowMs)}</FootVal>
         </span>
         {next !== null ? (
           <span>
-            Next roll · <b>{relIn(next, nowMs)}</b>
+            Next roll · <FootVal>{relIn(next, nowMs)}</FootVal>
           </span>
         ) : null}
       </div>
@@ -1469,7 +1483,10 @@ function RedemptionInstrument({
       </div>
       <div className="vxi-body">
         <div className="vxe-read">
-          <b>{read.settlementText}</b>
+          {/* `same day` is a phrase and was printing as a 22px monospaced
+              headline; a window that reads `T+1` is a datum. One owner
+              decides, per record. */}
+          <b data-kind={valueKind(read.settlementText)}>{read.settlementText}</b>
           <span>{read.readingLine}</span>
           {/* The window is the issuer's own statement, and the tag says so. */}
           <i className="vxe-modeled">{read.provenance}</i>
@@ -1491,7 +1508,13 @@ function RedemptionInstrument({
               >
                 <span className={`vxc-dot vxc-dot--${row.tone}`} />
                 <span className="vxc-cond">{row.cond}</span>
-                <b className="vxc-val">{row.val}</b>
+                {/* The one cascade whose condition column is WORDS: this
+                    table reads `same day` and `same route`, not a threshold.
+                    Every other cascade in the section states a figure and
+                    keeps the mono by default. */}
+                <b className="vxc-val" data-kind={valueKind(row.val)}>
+                  {row.val}
+                </b>
                 <span className="vxc-arr">→</span>
                 <span className="vxc-act">{row.act}</span>
               </div>
@@ -1503,7 +1526,7 @@ function RedemptionInstrument({
         {read.foot.map((f) => (
           <span key={f.k}>
             {f.k} ·{" "}
-            <b>
+            <b data-kind={valueKind(f.v)}>
               {f.href ? (
                 <a href={f.href} target="_blank" rel="noreferrer">
                   {f.v}

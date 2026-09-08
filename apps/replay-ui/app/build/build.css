@@ -327,14 +327,14 @@
 /* ── header + progress rail ── */
 .bc-top{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 26px 12px;border-bottom:1px solid var(--bc-line);background:var(--bc-chrome)}
 .bc-title{display:flex;flex-direction:column}
-.bc-kicker{font-family:var(--fm);font-size:10px;letter-spacing:.16em;color:var(--bc-accent-text)}
+.bc-kicker{font-family:var(--fx);font-size:10px;letter-spacing:.16em;color:var(--bc-accent-text)}
 .bc-title h1{margin:2px 0 0;font-size:20px;letter-spacing:-.03em;font-weight:600}
-.bc-save{font-family:var(--fm);font-size:10px;color:var(--bc-faint);min-width:70px;text-align:right}
+.bc-save{font-family:var(--fx);font-size:10px;color:var(--bc-faint);min-width:70px;text-align:right}
 
 .rail{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:0}
 .rail-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center}
 .rail-dots{display:flex;align-items:center;gap:10px}
-.rail-step{display:flex;align-items:center;gap:5px;font-family:var(--fm);font-size:8.5px;letter-spacing:.14em;color:var(--bc-faint);text-transform:uppercase}
+.rail-step{display:flex;align-items:center;gap:5px;font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:var(--bc-faint)}
 .rail-dot{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--bc-line-strong);background:transparent}
 .rail-step.done .rail-dot{background:#2B5CFF;border-color:#2B5CFF}
 .rail-step.done{color:var(--bc-ink)}
@@ -343,15 +343,17 @@
 .rail-step.skip .rail-dot{border-style:dashed;opacity:.5}
 @keyframes railpulse{0%,100%{box-shadow:0 0 0 0 var(--bc-accent-ring)}50%{box-shadow:0 0 0 5px rgba(43,92,255,0)}}
 /* hero portfolio readout (UX_ITERATION_3 §4): the ONE number, top-center */
-.rail-hero{font-family:var(--fm);color:var(--bc-ink);display:flex;align-items:baseline;gap:10px}
+.rail-hero{font-family:var(--fx);color:var(--bc-ink);display:flex;align-items:baseline;gap:10px}
 .rail-hero-k{font-size:9px;letter-spacing:.16em;color:var(--bc-accent-text)}
-.rail-hero b{font-size:24px;font-weight:600;letter-spacing:-.02em;line-height:1}
+/* The headline number keeps the mono; `modeled · draft saved` beside it is
+   words, and words go in the sans with the rest of the rail. */
+.rail-hero b{font-family:var(--fm);font-size:24px;font-weight:600;letter-spacing:-.02em;line-height:1}
 .rail-hero .flash{animation:apyflash .5s ease-out}
 .rail-hero-sub{color:var(--bc-faint);font-size:9.5px}
 @keyframes apyflash{0%{color:var(--bc-accent-text)}100%{color:var(--bc-ink)}}
 /* secondary per-lane chips */
 .rail-lanes{display:flex;gap:8px;flex-wrap:wrap}
-.rail-lanechip{font-family:var(--fm);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--bc-muted);border:1px solid var(--bc-line-mute);border-radius:30px;padding:3px 10px}
+.rail-lanechip{font-family:var(--fx);font-size:11px;letter-spacing:normal;color:var(--bc-muted);border:1px solid var(--bc-line-mute);border-radius:30px;padding:3px 10px}
 .rail-lanechip b{color:var(--bc-ink);font-weight:600}
 /* R1 2026-08-21: the stage-aware guide line is DELETED. The header states
    what is TRUE (meter → hero → .rail-status); the canvas tip stack states
@@ -359,7 +361,7 @@
 
 /* header launch key: the hm-key idiom at header scale */
 .rail-launch{display:flex;align-items:center;justify-content:center;gap:7px;height:40px;padding:0 18px;border-radius:12px;
-  font-family:var(--fm);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8a7a73;
+  font-family:var(--fx);font-size:11.5px;letter-spacing:normal;color:#8a7a73;
   background:#17291B;border:1px solid rgba(255,255,255,.26);cursor:default;
   box-shadow:0 7px 13px -6px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05),inset 0 0 0 1px rgba(0,0,0,.5);transition:.16s}
 .rail-launch .hm-led{width:5.5px;height:5.5px;border-radius:50%;background:#3a322f;transition:.16s}
@@ -485,12 +487,12 @@
    lie, and de-panning it would kill panning on a phone where the lanes fill
    the board. */
 .rk-lanehead{display:flex;align-items:center;gap:12px;height:28px;padding:0 6px;cursor:pointer}
-.rk-lanename{font-family:var(--fm);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--bc-ink);background:none;border:0;padding:2px 4px;border-radius:6px;cursor:text;min-width:60px}
+.rk-lanename{font-family:var(--fx);font-size:11.5px;letter-spacing:normal;color:var(--bc-ink);background:none;border:0;padding:2px 4px;border-radius:6px;cursor:text;min-width:60px}
 /* THE NAME IS A BUTTON NOW, not an input (see LaneName.tsx). It inherits the
    name field's exact box so the label stays flush with the plates below it:
    18px lane + 6px header + 4px = 28px from the frame, which is also the
    plates' 18 + 10. */
-.rk-lanepick{font-family:var(--fm);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+.rk-lanepick{font-family:var(--fx);font-size:11.5px;letter-spacing:normal;
   color:var(--bc-ink);background:none;border:0;padding:2px 4px;border-radius:6px;cursor:pointer;
   text-align:left;transition:color .15s}
 .rk-lanepick:hover{color:var(--bc-accent-text)}
@@ -503,14 +505,14 @@
    lane), not a warning — so it wears the standing chip register
    (.rail-lanechip's ink and edge), never the warn pair, and follows the
    ratified label voice: no uppercase, no letterspaced chrome (DL-9). */
-.rk-lanebdg{font-family:var(--fm);font-size:9px;letter-spacing:.02em;text-transform:none;border:1px solid var(--bc-line-mute);color:var(--bc-muted);border-radius:30px;padding:2px 8px}
-.rk-lanekill{margin-left:auto;font-family:var(--fm);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--bc-faint);background:none;border:1px solid var(--bc-line-mute);border-radius:30px;padding:3px 10px;cursor:pointer}
+.rk-lanebdg{font-family:var(--fx);font-size:9px;letter-spacing:.02em;text-transform:none;border:1px solid var(--bc-line-mute);color:var(--bc-muted);border-radius:30px;padding:2px 8px}
+.rk-lanekill{margin-left:auto;font-family:var(--fx);font-size:11px;letter-spacing:normal;color:var(--bc-faint);background:none;border:1px solid var(--bc-line-mute);border-radius:30px;padding:3px 10px;cursor:pointer}
 .rk-lanekill:hover{color:var(--bc-danger);border-color:rgba(185,28,28,.4)}
 
 /* ── lane risk dial (UX_ITERATION_3 §3): the ONE lane-level control ── */
 .rk-risk{display:flex;align-items:center;gap:5px}
-.rk-risklab{font-family:var(--fm);font-size:8px;letter-spacing:.16em;color:var(--bc-faint)}
-.rk-riskk{font-family:var(--fm);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--bc-muted-warm);
+.rk-risklab{font-family:var(--fx);font-size:8px;letter-spacing:.16em;color:var(--bc-faint)}
+.rk-riskk{font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:var(--bc-muted-warm);
   background:none;border:1px solid var(--bc-line-mute);border-radius:30px;padding:3px 10px;cursor:pointer;transition:.15s}
 .rk-riskk:hover{border-color:#2B5CFF;color:var(--bc-accent-text)}
 /* the press every other capsule on this canvas has (item 34). */
@@ -557,25 +559,25 @@
 @keyframes snapin{0%{transform:scale(.96);opacity:.4}100%{transform:scale(1);opacity:1}}
 
 /* the ? affordance in hm-tag (progressive disclosure) */
-.hm-help{font-family:var(--fm);font-size:9px;color:#6c6c68;border:1px solid rgba(0,0,0,.25);border-radius:50%;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;margin-left:6px;cursor:help;background:none}
-.hm-helppop{position:absolute;top:34px;left:10px;right:10px;z-index:6;background:#0d0d0d;color:#e9e9e6;font-family:var(--fm);font-size:9.5px;line-height:1.6;padding:10px 12px;border-radius:10px;box-shadow:0 18px 40px -18px rgba(0,0,0,.6)}
+.hm-help{font-family:var(--fx);font-size:9px;color:#6c6c68;border:1px solid rgba(0,0,0,.25);border-radius:50%;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;margin-left:6px;cursor:help;background:none}
+.hm-helppop{position:absolute;top:34px;left:10px;right:10px;z-index:6;background:#0d0d0d;color:#e9e9e6;font-family:var(--fx);font-size:9.5px;line-height:1.6;padding:10px 12px;border-radius:10px;box-shadow:0 18px 40px -18px rgba(0,0,0,.6)}
 
 /* plate controls (focused hm-acts swap) — dark hardware idiom */
 .pc{display:flex;flex-direction:column;gap:9px}
 .pc-dial{display:flex;flex-direction:column;gap:4px}
 .pc-dialrow{display:flex;justify-content:space-between;align-items:baseline}
-.pc-lab{font-family:var(--fm);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--bc-faint)}
+.pc-lab{font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:var(--bc-faint)}
 .pc-val{font-family:var(--fm);font-size:10.5px;color:var(--bc-ink);font-weight:600}
 .pc input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:2px;background:#2a2a28;border-radius:2px;outline:none}
 .pc input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;border-radius:50%;background:#ffffff;box-shadow:0 0 0 4px rgba(0,0,0,.15),0 0 8px rgba(0,0,0,.4);cursor:pointer;border:1px solid #2a2a28}
 .pc input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#ffffff;box-shadow:0 0 0 4px rgba(0,0,0,.15);cursor:pointer;border:1px solid #2a2a28}
-.pc-band{font-family:var(--fm);font-size:7.5px;letter-spacing:.06em;color:var(--bc-faint)}
+.pc-band{font-family:var(--fx);font-size:7.5px;letter-spacing:.06em;color:var(--bc-faint)}
 .pc-num{display:flex;align-items:center;gap:8px}
 .pc-num input{width:70px;font-family:var(--fm);font-size:11px;padding:5px 8px;border-radius:8px;border:1px solid var(--bc-line-strong);background:var(--bc-panel)}
 .pc .hm-keys .hm-key{height:34px;font-size:7.5px}
 .pc-eject.hm-key{flex:0 0 64px;color:var(--bc-warn);border-color:var(--bc-warn-e40)}
 /* automatic-behavior register shown while ADVANCED is closed (§3) */
-.pc-auto{font-family:var(--fm);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--bc-faint);padding:2px 3px 0;line-height:1.7}
+.pc-auto{font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:var(--bc-faint);padding:2px 3px 0;line-height:1.7}
 
 /* ── THE PLATE COPY OF PLATE CONTROLS (founder ruling, 2026-08-22).
       PlateControls has TWO homes and they are opposite kinds of surface:
@@ -618,7 +620,7 @@
 /* ── ghost slots (landing .pg-slot treatment) ── */
 .rk-slot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
   width:244px;flex:0 0 244px;min-height:210px;border:1.5px dashed var(--bc-line-invite);border-radius:16px;
-  background:none;cursor:pointer;font-family:var(--fm);font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--bc-muted-warm);transition:border-color .2s,background .2s}
+  background:none;cursor:pointer;font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:var(--bc-muted-warm);transition:border-color .2s,background .2s}
 .rk-rack--multi .rk-lane .rk-slot{zoom:.62}
 .rk-rack--multi .rk-lane--focused .rk-slot{zoom:.86}
 .rk-slot:hover{border-color:#2B5CFF;color:var(--bc-accent-text)}
@@ -637,7 +639,7 @@
    · a press. The bay had a hover and no transition at all, so even the hover
      snapped; 60ms and 1px are what every other pressable object on this
      canvas uses (hm.css:191, build.css:1239, build.css:2769). ── */
-.rk-addlane{margin:8px 16px 26px;display:flex;align-items:center;justify-content:center;height:64px;border:1.5px dashed var(--bc-line-invite);border-radius:16px;background:none;cursor:pointer;font-family:var(--fm);font-size:10px;letter-spacing:.05em;text-transform:none;color:var(--bc-muted-warm);width:calc(100% - 36px);transition:.15s}
+.rk-addlane{margin:8px 16px 26px;display:flex;align-items:center;justify-content:center;height:64px;border:1.5px dashed var(--bc-line-invite);border-radius:16px;background:none;cursor:pointer;font-family:var(--fx);font-size:10px;letter-spacing:.05em;text-transform:none;color:var(--bc-muted-warm);width:calc(100% - 36px);transition:.15s}
 .rk-addlane:hover{border-color:#2B5CFF;color:var(--bc-accent-text)}
 .rk-addlane:active{transform:translateY(1px);transition-duration:60ms}
 /* one-shot want pulse after the first lane completes (UX_ITERATION_3 §5):
@@ -695,31 +697,31 @@
 /* ── market discovery content rules (shell retired in IT4 — the content
       lives in the context dock; .mt-* row/card classes are KEPT) ── */
 .mt-head{display:flex;align-items:center;gap:18px;padding:20px 30px 14px;border-bottom:1px solid var(--bc-line);position:sticky;top:0;background:var(--bc-chrome);z-index:2;flex-wrap:wrap}
-.mt-kicker{font-family:var(--fm);font-size:11px;letter-spacing:.18em;color:var(--bc-accent-text)}
+.mt-kicker{font-family:var(--fx);font-size:11px;letter-spacing:.18em;color:var(--bc-accent-text)}
 .mt-venues{display:flex;gap:8px}
 .mt-venues .hm-key{height:38px;padding:0 14px;flex:0 0 auto;cursor:pointer}
 /* unified-list filter chips (UX_ITERATION_3 §1): all markets · venues · class */
 .mt-filters{display:flex;gap:8px;flex-wrap:wrap}
 .mt-filters .hm-key{height:38px;padding:0 14px;flex:0 0 auto;cursor:pointer}
 /* venue chip on each row */
-.mt-venuechip{display:inline-block;vertical-align:2px;margin-left:9px;font-family:var(--fm);font-style:normal;font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--bc-muted);border:1px solid var(--bc-line-mute);border-radius:30px;padding:2px 8px}
+.mt-venuechip{display:inline-block;vertical-align:2px;margin-left:9px;font-family:var(--fx);font-style:normal;font-size:10.5px;letter-spacing:normal;color:var(--bc-muted);border:1px solid var(--bc-line-mute);border-radius:30px;padding:2px 8px}
 /* per-venue scan provenance strip */
-.mt-scanline{display:flex;gap:14px;flex-wrap:wrap;padding:10px 30px 0;font-family:var(--fm);font-size:9px;color:var(--bc-faint)}
+.mt-scanline{display:flex;gap:14px;flex-wrap:wrap;padding:10px 30px 0;font-family:var(--fx);font-size:9px;color:var(--bc-faint)}
 .mt-scanline .mt-scan.stale{color:var(--bc-warn)}
 .mt-body--single{grid-template-columns:1fr;max-width:760px}
 .mt-floor{display:flex;flex-direction:column;gap:3px;min-width:210px}
 .mt-floor input[type=range]{accent-color:#2B5CFF}
 .mt-floor.pulse{animation:floorpulse .8s ease-out 1}
 @keyframes floorpulse{0%{transform:scale(1)}35%{transform:scale(1.04)}100%{transform:scale(1)}}
-.mt-floorrow{display:flex;justify-content:space-between;font-family:var(--fm);font-size:10px;color:var(--bc-muted)}
+.mt-floorrow{display:flex;justify-content:space-between;font-family:var(--fx);font-size:10px;color:var(--bc-muted)}
 .mt-floorrow b{color:var(--bc-accent-text)}
-.mt-fresh{margin-left:auto;font-family:var(--fm);font-size:10px;color:var(--bc-faint);text-align:right}
+.mt-fresh{margin-left:auto;font-family:var(--fx);font-size:10px;color:var(--bc-faint);text-align:right}
 .mt-fresh.stale{color:var(--bc-warn)}
-.mt-close{font-family:var(--fm);font-size:10px;letter-spacing:.1em;text-transform:uppercase;background:none;border:1px solid var(--bc-line-strong);border-radius:30px;padding:7px 14px;cursor:pointer;color:var(--bc-muted)}
-.mt-note{margin:12px 30px 0;font-family:var(--fm);font-size:10px;line-height:1.6;color:var(--bc-warn);border:1px dashed var(--bc-warn-e35);border-radius:10px;padding:9px 12px;background:var(--bc-warn-wash);max-width:900px}
+.mt-close{font-family:var(--fx);font-size:11.5px;letter-spacing:normal;background:none;border:1px solid var(--bc-line-strong);border-radius:30px;padding:7px 14px;cursor:pointer;color:var(--bc-muted)}
+.mt-note{margin:12px 30px 0;font-family:var(--fx);font-size:10px;line-height:1.6;color:var(--bc-warn);border:1px dashed var(--bc-warn-e35);border-radius:10px;padding:9px 12px;background:var(--bc-warn-wash);max-width:900px}
 .mt-body{display:grid;grid-template-columns:1fr 1fr;gap:26px;padding:20px 30px 60px;align-items:start}
 @media(max-width:900px){.mt-body{grid-template-columns:1fr}}
-.mt-sec-h{font-family:var(--fm);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--bc-muted);display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.mt-sec-h{font-family:var(--fx);font-size:11.5px;letter-spacing:normal;color:var(--bc-muted);display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .mt-sec-warn{color:var(--bc-warn);border:1px solid var(--bc-warn-e35);border-radius:999px;padding:2px 9px;font-size:9px;text-transform:none;letter-spacing:.02em}
 .mt-card{display:grid;grid-template-columns:1fr auto;gap:3px 14px;align-items:baseline;width:100%;text-align:left;min-height:72px;padding:14px 16px;margin-bottom:10px;border-radius:14px;border:1px solid var(--bc-line);background:var(--bc-panel);cursor:pointer;font-family:inherit;transition:transform .1s,box-shadow .15s}
 .mt-card:hover{transform:translateY(-1px);box-shadow:var(--bc-sh-lift)}
@@ -728,20 +730,20 @@
 .mt-card.miss{opacity:.55;cursor:default;background:transparent}
 .mt-pair{font-size:15px;font-weight:650;letter-spacing:-.01em}
 .mt-apy{font-family:var(--fm);font-size:16px;font-weight:600;color:var(--bc-accent-text)}
-.mt-meta{grid-column:1/-1;display:flex;gap:14px;font-family:var(--fm);font-size:9.5px;color:var(--bc-faint)}
-.mt-flag{grid-column:1/-1;font-family:var(--fm);font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--bc-warn)}
-.mt-empty{font-family:var(--fm);font-size:10px;line-height:1.6;color:var(--bc-faint);padding:6px 2px 10px}
-.mt-novenue{border:1px solid #262422;border-radius:14px;background:#0d0d0d;color:#7c7c78;font-family:var(--fm);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:26px;text-align:center}
+.mt-meta{grid-column:1/-1;display:flex;gap:14px;font-family:var(--fx);font-size:9.5px;color:var(--bc-faint)}
+.mt-flag{grid-column:1/-1;font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:var(--bc-warn)}
+.mt-empty{font-family:var(--fx);font-size:10px;line-height:1.6;color:var(--bc-faint);padding:6px 2px 10px}
+.mt-novenue{border:1px solid #262422;border-radius:14px;background:#0d0d0d;color:#7c7c78;font-family:var(--fx);font-size:11.5px;letter-spacing:normal;padding:26px;text-align:center}
 .mt-novenue small{display:block;margin-top:8px;letter-spacing:.04em;text-transform:none;color:#6c6c68}
 
 /* ── derived-rules decode content (RuleTakeover shell retired in IT4 —
       the decode renders inside the dock's portfolio panel) ── */
 .rt-body{padding:20px 30px 60px;max-width:860px}
-.rt-policy{font-family:var(--fm);font-size:12px;letter-spacing:.1em;color:var(--bc-ink);margin-bottom:6px}
+.rt-policy{font-family:var(--fx);font-size:12px;letter-spacing:.1em;color:var(--bc-ink);margin-bottom:6px}
 /* The de-uppercase register folded in (item 34), not overridden at :1517. */
-.rt-modeled{display:inline-block;font-family:var(--fm);font-size:9px;letter-spacing:.02em;text-transform:none;color:var(--bc-warn);border:1px solid var(--bc-warn-e45);border-radius:30px;padding:3px 10px;margin-bottom:16px}
-.rt-rule{font-family:var(--fm);font-size:11px;line-height:1.7;color:var(--bc-body);border-bottom:1px dashed var(--bc-line);padding:10px 2px}
-.rt-floor{font-family:var(--fm);font-size:10px;color:var(--bc-muted);margin-top:14px}
+.rt-modeled{display:inline-block;font-family:var(--fx);font-size:9px;letter-spacing:.02em;text-transform:none;color:var(--bc-warn);border:1px solid var(--bc-warn-e45);border-radius:30px;padding:3px 10px;margin-bottom:16px}
+.rt-rule{font-family:var(--fx);font-size:11px;line-height:1.7;color:var(--bc-body);border-bottom:1px dashed var(--bc-line);padding:10px 2px}
+.rt-floor{font-family:var(--fx);font-size:10px;color:var(--bc-muted);margin-top:14px}
 
 /* ── review backdrop (the modal shell itself is pf-*, founder pass (C)).
       The rest of the old dark-green .bcrev* shell was deleted 2026-08-20:
@@ -775,7 +777,7 @@
 .dock-head,.cp-head{display:flex;align-items:center;gap:10px;
   padding:12px 16px;border-bottom:1px solid var(--bc-line);flex:0 0 auto}
 .cp-head{border-bottom-color:#262422}
-.cp-kicker{font-family:var(--fm);font-size:11px;letter-spacing:.18em;color:#7FB2FF;
+.cp-kicker{font-family:var(--fx);font-size:11px;letter-spacing:.18em;color:#7FB2FF;
   flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dock-head .mt-kicker{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .panel-key.hm-key{flex:0 0 auto;height:26px;min-width:26px;padding:0 8px;font-size:8px;cursor:pointer}
@@ -783,8 +785,8 @@
 /* collapsed rails: 40px strips, rotated mono label, whole strip clickable */
 .panel-rail{display:none;flex:1;align-items:flex-start;justify-content:center;
   padding-top:14px;cursor:pointer;background:none;border:0}
-.panel-rail span{writing-mode:vertical-rl;font-family:var(--fm);font-size:9px;
-  letter-spacing:.18em;text-transform:uppercase;color:var(--bc-faint);display:inline-flex;align-items:center;gap:6px}
+.panel-rail span{writing-mode:vertical-rl;font-family:var(--fx);font-size:11px;
+  letter-spacing:normal;color:var(--bc-faint);display:inline-flex;align-items:center;gap:6px}
 .panel-rail span .hm-led{width:5px;height:5px;border-radius:50%;background:#3a322f}
 .panel-rail span .hm-led.lit{background:#4D8BFF;box-shadow:0 0 7px rgba(77,139,255,.7)}
 .cp .panel-rail span{color:#7c7c78}
@@ -823,7 +825,7 @@
 .dock-module .pc-num input{width:90px}
 .dock-market{display:flex;flex-direction:column;gap:9px}
 .dock-market-pair{font-size:16px;font-weight:650;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
-.dock-market-meta{display:flex;flex-wrap:wrap;gap:10px;font-family:var(--fm);font-size:9.5px;color:var(--bc-muted)}
+.dock-market-meta{display:flex;flex-wrap:wrap;gap:10px;font-family:var(--fx);font-size:9.5px;color:var(--bc-muted)}
 .dock-market .hm-keys .hm-key{height:38px;font-size:8.5px;cursor:pointer}
 
 /* ── THE NAMED LIST (2026-08-26) — the dock's mirror of the lamp strip ─────
@@ -831,13 +833,13 @@
    scale, no new panel and no drawer. The ORDER is the route, and the order is
    the argument, so there is no diagram anywhere beside it. */
 .dock-deps{display:flex;flex-direction:column;gap:14px}
-.dock-deps-head{font-family:var(--fser);font-style:italic;font-size:12px;color:var(--bc-muted-soft)}
+.dock-deps-head{font-family:var(--fx);font-style:normal;font-weight:600;font-size:12px;color:var(--bc-muted-soft)}
 .dock-dep{display:flex;flex-direction:column;gap:6px;padding-bottom:14px;border-bottom:1px solid var(--bc-line-mute)}
 .dock-dep:last-of-type{border-bottom:0}
 .dock-dep-nm{font-size:13px;font-weight:650;letter-spacing:-.01em;display:flex;align-items:baseline;gap:9px}
 /* The state is a FACT chip in the muted register, never a warning: an amber
    badge here would grade a dependency, and risk is never an adjective. */
-.dock-dep-st{font-family:var(--fm);font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-style:normal;color:var(--bc-muted)}
+.dock-dep-st{font-family:var(--fx);font-size:11px;letter-spacing:normal;font-style:normal;color:var(--bc-muted)}
 .dock-dep[data-state="failing"] .dock-dep-st{color:var(--bc-ink)}
 .dock-dep-why{font-family:var(--fser);font-style:italic;font-size:12px;color:var(--bc-muted-soft)}
 .dock-dep-cls{display:flex;flex-direction:column;gap:8px}
@@ -845,7 +847,9 @@
    The act is set off by a rule rather than by a colour, because it is a
    design, not an alarm. */
 .dock-dep-pair{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--bc-muted)}
-.dock-dep-pair b{font-family:var(--fm);font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:500;color:var(--bc-muted)}
+/* The pair itself is a ticker and stays in the mono; the words around it
+   in `.dock-dep-pair` are the sans. */
+.dock-dep-pair b{font-family:var(--fm);font-size:11px;letter-spacing:normal;font-weight:500;color:var(--bc-muted)}
 .dock-dep-act{color:var(--bc-ink);padding-left:9px;border-left:1px solid var(--bc-line-mute)}
 /* AN ABSENCE AT ITS OWN INK, NEVER DIMMED. Dimming it would be implying
    coverage by making the gap easy to miss. */
@@ -855,22 +859,27 @@
 /* dock readouts (derived numbers above the controls) */
 .dock-readouts{border:1px solid var(--bc-line);border-radius:14px;background:var(--bc-panel);padding:12px 14px}
 .dock-ro-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.dock-ro-lane{font-family:var(--fm);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--bc-faint)}
-.dock-ro-mod{font-family:var(--fm);font-size:10px;font-weight:600;color:var(--bc-ink);flex:1;min-width:0}
-.dock-readouts .hm-bdg{font-family:var(--fm);font-size:8px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--bc-line-mute);border-radius:30px;padding:2px 8px;color:var(--bc-muted)}
+.dock-ro-lane{font-family:var(--fx);font-size:11px;letter-spacing:normal;color:var(--bc-faint)}
+.dock-ro-mod{font-family:var(--fx);font-size:10px;font-weight:600;color:var(--bc-ink);flex:1;min-width:0}
+.dock-readouts .hm-bdg{font-family:var(--fx);font-size:10.5px;letter-spacing:normal;border:1px solid var(--bc-line-mute);border-radius:30px;padding:2px 8px;color:var(--bc-muted)}
 .dock-readouts .hm-bdg.ok{color:var(--bc-ok);border-color:var(--bc-ok-line)}
 .dock-ro-rows{display:flex;flex-direction:column;gap:5px}
-.dock-ro-row{display:flex;justify-content:space-between;gap:10px;font-family:var(--fm);font-size:9.5px;color:var(--bc-muted)}
-.dock-ro-row b{color:var(--bc-ink);font-weight:600;text-align:right}
-.dock-ro-warn{font-family:var(--fm);font-size:9px;line-height:1.5;color:var(--bc-warn);border:1px dashed var(--bc-warn-e35);border-radius:8px;padding:6px 8px;background:var(--bc-warn-wash)}
-.dock-ro-register{font-family:var(--fm);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--bc-faint)}
+/* A HEAD IS NOT ITS READING. The row's name goes in the chrome sans and the
+   value beside it keeps the mono, which is the pattern `.dock-lane-cap` /
+   `.dock-lane-cap b` already carries at :1307. Without the split the name of
+   a thing and the reading of it print in one face and nothing separates
+   them. */
+.dock-ro-row{display:flex;justify-content:space-between;gap:10px;font-family:var(--fx);font-size:11px;color:var(--bc-muted)}
+.dock-ro-row b{font-family:var(--fm);font-variant-numeric:tabular-nums;color:var(--bc-ink);font-weight:600;text-align:right}
+.dock-ro-warn{font-family:var(--fx);font-size:11px;line-height:1.5;color:var(--bc-warn);border:1px dashed var(--bc-warn-e35);border-radius:8px;padding:6px 8px;background:var(--bc-warn-wash)}
+.dock-ro-register{font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:var(--bc-faint)}
 
 /* ── dock: lane / portfolio mode ── */
 .dock-lane,.dock-portfolio{display:flex;flex-direction:column;gap:13px}
 .dock-lane-head{display:flex;align-items:center;gap:10px}
 .dock-lane-head b{font-size:14px;letter-spacing:-.01em}
-.dock-lane-apy{font-family:var(--fm);font-size:11px;color:var(--bc-muted);display:flex;align-items:baseline;gap:8px}
-.dock-lane-apy b{color:var(--bc-ink);font-weight:600}
+.dock-lane-apy{font-family:var(--fx);font-size:11px;color:var(--bc-muted);display:flex;align-items:baseline;gap:8px}
+.dock-lane-apy b{font-family:var(--fm);font-variant-numeric:tabular-nums;color:var(--bc-ink);font-weight:600}
 .dock-risk{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .dock-risk .rk-riskk{font-size:9.5px;padding:5px 13px}
 .dock-checklist{display:flex;flex-direction:column;gap:6px;border:1px solid var(--bc-line);border-radius:12px;padding:10px 12px;background:var(--bc-panel)}
@@ -878,39 +887,39 @@
 .dock-lane-share{font-family:var(--fm);font-size:10px;color:var(--bc-muted)}
 .dock-lane-acts .hm-key,.dock-lane .hm-keys .hm-key,.dock-portfolio .hm-keys .hm-key{height:38px;font-size:8.5px;cursor:pointer}
 .dock-allocs{display:flex;flex-direction:column;gap:7px;border:1px solid #262422;border-radius:12px;background:#0d0d0d;padding:12px}
-.dock-orch-status{font-family:var(--fm);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--bc-faint)}
+.dock-orch-status{font-family:var(--fx);font-size:11px;letter-spacing:normal;color:var(--bc-faint)}
 .dock-orch-dials{border:1px solid var(--bc-line);border-radius:12px;background:var(--bc-panel);padding:12px}
 .dock-rules .rt-rule{font-size:10px}
 .dock-rules .rt-policy{font-size:11px;margin-top:4px}
 
 /* ── copilot panel internals (cop-*, dark-OLED register) ── */
 .cop-chat{flex:1;min-height:0;overflow-y:auto;padding:14px 14px 8px;display:flex;flex-direction:column;gap:10px}
-.cop-offline{font-family:var(--fm);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#c2864e;border:1px dashed rgba(194,134,78,.4);border-radius:10px;padding:12px;text-align:center}
-.cop-hello{font-family:var(--fs);font-size:12px;line-height:1.6;color:#7c7c78}
+.cop-offline{font-family:var(--fx);font-size:11px;letter-spacing:normal;color:#c2864e;border:1px dashed rgba(194,134,78,.4);border-radius:10px;padding:12px;text-align:center}
+.cop-hello{font-family:var(--fs);font-size:11.5px;line-height:1.6;color:#7c7c78}
 .cop-msg{font-size:12px;line-height:1.6}
 .cop-msg--user{align-self:flex-end;max-width:88%;background:#1c1a18;border:1px solid #2a2724;border-radius:12px 12px 3px 12px;padding:8px 11px;color:#e9e9e6;white-space:pre-wrap}
 .cop-msg--assistant{align-self:stretch;color:#cfcfca;display:flex;flex-direction:column;gap:8px}
 .cop-msg-text{white-space:pre-wrap}
-.cop-register{font-family:var(--fm);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#7c7c78}
-.cop-rejected{font-family:var(--fm);font-size:9.5px;color:#c2864e;border:1px dashed rgba(194,134,78,.4);border-radius:10px;padding:8px 10px}
+.cop-register{font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:#7c7c78}
+.cop-rejected{font-family:var(--fx);font-size:9.5px;color:#c2864e;border:1px dashed rgba(194,134,78,.4);border-radius:10px;padding:8px 10px}
 .cop-chips{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px}
 .cop-chip{font-family:var(--fs);font-size:11px;letter-spacing:.01em;color:#a5a5a0;background:none;border:1px solid #2a2724;border-radius:30px;padding:6px 11px;cursor:pointer;text-align:left}
 .cop-chip:hover{color:#fff;border-color:#4D8BFF}
-.cop-limit{font-family:var(--fm);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#7c7c78;padding:8px 14px;display:flex;align-items:center;gap:8px}
+.cop-limit{font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:#7c7c78;padding:8px 14px;display:flex;align-items:center;gap:8px}
 .cop-inputrow{display:flex;gap:8px;padding:10px 14px 14px;border-top:1px solid #262422;flex:0 0 auto}
-.cop-input{flex:1;min-width:0;font-family:var(--fm);font-size:11px;color:#e9e9e6;background:#151312;border:1px solid #2a2724;border-radius:10px;padding:9px 11px;outline:none}
+.cop-input{flex:1;min-width:0;font-family:var(--fx);font-size:11px;color:#e9e9e6;background:#151312;border:1px solid #2a2724;border-radius:10px;padding:9px 11px;outline:none}
 .cop-input:focus{border-color:#4D8BFF}
 .cop-input:disabled{opacity:.5}
-.cop-send{font-family:var(--fm);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#e9e9e6;background:#17291B;border:1px solid rgba(255,255,255,.26);border-radius:10px;padding:0 13px;cursor:pointer}
+.cop-send{font-family:var(--fx);font-size:11px;letter-spacing:normal;color:#e9e9e6;background:#17291B;border:1px solid rgba(255,255,255,.26);border-radius:10px;padding:0 13px;cursor:pointer}
 .cop-send:disabled{opacity:.4;cursor:default}
 
 /* explain / compare cards */
 .cop-card{border:1px solid #262422;border-radius:12px;background:#151312;padding:11px 12px;display:flex;flex-direction:column;gap:7px}
 .cop-card-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .cop-card-h b{font-size:12.5px;color:#fff}
-.cop-cls{font-family:var(--fm);font-size:7.5px;letter-spacing:.1em;color:#5fd39a;border:1px solid rgba(95,211,154,.35);border-radius:30px;padding:2px 7px}
+.cop-cls{font-family:var(--fx);font-size:7.5px;letter-spacing:.1em;color:#5fd39a;border:1px solid rgba(95,211,154,.35);border-radius:30px;padding:2px 7px}
 .cop-cls.warn{color:#c2864e;border-color:rgba(194,134,78,.4)}
-.cop-card-rows{display:grid;grid-template-columns:1fr auto;gap:3px 12px;font-family:var(--fm);font-size:9.5px;color:#8a8a85}
+.cop-card-rows{display:grid;grid-template-columns:1fr auto;gap:3px 12px;font-family:var(--fx);font-size:9.5px;color:#8a8a85}
 .cop-card-rows b{color:#e9e9e6;font-weight:600;text-align:right}
 .cop-compare{display:flex;flex-direction:column;gap:8px}
 .cp .mt-flag{color:#c2864e}
@@ -918,22 +927,22 @@
 /* blueprint card */
 .cop-blueprint{border:1px solid #262422;border-radius:14px;background:#151312;padding:13px;display:flex;flex-direction:column;gap:10px}
 .cop-bp-head{display:flex;align-items:baseline;gap:9px}
-.cop-bp-k{font-family:var(--fm);font-size:8.5px;letter-spacing:.16em;color:#7FB2FF}
+.cop-bp-k{font-family:var(--fx);font-size:8.5px;letter-spacing:.16em;color:#7FB2FF}
 .cop-bp-head b{font-size:12.5px;color:#fff}
 .cop-bp-rationale{font-size:10.5px;line-height:1.55;color:#a5a5a0}
 .cop-bp-lane{border-top:1px dashed #262422;padding-top:9px;display:flex;flex-direction:column;gap:5px}
 .cop-bp-lane-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .cop-bp-lane-h b{font-size:12px;color:#e9e9e6}
-.cop-bp-lane-m{display:flex;gap:9px;flex-wrap:wrap;font-family:var(--fm);font-size:8.5px;letter-spacing:.06em;color:#8a8a85;text-transform:uppercase}
+.cop-bp-lane-m{display:flex;gap:9px;flex-wrap:wrap;font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:#8a8a85}
 .cop-bp-alloc{display:flex;align-items:center;gap:8px}
 .cop-bp-bar{position:relative;flex:1;height:6px;border-radius:4px;background:#1a1816;border:1px solid #262422;overflow:hidden}
 .cop-bp-bar i{position:absolute;inset:0;width:0;background:#fff;box-shadow:0 0 8px rgba(255,255,255,.5);border-radius:4px}
-.cop-bp-alloc b{font-family:var(--fm);font-size:9.5px;color:#e9e9e6}
-.cop-bp-blend{font-family:var(--fm);font-size:9.5px;letter-spacing:.1em;color:#e9e9e6;border:1px solid #262422;border-radius:10px;background:#0d0d0d;padding:9px 11px;text-align:center}
+.cop-bp-alloc b{font-family:var(--fx);font-size:9.5px;color:#e9e9e6}
+.cop-bp-blend{font-family:var(--fx);font-size:9.5px;letter-spacing:.1em;color:#e9e9e6;border:1px solid #262422;border-radius:10px;background:#0d0d0d;padding:9px 11px;text-align:center}
 .cop-bp-violations{display:flex;flex-direction:column;gap:4px}
-.cop-bp-violation{font-family:var(--fm);font-size:9px;line-height:1.5;color:#c2864e;border:1px dashed rgba(194,134,78,.4);border-radius:8px;padding:6px 8px}
-.cop-bp-notes{font-family:var(--fm);font-size:8.5px;line-height:1.6;color:#7c7c78}
-.cop-bp-confirm{font-family:var(--fm);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#c2864e;text-align:center}
+.cop-bp-violation{font-family:var(--fx);font-size:9px;line-height:1.5;color:#c2864e;border:1px dashed rgba(194,134,78,.4);border-radius:8px;padding:6px 8px}
+.cop-bp-notes{font-family:var(--fx);font-size:8.5px;line-height:1.6;color:#7c7c78}
+.cop-bp-confirm{font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:#c2864e;text-align:center}
 /* THE VERBATIM REGISTER (2026-08-24). Four ratified strings can reach a
    copilot card — the two-leverage sentence, the funding line, the rail verdict
    and the measured absence — and they are quoted from the surface that owns
@@ -941,15 +950,15 @@
    and one step above the notes, because they qualify a figure rather than
    being one. The strategy chip sits beside the kind chip in the same
    pill register, muted so the pair reads as one label. */
-.cop-strat{font-family:var(--fm);font-size:7.5px;letter-spacing:.1em;color:#8a8a85;border:1px solid #2f2c29;border-radius:30px;padding:2px 7px}
-.cop-card-lines,.cop-bp-lane-line{font-family:var(--fm);font-size:8.5px;line-height:1.6;color:#8a8a85}
+.cop-strat{font-family:var(--fx);font-size:7.5px;letter-spacing:.1em;color:#8a8a85;border:1px solid #2f2c29;border-radius:30px;padding:2px 7px}
+.cop-card-lines,.cop-bp-lane-line{font-family:var(--fx);font-size:8.5px;line-height:1.6;color:#8a8a85}
 .cop-card-lines{display:flex;flex-direction:column;gap:3px}
-.cop-bp-lane-cap{font-family:var(--fm);font-size:8.5px;letter-spacing:.04em;color:#7c7c78}
+.cop-bp-lane-cap{font-family:var(--fx);font-size:8.5px;letter-spacing:.04em;color:#7c7c78}
 /* The fee caption, byte-identical with the review sheet and the record. It is
    the quietest line on the card on purpose: it is a standing fact about every
    number above it, not a disclosure bolted onto one. */
-.cop-card-foot,.cop-bp-foot{font-family:var(--fm);font-size:8px;line-height:1.5;color:#6f6f6b;text-align:center}
-.cop-apply{font-family:var(--fm);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;width:100%;padding:11px 0;border-radius:11px;border:1px solid rgba(255,255,255,.26);background:#17291B;color:#fff;cursor:pointer;transition:.16s;
+.cop-card-foot,.cop-bp-foot{font-family:var(--fx);font-size:8px;line-height:1.5;color:#6f6f6b;text-align:center}
+.cop-apply{font-family:var(--fx);font-size:11.5px;letter-spacing:normal;font-weight:600;width:100%;padding:11px 0;border-radius:11px;border:1px solid rgba(255,255,255,.26);background:#17291B;color:#fff;cursor:pointer;transition:.16s;
   box-shadow:0 0 18px rgba(255,255,255,.25),inset 0 1px 0 rgba(255,255,255,.1)}
 .cop-apply:hover:not(:disabled){box-shadow:0 0 26px rgba(255,255,255,.45)}
 .cop-apply.applied,.cop-apply:disabled{color:#8a7a73;border-color:rgba(255,255,255,.14);box-shadow:none;cursor:default}
@@ -973,17 +982,17 @@
 .cop-rate-k:active{transform:scale(.96)}
 .cop-rate-k:focus-visible{outline:1px solid #4D8BFF;outline-offset:1px}
 .cop-rate-k.on{color:#E6F4FF;cursor:default}
-.cop-rate-ack{font-family:var(--fm);font-size:8.5px;letter-spacing:.03em;color:#8B94C4;margin-right:4px}
+.cop-rate-ack{font-family:var(--fx);font-size:8.5px;letter-spacing:.03em;color:#8B94C4;margin-right:4px}
 .cop-rate-follow{display:flex;justify-content:flex-end;width:100%}
 .cop-rate-chips{flex-wrap:wrap;gap:6px}
 .cop-rate-chips .cop-chip{font-size:10.5px;padding:5px 10px}
-.cop-rate-note{width:100%;max-width:260px;font-family:var(--fm);font-size:10.5px;color:#e9e9e6;background:#070A1C;
+.cop-rate-note{width:100%;max-width:260px;font-family:var(--fx);font-size:10.5px;color:#e9e9e6;background:#070A1C;
   border:1px solid #1B2350;border-radius:8px;padding:6px 9px;outline:none}
 .cop-rate-note:focus{border-color:#4D8BFF}
 .cop-rate-note::placeholder{color:#6E77A8}
 /* The disclosure under the hello (A8): one register line, dimmer than the
    hello body, seen before the first message in every fresh session. */
-.cop-hello-fine{margin-top:7px;font-family:var(--fm);font-size:8.5px;line-height:1.6;letter-spacing:.03em;color:#6E77A8}
+.cop-hello-fine{margin-top:7px;font-family:var(--fx);font-size:8.5px;line-height:1.6;letter-spacing:.03em;color:#6E77A8}
 @media (prefers-reduced-motion:reduce){
   .cop-rate{opacity:.45;transition:none}
   .cop-rate--open,.cop-msg--assistant:hover .cop-rate,.cop-msg--assistant:focus-within .cop-rate{opacity:1}
@@ -1029,7 +1038,7 @@
 
 /* zone 1 — identity, quiet left: it names the room, it stops competing */
 .rail-id{display:flex;flex-direction:column;min-width:0}
-.rail-title{margin:2px 0 0;font-family:var(--fs);font-size:18px;
+.rail-title{margin:2px 0 0;font-family:var(--fs);font-size:17px;
   letter-spacing:-.02em;font-weight:700;white-space:nowrap}
 
 /* zone 2 — instrument, the one voice: meter → hero → status → guide,
@@ -1045,13 +1054,13 @@
 .rail-seg.now{background:#2B5CFF;animation:segpulse 1.4s ease-in-out infinite}
 .rail-seg.skip{opacity:.45}
 @keyframes segpulse{0%,100%{opacity:.35}50%{opacity:.95}}
-.rail-seg-active{font-family:var(--fm);font-size:8.5px;letter-spacing:.12em;color:var(--bc-accent-text);white-space:nowrap}
+.rail-seg-active{font-family:var(--fx);font-size:8.5px;letter-spacing:.12em;color:var(--bc-accent-text);white-space:nowrap}
 /* full labels only on hover, aligned over their segments */
 .rail-seg-labels{position:absolute;left:0;right:0;bottom:7px;display:flex;gap:4px;
   opacity:0;pointer-events:none;transition:opacity .15s}
 .rail-meter:hover .rail-seg-labels{opacity:1}
-.rail-seg-labels i{flex:1;min-width:0;text-align:center;font-style:normal;font-family:var(--fm);
-  font-size:6.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--bc-faint);white-space:nowrap}
+.rail-seg-labels i{flex:1;min-width:0;text-align:center;font-style:normal;font-family:var(--fx);
+  font-size:6.5px;letter-spacing:normal;color:var(--bc-faint);white-space:nowrap}
 .rail-seg-labels i.done,.rail-seg-labels i.now{color:var(--bc-accent-text)}
 
 /* hero numeral joins the mono data signature (rank 24): every data point
@@ -1059,7 +1068,7 @@
 .rail .rail-hero b{font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1}
 
 /* ONE merged mono status register: modeled · block N · draft saved */
-.rail-status{font-family:var(--fm);font-size:9.5px;letter-spacing:.04em;color:var(--bc-faint);min-height:13px}
+.rail-status{font-family:var(--fx);font-size:9.5px;letter-spacing:.04em;color:var(--bc-faint);min-height:13px}
 
 /* the status line is the header's only prose register now (R1) */
 .rail .rail-status{text-align:left}
@@ -1139,7 +1148,7 @@ main#main-content:has(.bc-root){max-width:none;margin:0;padding:0}
 .panel-rail:hover span,.panel-rail:hover .panel-rail-icon{color:#fff}
 .panel-rail .panel-rail-tip{position:absolute;top:50%;left:calc(100% + 10px);transform:translateY(-50%);
   writing-mode:horizontal-tb;white-space:nowrap;display:block;
-  font-family:var(--fm);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#e9e9e6;
+  font-family:var(--fx);font-size:10.5px;letter-spacing:normal;color:#e9e9e6;
   background:#0d0d0d;border:1px solid #2a2724;border-radius:8px;padding:6px 10px;
   opacity:0;pointer-events:none;transition:opacity .15s;z-index:40;
   box-shadow:0 12px 30px -14px rgba(0,0,0,.55)}
@@ -1181,10 +1190,10 @@ main#main-content:has(.bc-root){max-width:none;margin:0;padding:0}
 .rk-lanerescue .rk-riskk{cursor:pointer}
 
 /* P1-4 — one quiet line on the risk dial when leverage is yield-negative */
-.rk-riskline{font-family:var(--fm);font-size:8px;letter-spacing:.04em;color:var(--bc-warn);text-transform:none}
+.rk-riskline{font-family:var(--fx);font-size:8px;letter-spacing:.04em;color:var(--bc-warn);text-transform:none}
 
 /* P2-6 — the honest one-line notice under the guide (dismissable) */
-.rail-notice{display:flex;align-items:center;gap:8px;font-family:var(--fm);font-size:9.5px;color:var(--bc-warn);
+.rail-notice{display:flex;align-items:center;gap:8px;font-family:var(--fx);font-size:9.5px;color:var(--bc-warn);
   border:1px dashed var(--bc-warn-e35);border-radius:8px;padding:4px 8px;background:var(--bc-warn-wash)}
 .rail-notice-x{display:inline-flex;align-items:center;justify-content:center;color:var(--bc-warn);
   background:none;border:0;cursor:pointer;border-radius:8px;padding:9px;margin:-9px -7px;
@@ -1194,7 +1203,7 @@ main#main-content:has(.bc-root){max-width:none;margin:0;padding:0}
    notice is already a bordered amber object, and a second filled control
    inside it would be two loud things in one 24px strip. It borrows the
    notice's own colour so it reads as part of the sentence it follows. */
-.rail-notice-key{font-family:var(--fm);font-size:9.5px;color:var(--bc-warn);background:none;border:0;
+.rail-notice-key{font-family:var(--fx);font-size:9.5px;color:var(--bc-warn);background:none;border:0;
   cursor:pointer;padding:4px 2px;margin:-4px 0;text-decoration:underline;text-underline-offset:2px;
   text-decoration-thickness:1px;transition:opacity 120ms;outline-offset:-2px;white-space:nowrap}
 .rail-notice-key:hover{opacity:.72}
@@ -1269,7 +1278,7 @@ main#main-content:has(.bc-root){max-width:none;margin:0;padding:0}
    rail with a lit position" as this product's state grammar, and one marker
    means the state and the motion are the same object. */
 .dk-comp{--dk-row-h:34px;border:1px solid var(--bc-line);border-radius:12px;background:var(--bc-panel);padding:10px 12px}
-.dk-comp-k{font-family:var(--fser);font-style:italic;font-size:11.5px;color:var(--bc-muted-soft);line-height:1;margin-bottom:8px}
+.dk-comp-k{font-family:var(--fx);font-style:normal;font-weight:600;font-size:11.5px;color:var(--bc-muted-soft);line-height:1;margin-bottom:8px}
 .dk-comp-rows{position:relative;padding-left:11px}
 .dk-comp-rail{position:absolute;left:0;top:0;width:2px;height:var(--dk-row-h);border-radius:1px;
   background:#2B5CFF;transition:transform 200ms cubic-bezier(.4,0,.2,1)}
@@ -1278,7 +1287,7 @@ main#main-content:has(.bc-root){max-width:none;margin:0;padding:0}
   height:var(--dk-row-h);width:100%;text-align:left;padding:0 2px;background:none;border:0;
   cursor:pointer;font-family:inherit;transition:color 160ms ease-out}
 .dk-comp-row + .dk-comp-row{border-top:1px solid var(--bc-rule)}
-.dk-comp-lab{font-family:var(--fs);font-size:11.5px;font-weight:500;letter-spacing:-.01em;color:var(--bc-muted-soft)}
+.dk-comp-lab{font-family:var(--fs);font-size:11px;font-weight:500;letter-spacing:-.01em;color:var(--bc-muted-soft)}
 .dk-comp-val{font-family:var(--fm);font-variant-numeric:tabular-nums;font-size:13px;font-weight:500;
   color:var(--bc-muted);text-align:right}
 /* The lit number is INK #141210, never blue, matching .dock-lane-apy b
@@ -1340,7 +1349,7 @@ main#main-content:has(.bc-root){max-width:none;margin:0;padding:0}
 /* P2-2 — the failing-gate list in the dock (human labels) */
 .dock-gatelist{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .dock-gatelist .dock-ro-register{width:100%}
-.dock-gate{font-family:var(--fm);font-size:8.5px;letter-spacing:.04em;color:var(--bc-warn);
+.dock-gate{font-family:var(--fx);font-size:8.5px;letter-spacing:.04em;color:var(--bc-warn);
   border:1px solid var(--bc-warn-e35);border-radius:30px;padding:3px 9px}
 
 /* P1-6 — allocation share editor (canvas plate + dock rows) */
@@ -1349,13 +1358,13 @@ main#main-content:has(.bc-root){max-width:none;margin:0;padding:0}
   color:var(--bc-ink);background:var(--bc-panel);border:1px solid var(--bc-line-strong);border-radius:6px;padding:1px 3px;
   -moz-appearance:textfield;appearance:textfield}
 .rk-allocedit input::-webkit-outer-spin-button,.rk-allocedit input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.rk-allocedit b{font-family:var(--fm);font-size:9px;font-weight:600;color:var(--bc-muted)}
+.rk-allocedit b{font-family:var(--fx);font-size:9px;font-weight:600;color:var(--bc-muted)}
 .rk-allocedit.dark input{color:#e9e9e6;background:#1a1816;border-color:#262422}
 .rk-allocedit.dark b{color:#a5a5a0}
 .rk-orchrow.dry .rk-allocedit input{color:#c2864e}
 
 /* P1-2 — gated APPLY on unverifiable blueprints */
-.cop-bp-gate{font-family:var(--fm);font-size:9px;line-height:1.5;color:#c2864e;
+.cop-bp-gate{font-family:var(--fx);font-size:9px;line-height:1.5;color:#c2864e;
   border:1px dashed rgba(194,134,78,.4);border-radius:8px;padding:6px 8px}
 .cop-apply.gated{color:#8a7a73;border-color:rgba(255,255,255,.14);box-shadow:none;cursor:default}
 
@@ -1417,7 +1426,7 @@ body:has(.bc-root) footer{display:none}
    never mounted. Three things are corrected on the way in.
 
    1 · A GRID, NOT FLEX-WRAP. Six labels and five 13px gaps measure 189.9px
-       into a 176.6px interior at IBM Plex Mono 6.5px, so the landing's wrap
+       into a 176.6px interior at the plate mono, 6.5px, so the landing's wrap
        widows the sixth onto its own row and a one-item widow does not read as
        a set. `--dep-cols` is set inline from the MEMBER COUNT, never from the
        plate width: at 340px the plate gains size, not a new arrangement.
@@ -1548,34 +1557,33 @@ body:has(.bc-root) footer{display:none}
   font-size:12.5px;letter-spacing:0;text-transform:none}
 .bc-kicker,.rail-hero-k,.mt-kicker{color:var(--bc-accent-text)}
 .cp-kicker{color:#7FB2FF}
-.rail-seg-active{font-family:var(--fser);font-style:italic;letter-spacing:0;font-size:10.5px}
+.rail-seg-active{font-family:var(--fser);font-style:italic;letter-spacing:0;font-size:12px}
 .rail-seg-labels i{text-transform:none;letter-spacing:0;font-size:7.5px}
 .bc-root .hm-key{text-transform:none;letter-spacing:.02em;font-size:9.5px;border-radius:999px}
-.bc-root .hm-al{font-family:var(--fser);font-style:italic;font-size:10.5px;letter-spacing:0;text-transform:none;color:var(--bc-muted-soft)}
+.bc-root .hm-al{font-family:var(--fser);font-style:italic;font-size:12px;letter-spacing:0;text-transform:none;color:var(--bc-muted-soft)}
 .bc-root .hm-st{text-transform:none;letter-spacing:.03em}
 .bc-root .hm-bdg{text-transform:none;letter-spacing:.02em}
 .bc-root .hm-sb{text-transform:none;letter-spacing:.04em}
 .rk-lanename,.rk-lanepick{text-transform:none;letter-spacing:.01em;font-size:11.5px;font-weight:600}
-.rk-lanenote{font-family:var(--fser);font-style:italic;font-size:10.5px;color:var(--bc-muted-soft);font-weight:400}
+.rk-lanenote{font-family:var(--fser);font-style:italic;font-size:12px;color:var(--bc-muted-soft);font-weight:400}
 .rk-lanekill{text-transform:none;letter-spacing:.02em}
 .rk-slot{text-transform:none;letter-spacing:.05em;font-size:10px}
 /* `.rk-addlane` and `.rt-modeled` are NOT here any more (item 34): their
    register is folded into their own declarations at :622 and :688, so a
    scoped rule on the second rack cannot resurrect the retired uppercase. */
-.mt-sec-h{font-family:var(--fser);font-style:italic;text-transform:none;letter-spacing:0;font-size:13px;color:var(--bc-body)}
+.mt-sec-h{font-family:var(--fx);font-style:normal;font-weight:600;text-transform:none;letter-spacing:-.01em;font-size:13px;color:var(--bc-body)}
 .mt-status{font-family:var(--fser);font-style:italic;font-size:12px;color:var(--bc-muted-soft);margin-top:12px}
 .mt-venuechip{text-transform:none;letter-spacing:.02em}
 .pc-lab{text-transform:none;letter-spacing:.04em}
 .pc-auto{font-family:var(--fser);font-style:italic;text-transform:none;letter-spacing:0;font-size:10.5px}
 .dock-ro-register{text-transform:none;letter-spacing:.03em}
-.dock-ro-lane{font-family:var(--fser);font-style:italic;text-transform:none;letter-spacing:0;font-size:11px}
+.dock-ro-lane{font-family:var(--fx);font-style:normal;font-weight:600;text-transform:none;letter-spacing:-.01em;font-size:11px}
 .dock-orch-status{text-transform:none;letter-spacing:.03em}
 .cop-register,.cop-limit,.cop-offline{text-transform:none;letter-spacing:.03em}
 .cop-bp-lane-m{text-transform:none;letter-spacing:.02em}
 .cop-bp-confirm{text-transform:none;letter-spacing:.02em}
 .panel-rail span{text-transform:none;letter-spacing:.1em}
 .panel-rail .panel-rail-tip{text-transform:none;letter-spacing:.04em}
-.dock-checklist .rail-step{text-transform:none;letter-spacing:.06em}
 .mt-flag{text-transform:none;letter-spacing:.02em}
 .rail-launch{text-transform:none;letter-spacing:.02em;font-size:10.5px;border-radius:999px}
 .rail-lanechip{text-transform:none;letter-spacing:.02em}
@@ -1590,7 +1598,7 @@ body:has(.bc-root) footer{display:none}
    disabled; no red, no shake. M7 crosses it on opacity/filter only. */
 .rail-reason{display:flex;align-items:baseline;gap:8px;justify-content:flex-end;text-align:right;
   max-width:230px;font-family:var(--fser);font-style:italic;font-size:11px;color:#8B94C4}
-.rail-reason button{font-family:var(--fm);font-style:normal;font-size:9.5px;color:#7FB2FF;background:none;
+.rail-reason button{font-family:var(--fx);font-style:normal;font-size:9.5px;color:#7FB2FF;background:none;
   border:0;padding:2px 0;cursor:pointer;border-bottom:1px solid transparent}
 .rail-reason button:hover{color:#fff;border-bottom-color:#4D8BFF}
 /* M7's 160ms cross to disabled is already the key's own `transition:.16s`
@@ -1651,14 +1659,14 @@ body:has(.bc-root) footer{display:none}
   box-shadow:inset 0 2px 9px rgba(0,0,0,.7),0 40px 90px -30px rgba(4,7,31,.85)}
 .pf-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
 .pf-kicker{font-family:var(--fser);font-style:italic;font-size:14px;color:#7FB2FF}
-.pf-close{font-family:var(--fm);font-size:10px;color:#8B94C4;background:none;border:1px solid #1B2350;border-radius:999px;padding:6px 13px;cursor:pointer}
+.pf-close{font-family:var(--fx);font-size:10px;color:#8B94C4;background:none;border:1px solid #1B2350;border-radius:999px;padding:6px 13px;cursor:pointer}
 .pf-close:hover{color:#fff;border-color:#4D8BFF}
-.pf-name{width:100%;font-family:var(--fs);font-size:20px;font-weight:650;letter-spacing:-.02em;color:#fff;
+.pf-name{width:100%;font-family:var(--fs);font-size:19px;font-weight:650;letter-spacing:-.02em;color:#fff;
   background:#0D1233;border:1px solid #1B2350;border-bottom-color:#2A3568;border-radius:12px;padding:12px 14px;outline:none;margin-bottom:10px}
 .pf-name:focus{border-color:#4D8BFF}
 .pf-summary{font-family:var(--fser);font-style:italic;font-size:14px;line-height:1.55;color:#B8D9FF;margin-bottom:14px}
 .pf-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
-.pf-chip{font-family:var(--fm);font-size:10px;color:#B8D9FF;border:1px solid #1B2350;border-radius:999px;padding:4px 11px}
+.pf-chip{font-family:var(--fx);font-size:10px;color:#B8D9FF;border:1px solid #1B2350;border-radius:999px;padding:4px 11px}
 .pf-apy{display:flex;align-items:baseline;gap:9px;margin-bottom:10px}
 .pf-apy b{font-family:var(--fm);font-size:30px;font-weight:600;letter-spacing:-.02em;color:#fff}
 .pf-apy i{font-family:var(--fser);font-style:italic;font-size:12.5px;color:#8B94C4}
@@ -1740,7 +1748,7 @@ body:has(.bc-root) footer{display:none}
    460 where the row still fits on one line. */
 .pf-backtest{display:flex;align-items:baseline;justify-content:space-between;
   flex-wrap:wrap;gap:4px 12px;
-  font-family:var(--fm);font-size:11px;color:#B8D9FF;margin-bottom:16px;
+  font-family:var(--fx);font-size:11px;color:#B8D9FF;margin-bottom:16px;
   transition:margin-bottom 280ms cubic-bezier(.16,1,.3,1)}
 .pf-backtest-k{color:#8B94C4}
 .pf-backtest-state{display:flex;align-items:baseline;flex-wrap:wrap;justify-content:flex-end;gap:4px 10px}
@@ -1850,7 +1858,7 @@ body:has(.bc-root) footer{display:none}
 .pf-run-rows{display:grid;gap:6px;margin-top:12px;padding-top:12px;
   border-top:1px solid rgba(139,148,196,.18)}
 .pf-run-row{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;
-  gap:2px 12px;font-family:var(--fm);font-size:10.5px;line-height:1.45;color:#B8D9FF}
+  gap:2px 12px;font-family:var(--fx);font-size:11.5px;line-height:1.5;color:#B8D9FF}
 .pf-run-row-k{color:#8B94C4}
 /* `margin-left:auto` because the legs make the wrap the COMMON case rather
    than the edge one: a leg label and its standing rarely share a line, and a
@@ -2181,16 +2189,16 @@ body:has(.bc-root) footer{display:none}
 .rk-tip-k{grid-area:k;font-family:var(--fser);font-style:italic;font-weight:400;
   font-size:10.5px;line-height:16px;color:var(--tip-mute);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rk-tip-h{grid-area:h;margin:6px 0 0;font-family:var(--fs);font-size:13px;line-height:1.35;
+.rk-tip-h{grid-area:h;margin:6px 0 0;font-family:var(--fs);font-size:12px;line-height:1.35;
   font-weight:600;letter-spacing:-.02em;color:var(--tip-ink);text-wrap:pretty;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.rk-tip-b{grid-area:b;margin:6px 0 0;font-family:var(--fs);font-size:11.5px;line-height:1.5;
+.rk-tip-b{grid-area:b;margin:6px 0 0;font-family:var(--fs);font-size:11px;line-height:1.5;
   color:var(--tip-body);text-wrap:pretty;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .rk-tip-stamp{grid-area:s;margin:8px 0 0;font-family:var(--fser);font-style:italic;
   font-size:10px;color:var(--tip-mute)}
 .rk-tip-stamp .rk-tip-n{font-size:10px}
-/* mono runs optically larger than Hanken at equal px, so an unadjusted mono
+/* mono runs optically larger than the sans at equal px, so an unadjusted mono
    run inside a sans sentence bulges: .92em. Ink, never blue — headline
    metrics stay in ink. */
 .rk-tip-n{font-family:var(--fm);font-variant-numeric:tabular-nums;font-size:.92em;
@@ -2354,7 +2362,7 @@ body:has(.bc-root) footer{display:none}
 .rk-tippill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;height:30px;
   padding:0 14px;border-radius:999px;background:var(--tip-paper);
   border:1px solid var(--tip-line);cursor:pointer;
-  font-family:var(--fs);font-size:11.5px;font-weight:600;color:var(--tip-ink);
+  font-family:var(--fs);font-size:11px;font-weight:600;color:var(--tip-ink);
   box-shadow:var(--bc-sh-pill)}
 .rk-tippill--block{border-style:dashed;border-color:var(--tip-amber-line);background:var(--tip-amber-wash)}
 .rk-tips--over{background:none}
@@ -2363,7 +2371,7 @@ body:has(.bc-root) footer{display:none}
       system is undebuggable, and it costs one component. No PostHog. ── */
 .rk-tipdebug{position:fixed;left:10px;bottom:10px;z-index:200;max-width:420px;max-height:40vh;
   overflow:auto;background:#0A0E2A;color:#C9D4F0;border:1px solid #1B2350;border-radius:10px;
-  padding:10px 12px;font-family:var(--fm);font-size:9.5px;line-height:1.7}
+  padding:10px 12px;font-family:var(--fx);font-size:9.5px;line-height:1.7}
 .rk-tipdebug i{color:#7FB2FF;font-style:normal}
 .rk-tipdebug em{color:#8B94C4;font-style:italic}
 
@@ -2447,7 +2455,7 @@ body:has(.bc-root) footer{display:none}
    header hero already prints that number 40px away, and printing it twice is
    how a surface starts arguing with itself. */
 .cpz-pf{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
-.cpz-pf-k{font-family:var(--fser);font-style:italic;font-size:12px;color:var(--bc-accent-text)}
+.cpz-pf-k{font-family:var(--fx);font-style:normal;font-weight:600;font-size:12px;color:var(--bc-accent-text)}
 .cpz-pf b{font-family:var(--fm);font-variant-numeric:tabular-nums;font-size:16px;font-weight:600;
   letter-spacing:-.01em;color:var(--bc-ink)}
 .cpz-pf-cap{font-family:var(--fm);font-variant-numeric:tabular-nums;font-size:9.5px;color:var(--bc-faint)}
@@ -2476,12 +2484,12 @@ body:has(.bc-root) footer{display:none}
 .cpz-bridge{display:flex;flex-direction:column;gap:9px}
 .cpz-bridge-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .cpz-bridge-h b{font-size:12.5px;font-weight:600;letter-spacing:-.01em;color:var(--bc-ink)}
-.cpz-bridge-quoting{font-family:var(--fm);font-size:11px;color:var(--bc-muted-soft);min-height:60px;
+.cpz-bridge-quoting{font-family:var(--fx);font-size:11px;color:var(--bc-muted-soft);min-height:60px;
   display:flex;align-items:center}
 .cpz-ladder{display:grid;grid-template-columns:60px 1fr;row-gap:5px;column-gap:10px;align-items:baseline}
 .cpz-rung{display:contents}
 .cpz-rung-n{font-family:var(--fm);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-.cpz-rung-l{font-family:var(--fs);font-size:11.5px;line-height:1.35;color:var(--bc-muted)}
+.cpz-rung-l{font-family:var(--fs);font-size:11px;line-height:1.35;color:var(--bc-muted)}
 /* only the two ENDPOINTS are values */
 .cpz-rung--end .cpz-rung-n{font-size:11px;font-weight:600;color:var(--bc-ink)}
 /* a RUNG, not a value: same weight as the term rows it sits between */
@@ -2523,7 +2531,7 @@ body:has(.bc-root) footer{display:none}
 .cpz-x{padding:7px;margin:-7px;color:var(--bc-faint)}
 .cpz-x:hover{color:var(--bc-warn)}
 /* the reason is STATED, so the missing control never reads as a bug */
-.cpz-req{font-family:var(--fm);font-size:8px;letter-spacing:.06em;color:var(--bc-faint);font-style:normal}
+.cpz-req{font-family:var(--fx);font-size:8px;letter-spacing:.06em;color:var(--bc-faint);font-style:normal}
 .cpz-inv--router .cpz-row-v{font-family:var(--fs);font-size:10.5px;color:var(--bc-muted-soft)}
 /* six words, the only instruction text in the panel */
 .cpz-hint{margin-top:0}
@@ -2608,11 +2616,15 @@ body:has(.bc-root) footer{display:none}
    register simply stops being one of their consumers. ── */
 .dk-brk{width:100%;border-collapse:collapse;margin:0 0 10px}
 .dk-brk,.dk-brk thead,.dk-brk tbody{display:block}
-.dk-brk-hrow,.dk-brk-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(7ch,44%);
+/* `ch` resolves against the ROW's inherited face while the cells that fill
+   the column render mono, so the minimum tracked whichever sans the canvas
+   happened to wear. `em` is face-relative in the same way but is the unit
+   this column actually wants: 4.2em is the seven-digit measure at the mono's
+   0.600em advance. */
+.dk-brk-hrow,.dk-brk-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(4.2em,44%);
   align-items:start;column-gap:10px;row-gap:2px}
 .dk-brk-hrow{padding:0 0 5px;border-bottom:1px solid var(--bc-line)}
-.dk-brk-hrow th{font-family:var(--fm);font-size:8.5px;font-weight:400;letter-spacing:.08em;
-  text-transform:uppercase;color:var(--bc-faint);text-align:right}
+.dk-brk-hrow th{font-family:var(--fx);font-size:10.5px;font-weight:400;letter-spacing:normal;color:var(--bc-faint);text-align:right}
 .dk-brk-hrow th:first-child{text-align:left}
 .dk-brk-row{padding:8px 0;border-bottom:1px solid var(--bc-line-div)}
 .dk-brk tbody tr:last-child{border-bottom:0}
@@ -2676,13 +2688,13 @@ body:has(.bc-root) footer{display:none}
 .dk-brk-cap{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-bottom:9px;
   font-size:10.5px;color:var(--bc-muted)}
 .dk-brk-cap i{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--tip-amber)}
-.dk-brk-cap b{font-family:var(--fm);font-size:10px;font-weight:600;color:var(--bc-ink)}
+.dk-brk-cap b{font-family:var(--fx);font-size:10px;font-weight:600;color:var(--bc-ink)}
 .dk-brk-cap em{font-style:normal;color:var(--bc-faint)}
 
 /* the stamp, and the count of readings not taken — which is what replaced the
    skip drawer: a state behind a chevron is a state a depositor never sees */
 .dk-brk-foot{display:flex;flex-direction:column;align-items:flex-start;gap:3px;
-  font-family:var(--fm);font-size:8.5px;letter-spacing:.03em;line-height:1.5;color:var(--bc-faint)}
+  font-family:var(--fx);font-size:8.5px;letter-spacing:.03em;line-height:1.5;color:var(--bc-faint)}
 .dk-brk-asof{font-variant-numeric:tabular-nums}
 .dk-brk-unwatched{margin-top:5px;font-size:10px;line-height:1.45;color:var(--bc-faint)}
 
@@ -2714,7 +2726,7 @@ body:has(.bc-root) footer{display:none}
 .cpz-target{color:var(--bc-accent-text);font-weight:600}
 .cpz-fact{color:var(--bc-muted)}
 .cpz-bay-keys{margin-top:11px}
-.cpz-bay-chain{margin-top:6px;font-family:var(--fm);font-size:9px;color:var(--bc-faint);text-align:center}
+.cpz-bay-chain{margin-top:6px;font-family:var(--fx);font-size:9px;color:var(--bc-faint);text-align:center}
 /* NEGATIVE VALUE: gray dashed = available but uninviting; tan dashed =
    inviting. No red, no warning glyph, no fourth group header — a header for
    a case that holds one card sometimes is chrome that exists to apologise. */
@@ -2728,7 +2740,7 @@ body:has(.bc-root) footer{display:none}
 .cpz-skip{border:1px dashed var(--bc-line);border-radius:12px;background:transparent}
 .cpz-skip-bar{display:flex;align-items:center;gap:8px;width:100%;min-height:42px;padding:0 13px;
   background:none;border:0;cursor:pointer;text-align:left;
-  font-family:var(--fs);font-size:11.5px;color:var(--bc-muted-soft)}
+  font-family:var(--fs);font-size:11px;color:var(--bc-muted-soft)}
 .cpz-skip-bar:hover{color:var(--bc-body)}
 .cpz-skip-chev{margin-left:auto;color:var(--bc-faint);transition:transform 200ms cubic-bezier(.4,0,.2,1)}
 .cpz-skip[data-open="true"] .cpz-skip-chev{transform:rotate(90deg)}
@@ -2755,7 +2767,7 @@ body:has(.bc-root) footer{display:none}
    shipped control that nothing asked for. */
 .cpz-addlane{display:flex;align-items:center;justify-content:center;height:48px;width:100%;
   border:1.5px dashed var(--bc-line-invite);border-radius:14px;background:none;cursor:pointer;
-  font-family:var(--fm);font-size:10px;letter-spacing:.05em;color:var(--bc-muted-warm);transition:.15s}
+  font-family:var(--fx);font-size:10px;letter-spacing:.05em;color:var(--bc-muted-warm);transition:.15s}
 .cpz-addlane:hover{border-color:#2B5CFF;color:var(--bc-accent-text)}
 .cpz-addlane:active{transform:translateY(1px);transition-duration:60ms}
 

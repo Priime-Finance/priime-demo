@@ -193,7 +193,7 @@ function ComingSoonCard({ v, i }: { v: VaultRecord; i: number }) {
         </span>
       </div>
       <span className="vx-card-mkt">
-        {v.market} · {recordVenueLine(v)}
+        <span className="pair">{v.market}</span> · {recordVenueLine(v)}
       </span>
       {apyOk ? (
         <div className="vx-card-apy">
@@ -261,7 +261,7 @@ function LiveCard({ v, i, live }: { v: VaultRecord; i: number; live: boolean }) 
         <span className={`vx-tag${v.mine ? " vx-tag--mine" : ""}`}>{v.strategyLabel}</span>
       </div>
       <span className="vx-card-mkt">
-        {v.market} · {recordVenueLine(v)}
+        <span className="pair">{v.market}</span> · {recordVenueLine(v)}
       </span>
       <ApyHero apy={v.modeledApy} ok={apyOk} live={live} inView={inView} />
       {forfeit ? <span className="vx-card-forfeit">{collarForfeitLine(forfeit)}</span> : null}
@@ -433,9 +433,17 @@ export default function VaultsDirectory() {
             NAV and share value are attested off the journal.
           </p>
           <p className="vx-dir-stats" suppressHydrationWarning>
-            {liveCount} live {liveCount === 1 ? "vault" : "vaults"} ·{" "}
-            {navUsd === null ? "awaiting strike" : `${fmtUsd(navUsd)} attested NAV`} · {soonCount}{" "}
-            {COMING_SOON.prose}
+            {/* A sentence with three figures in it: the words are the sans and
+                each figure claims `.num` back. */}
+            <b className="num">{liveCount}</b> live {liveCount === 1 ? "vault" : "vaults"} ·{" "}
+            {navUsd === null ? (
+              "awaiting strike"
+            ) : (
+              <>
+                <b className="num">{fmtUsd(navUsd)}</b> attested NAV
+              </>
+            )}{" "}
+            · <b className="num">{soonCount}</b> {COMING_SOON.prose}
           </p>
         </div>
         <a className="vx-cta" href={buildHref}>

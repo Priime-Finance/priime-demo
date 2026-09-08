@@ -7,6 +7,12 @@
   --vx-ink:#141414;--vx-mut:#57534e;--vx-faint:#6f6b63;--vx-line:#e7e4dd;--vx-card:#fbfaf8;
   --vx-green:#267e50;--vx-red:#c0392b;
   --vx-ser:var(--font-fraunces),'Fraunces',Georgia,serif;
+  /* Alignment here was carried by the monospaced FACE and by almost no
+     declaration: 3 of the 32 mono selectors in this file ask for tabular
+     figures. Geist is the only face left in the app that ships the tnum
+     feature, so the guard is declared once at the root and every column
+     inherits it. */
+  font-variant-numeric:tabular-nums;
   color:var(--vx-ink)}
 
 /* ── page header ── */
@@ -43,7 +49,11 @@
 .vx-cell b{font-family:var(--font-mono,ui-monospace);font-size:12.5px;font-weight:600;color:var(--vx-ink)}
 .vx-card-cur{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--vx-mut)}
 .vx-card-cur b{font-weight:600;color:var(--vx-ink)}
-.vx-card-mkt{font-family:var(--font-mono,ui-monospace);font-size:11.5px;color:var(--vx-mut)}
+/* The MARKET PAIR is the ticker and keeps the mono. A count (`2 markets`)
+   and two protocol names in their native casing (`Morpho Blue and Aave v3`)
+   are words. */
+.vx-card-mkt{font-family:inherit;font-size:12px;color:var(--vx-mut)}
+.vx-card-mkt .pair{font-family:var(--font-mono,ui-monospace)}
 /* DL-3: the portfolio card carries the stage chip beside the strategy tag. */
 .vx-card-tags{display:flex;align-items:center;gap:6px;flex:0 0 auto}
 
@@ -68,17 +78,28 @@
 @media(max-width:900px){.vx-cols{grid-template-columns:1fr}}
 .vx-panel{background:var(--vx-card);border:1px solid var(--vx-line);border-radius:16px;padding:18px}
 .vx-panel + .vx-panel{margin-top:16px}
-.vx-panel-h{font-family:var(--vx-ser);font-style:italic;font-size:13.5px;color:var(--vx-blue);margin-bottom:12px}
+/* A HEAD NAMES A REGION AND BELONGS TO THE CHROME. Fraunces italic is the
+   kicker/summary/footnote voice; it had crept onto the section heads, which
+   ran two head registers on one page (`Deposit` in blue serif italic beside
+   `Overview` in the sans at 19px/600) and stacked seven blue italic lines
+   into a wash. Blue is punctuation, one loud beat per surface. */
+.vx-panel-h{font-family:inherit;font-style:normal;font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--vx-ink);margin-bottom:12px}
 .vx-spark{width:100%;height:120px;display:block}
-.vx-spark-note{font-family:var(--vx-ser);font-style:italic;font-size:11.5px;color:var(--vx-faint);margin-top:8px}
+.vx-spark-note{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);margin-top:8px}
 .vx-kv{display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px dashed var(--vx-line);font-size:13px}
 .vx-kv:last-child{border-bottom:0}
 .vx-kv span{color:var(--vx-mut)}
-.vx-kv b{font-family:var(--font-mono,ui-monospace);font-weight:600;text-align:right}
+.vx-kv b{font-family:var(--font-mono,ui-monospace);font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
 /* sentence-valued rows (Main risk): prose wraps left in sans — mono stays
    reserved for data */
 .vx-kv--prose{flex-direction:column;align-items:flex-start;gap:3px}
 .vx-kv--prose b{font-family:inherit;font-weight:500;text-align:left;line-height:1.55;color:var(--vx-ink)}
+/* THE PHRASE REGISTER. Mono stays the DEFAULT above, so no numeric row can
+   ever regress out of the data register; what is granted here is the escape,
+   to the rows whose value is words. The register is decided in ONE place,
+   lib/vaults/param-kind.ts, and arrives as data-kind, so every key/value
+   surface in the app reads one owner. */
+.vx-kv b[data-kind="phrase"],.vxj-row b[data-kind="phrase"],.vxi-foot b[data-kind="phrase"],.vxe-read b[data-kind="phrase"],.vxc-val[data-kind="phrase"]{font-family:var(--font-body);font-weight:500;letter-spacing:-.005em;font-variant-numeric:normal;white-space:normal}
 .vx-mod{display:flex;flex-direction:column;gap:2px;padding:9px 0;border-bottom:1px dashed var(--vx-line)}
 .vx-mod:last-child{border-bottom:0}
 .vx-mod b{font-size:13px;font-weight:600}
@@ -88,6 +109,10 @@
 .vx-dep-row{display:flex;gap:10px;margin-bottom:10px}
 .vx-dep-input{flex:1;min-width:0;font-family:var(--font-mono,ui-monospace);font-size:16px;font-weight:600;
   padding:11px 14px;border-radius:12px;border:1px solid var(--vx-line);background:#fff;color:var(--vx-ink);outline:none}
+/* THE VALUE IS A NUMBER, THE PLACEHOLDER IS A PHRASE. `Amount, USD` was
+   printing in the mono at 16px/600, which made it the loudest chrome run in
+   the deposit rail and heavier than the `Deposit` key beside it. */
+.vx-dep-input::placeholder{font-family:var(--font-body);font-weight:500;letter-spacing:-.005em;opacity:1}
 .vx-dep-input:focus{border-color:var(--vx-blue)}
 .vx-dep-btn{border:0;border-radius:12px;background:var(--vx-blue);color:#fff;font-size:14px;font-weight:600;
   padding:0 22px;cursor:pointer;transition:.15s;box-shadow:0 8px 20px -10px rgba(43,92,255,.55)}
@@ -97,7 +122,7 @@
 .vx-dep-quick button{font-family:var(--font-mono,ui-monospace);font-size:11.5px;color:var(--vx-mut);background:none;
   border:1px solid var(--vx-line);border-radius:999px;padding:4px 12px;cursor:pointer;transition:.15s}
 .vx-dep-quick button:hover{border-color:var(--vx-blue);color:var(--vx-blue)}
-.vx-dep-note{font-family:var(--vx-ser);font-style:italic;font-size:11.5px;color:var(--vx-faint)}
+.vx-dep-note{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint)}
 .vx-dep-done{display:flex;flex-direction:column;gap:4px;background:rgba(38,126,80,.06);border:1px solid rgba(38,126,80,.25);
   border-radius:12px;padding:12px 14px;margin-bottom:10px}
 .vx-dep-done b{font-size:13.5px;color:var(--vx-green)}
@@ -121,8 +146,14 @@
 .vx-table th{font-family:var(--vx-ser);font-style:italic;font-weight:500;font-size:12px;color:var(--vx-faint);
   text-align:right;padding:8px 10px;border-bottom:1px solid var(--vx-line)}
 .vx-table th:first-child{text-align:left}
-.vx-table td{font-family:var(--font-mono,ui-monospace);font-size:13px;text-align:right;padding:11px 10px;border-bottom:1px dashed var(--vx-line)}
-.vx-table td:first-child{text-align:left;font-family:inherit}
+/* A CELL IS A SENTENCE UNTIL IT SAYS OTHERWISE. The table used to set every
+   cell in the mono and hand the first column back, which put the Detail
+   cell's whole sentence in monospace with a number buried inside it. Words
+   inherit the sans; `.num` is what claims the data register, and it is
+   granted to the figure, not to the cell around it. */
+.vx-table td{font-family:inherit;font-size:13px;text-align:right;padding:11px 10px;border-bottom:1px dashed var(--vx-line)}
+.vx-table td.num,.vx-table td .num{font-family:var(--font-mono,ui-monospace);font-variant-numeric:tabular-nums}
+.vx-table td:first-child{text-align:left}
 .vx-table tr:last-child td{border-bottom:0}
 .vx-table a{color:var(--vx-ink);font-weight:600;text-decoration:none}
 .vx-table a:hover{color:var(--vx-blue)}
@@ -305,8 +336,8 @@
 .vxd-sec{scroll-margin-top:122px;margin-bottom:32px}
 .vxd-sec-h{font-size:19px;font-weight:600;letter-spacing:-.01em;margin:0 0 12px}
 .vxd-desc{font-size:14px;line-height:1.65;color:var(--vx-ink);margin:0}
-.vxd-desc--note{font-family:var(--vx-ser);font-style:italic;font-size:12px;color:var(--vx-faint);margin-top:10px}
-.vxd-note{font-family:var(--vx-ser);font-style:italic;font-size:11.5px;color:var(--vx-faint);margin:2px 2px 0}
+.vxd-desc--note{font-family:var(--vx-ser);font-style:italic;font-size:13.5px;color:var(--vx-faint);margin-top:10px}
+.vxd-note{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);margin:2px 2px 0}
 .vx-kv--chips{align-items:center}
 .vxo-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
 .vxo-chip{font-size:11px;font-weight:500;color:var(--vx-mut);border:1px solid var(--vx-line);border-radius:999px;padding:2px 9px;background:#fff}
@@ -406,7 +437,7 @@
 
 /* ── cascade + rules tables ── */
 .vxc{margin-top:16px}
-.vxc-k{font-family:var(--vx-ser);font-style:italic;font-size:12px;color:var(--vx-faint);margin-bottom:8px}
+.vxc-k{font-family:inherit;font-style:normal;font-size:12px;font-weight:600;letter-spacing:-.01em;color:var(--vx-mut);margin-bottom:8px}
 .vxc-rows{border:1px solid var(--vx-line);border-radius:12px;background:#fff;overflow:hidden}
 .vxc-row{display:grid;grid-template-columns:auto minmax(0,auto) auto auto minmax(0,1fr);align-items:center;gap:10px;
   padding:9px 12px;border-bottom:1px solid var(--vx-line);font-size:12.5px}
@@ -424,7 +455,7 @@
    as every other italic note on this page (`.vx-spark-note`, `.vx-dep-note`):
    the serif italic at --vx-faint, which is redefined in the dark block, so
    this follows the theme without a twin. */
-.vxc-note{font-family:var(--vx-ser);font-style:italic;font-size:11.5px;color:var(--vx-faint);margin-top:8px}
+.vxc-note{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);margin-top:8px}
 /* THE LIQUIDATION VERDICT, first group in the register. `.vxv-h` is
    `.vx-kv--prose b`'s prose register at `.vx-kv`'s own size — the page's
    existing statement-sentence type, not a new one. The blind value drops to
@@ -677,8 +708,10 @@
 .vxp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}
 .vxp-sv{font-family:var(--font-mono,ui-monospace);font-size:24px;font-weight:600;letter-spacing:-.01em}
 .vxp-chips{display:flex;gap:5px}
-.vxp-chips button{font-family:var(--font-mono,ui-monospace);font-size:11px;color:var(--vx-mut);background:none;border:1px solid var(--vx-line);
-  border-radius:999px;padding:4px 12px;cursor:pointer;transition:.15s}
+/* One chip system on this page, not two: `.vx-chip` at :769 is sans 12.5/500
+   at 6px 13px, and these range keys are the same object on a second tab. */
+.vxp-chips button{font-family:inherit;font-size:11.5px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--vx-mut);background:none;border:1px solid var(--vx-line);
+  border-radius:999px;padding:5px 12px;cursor:pointer;transition:.15s}
 .vxp-chips button:hover{border-color:var(--vx-blue);color:var(--vx-blue)}
 .vxp-chips button.on{border-color:var(--vx-blue);color:var(--vx-blue);background:rgba(43,92,255,.07);font-weight:600}
 .vxr-note{font-family:var(--vx-ser);font-style:italic;font-size:11px;color:var(--vx-faint);margin-left:4px}
@@ -688,17 +721,20 @@
 .vxa-action{font-weight:600}
 .vxa-detail{color:var(--vx-mut)}
 .vxa-time{color:var(--vx-faint);font-size:12px}
-.vxa-tag{font-family:var(--vx-ser);font-style:italic;font-size:10.5px;color:var(--vx-faint);margin-left:7px;font-weight:400}
+.vxa-tag{font-family:inherit;font-style:normal;font-size:11px;color:var(--vx-faint);margin-left:7px;font-weight:500}
 .vxa-tag--you{color:var(--vx-blue)}
-.vxa-trunc{font-family:var(--vx-ser);font-style:italic;font-size:11.5px;color:var(--vx-faint);text-align:center;padding:9px 0 7px}
+.vxa-trunc{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);text-align:center;padding:9px 0 7px}
 /* ── the Verify column (founder feedback, 2026-09-07). One key at the end of
       every on-chain row, opening the execution on Basescan. The column exists
       only on a record with a chain ledger; rows without a transaction leave
       the cell empty rather than printing a dead key. ── */
 .vxa-tag--chain{color:var(--vx-mut)}
 .vxa-col-verify{text-align:right;width:1%;padding-right:4px}
-.vxa-verify{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono,ui-monospace);font-size:11.5px;font-weight:600;
-  letter-spacing:.01em;color:var(--vx-ink);background:var(--vx-card);border:1px solid var(--vx-line);border-radius:999px;padding:5px 11px 5px 12px;
+/* A CONTROL, THEREFORE CHROME. The 1px padding asymmetry compensated a mono
+   side-bearing against what is actually an inline <svg>, so it is
+   unmotivated at any face. */
+.vxa-verify{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:11.5px;font-weight:600;
+  letter-spacing:-.005em;color:var(--vx-ink);background:var(--vx-card);border:1px solid var(--vx-line);border-radius:999px;padding:5px 12px;
   text-decoration:none;white-space:nowrap;line-height:1;transition:color .15s ease,border-color .15s ease,transform .15s ease}
 .vxa-verify svg{width:10px;height:10px;flex:none;opacity:.75}
 .vxa-verify:hover{color:var(--vx-blue);border-color:var(--vx-blue);transform:translateY(-1px)}
@@ -741,7 +777,11 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── header stats strip: derived, mono, quiet ── */
-.vx-dir-stats{font-family:var(--font-mono,ui-monospace);font-size:11.5px;color:var(--vx-faint);margin-top:10px}
+/* `1 live vault · $500 attested NAV · 7 coming soon` is a SENTENCE with
+   three numbers in it, not a datum. The words inherit the sans and each
+   figure claims `.num` back. */
+.vx-dir-stats{font-family:inherit;font-size:12px;color:var(--vx-faint);margin-top:10px}
+.vx-dir-stats .num{font-family:var(--font-mono,ui-monospace);font-variant-numeric:tabular-nums}
 
 /* ── control bar ── */
 .vx-dir-bar{display:flex;align-items:center;justify-content:space-between;gap:10px 18px;flex-wrap:wrap;margin:0 0 18px}
@@ -752,7 +792,10 @@
 .vx-chip:hover{color:var(--vx-ink);border-color:#cfcabf}
 .vx-chip:active{transform:scale(.96)}
 .vx-chip.on{background:var(--vx-blue);border-color:var(--vx-blue);color:#fff}
-.vx-chip-n{font-family:var(--font-mono,ui-monospace);font-size:10.5px;font-weight:600;color:var(--vx-faint);display:inline-block}
+/* `min-width:2ch` so a 12-to-3 change cannot reflow the flex row at the
+   exact moment `.vx-chip-n--pulse` plays its 450ms scale beat, which read as
+   the pill collapsing rather than as the count moving. */
+.vx-chip-n{font-family:var(--font-mono,ui-monospace);font-size:10.5px;font-weight:600;color:var(--vx-faint);display:inline-block;font-variant-numeric:tabular-nums;min-width:2ch;text-align:center}
 .vx-chip.on .vx-chip-n{color:rgba(255,255,255,.72)}
 .vx-chip-n--pulse{animation:vxchipn .45s cubic-bezier(.3,1.4,.4,1) 1}
 @keyframes vxchipn{0%{transform:scale(1)}35%{transform:scale(1.3)}100%{transform:scale(1)}}
@@ -1383,7 +1426,7 @@ button.vx-cta:disabled{opacity:.6;cursor:default;transform:none}
 [data-theme="dark"] .vx-chip-n,
 [data-theme="dark"] .vx-pf-pnl{font-weight:550}
 [data-theme="dark"] .vxj-row--lead b{font-weight:600}
-/* …and the ACTIVITY table's two Hanken columns come back out of the step. The
+/* …and the ACTIVITY table's two SANS columns come back out of the step. The
    rule above catches every `.vx-table td`, so `.vxa-action` went 600 to 550
    and `.vxa-detail` sat at 550 too: two columns 200 weight units apart in
    light converge on one weight in dark, and the Action column stops leading
@@ -1397,6 +1440,15 @@ button.vx-cta:disabled{opacity:.6;cursor:default;transform:none}
 [data-theme="dark"] .vx-table td.vxa-action{font-weight:600}
 [data-theme="dark"] .vx-table td.vxa-detail,
 [data-theme="dark"] .vx-table td.vxa-time{font-weight:400}
+/* …and neither do the rows that left the mono in the phrase pass. Four of the
+   eleven selectors in the step above now carry VALUES that are sans, and a
+   sans phrase has no bloom to correct: left in the step it would render 550
+   on dark against 600 in light. `.vx-table td.vxa-detail` above carries its
+   `td` for the same specificity reason documented there. */
+[data-theme="dark"] .vx-kv b[data-kind="phrase"],
+[data-theme="dark"] .vxj-row b[data-kind="phrase"],
+[data-theme="dark"] .vxi-foot b[data-kind="phrase"],
+[data-theme="dark"] .vxc-val[data-kind="phrase"]{font-weight:500}
 /* …and the register's absence does NOT step with them. It is not a figure, it
    is the word `not measured`, and an absence carried at measurement weight
    reads as a measurement. The mono bloom step above is (0,2,0); `.vxb-abs` is

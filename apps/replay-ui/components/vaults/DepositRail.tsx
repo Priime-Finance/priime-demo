@@ -24,6 +24,7 @@ import { useRef, useState } from "react";
 import { HOUSE_FEES, depositAfterSettlement, settlementFeeUsd, withdrawalLine } from "@/lib/canvas/fees";
 import { MIN_DEPOSIT_USD } from "@/lib/canvas/param-schema";
 import { HERO_SLUG } from "@/lib/demo-scope";
+import { valueKind } from "@/lib/vaults/param-kind";
 import { heroNavPerShare } from "@/lib/vaults/rows";
 import {
   addPosition,
@@ -407,9 +408,12 @@ export default function DepositRail({
 
       <div className="vx-panel">
         <div className="vx-panel-h">Projection</div>
+        {/* Every value below is a figure and stays in the mono; the venue is
+            two names and the rate can read `Not modeled`, so both ask the one
+            register owner rather than being decided here. */}
         <div className="vxj-row">
           <span>Venue</span>
-          <b>
+          <b data-kind={valueKind(`${venue} · ${chain}`)}>
             {venue} · {chain}
           </b>
         </div>
@@ -438,7 +442,12 @@ export default function DepositRail({
         ) : null}
         <div className="vxj-row">
           <span>Modeled APY</span>
-          <b className={negative ? "vx-pnl neg" : undefined}>{apyOk ? fmtPct(apy) : "Not modeled"}</b>
+          <b
+            className={negative ? "vx-pnl neg" : undefined}
+            data-kind={valueKind(apyOk ? fmtPct(apy) : "Not modeled")}
+          >
+            {apyOk ? fmtPct(apy) : "Not modeled"}
+          </b>
         </div>
         {apyOk ? (
           <>

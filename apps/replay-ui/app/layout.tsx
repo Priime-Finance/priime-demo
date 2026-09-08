@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Geist, Geist_Mono, Hanken_Grotesk, IBM_Plex_Mono } from "next/font/google";
+import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 import { SiteNav } from "@/components/nav/SiteNav";
 import { VintageFooter } from "@/components/footer/VintageFooter";
 import { DemoWalletSheet } from "@/components/wallet/DemoWalletSheet";
@@ -7,18 +7,24 @@ import "./globals.css";
 
 /* ────────────────────────────────────────────────────────────────────────────
    FONTS: THE ROOT LAYOUT OWNS EVERY FACE (docs/plans/LATEST_UI_PORT_SPEC.md
-   A.3 #33). Five next/font faces, self-hosted at build time, exposed as CSS
+   A.3 #33). Three next/font faces, self-hosted at build time, exposed as CSS
    variables on <html>. Route layouts import CSS only; every literal family
    name in the ported CSS is remapped to one of these variables, so nothing on
    the property contacts fonts.googleapis.com at runtime (the network
    dependency PR #12 removed stays removed).
 
-   Geist and Geist Mono are the app's sans and mono. IBM Plex Mono is the
-   static site's nav face: priime.finance sets the pill's links in Plex Mono
-   12.5px, and the pill is the one element present on every page of both
-   hosts. Hanken Grotesk is the hardware-module nameplate face and Fraunces
-   the brand's serif-italic annotation face (DESIGN_HWMOD_SPEC §1A), both
-   previously loaded per route through a Google Fonts <link>.
+   Three faces, one job each. Geist is the app's only sans and it carries
+   every word: body, heads, labels, chips, controls, the nav pill, the build
+   canvas chrome. Geist Mono is the only mono and it is used sporadically,
+   for the data register alone: figures with their units, hashes, addresses,
+   block numbers, timestamps, the market pair, the plate's printed ink.
+   Fraunces stays italic, small, and never grows past annotation: the kicker
+   above a head, the summary under a title, the footnote under a table.
+
+   Do not add a fourth face here. A second sans or a second mono is a
+   distinction the product does not make and every reader feels; a grep gate
+   in tests/type-faces.test.ts fails the build if one returns, including
+   through an inline style.
    ──────────────────────────────────────────────────────────────────────────── */
 const geist = Geist({
   subsets: ["latin"],
@@ -31,20 +37,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-geist-mono",
-  display: "swap",
-});
-
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-plex-mono",
-  display: "swap",
-});
-
-const hanken = Hanken_Grotesk({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-hanken",
   display: "swap",
 });
 
@@ -116,7 +108,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${geist.variable} ${geistMono.variable} ${plexMono.variable} ${hanken.variable} ${fraunces.variable}`}
+      className={`${geist.variable} ${geistMono.variable} ${fraunces.variable}`}
       /* The script above stamps data-theme on <html> before React hydrates,
          so the server markup and the client DOM legitimately differ by that
          one attribute. Theme is NOT React state: it is an attribute written

@@ -47,8 +47,10 @@ export type ScreenState = "idle" | "quoting" | "ok" | "noquote";
 /**
  * THE LAMP'S OWN WORD for each party. Six characters at most: the strip runs
  * three columns into a 176.6px interior, which is 47.5px a cell and eight
- * characters of IBM Plex Mono at 7.5px before the label touches its
- * neighbour's. The landing's own vocabulary where it had one.
+ * characters of the plate mono at 7.5px before the label touches its
+ * neighbour's. The budget is face-stable: every mono the plate has worn is a
+ * 600/1000-unit face, so the advance is 0.600em whichever one is mounted.
+ * The landing's own vocabulary where it had one.
  */
 const LAMP_LABEL: Record<CounterpartyId, string> = {
   bridge: "BRIDGE",
@@ -613,8 +615,8 @@ export default function PlateScreen({
       params: { "exogenous-risk": params },
     });
     /* COLUMNS FROM THE MEMBER COUNT, never from the plate width. Six labels
-       and five gaps measure 189.9px into a 176.6px interior at IBM Plex Mono
-       6.5px, so the landing's flex-wrap widows the sixth onto its own row —
+       and five gaps measure 189.9px into a 176.6px interior at the plate
+       mono, 6.5px, so the landing's flex-wrap widows the sixth onto its row,
        and a one-item widow does not read as a set. n<=3 is one row; above
        that it is two, and the enumeration is closed at six so it is never
        three. The count does not change on focus: at 340px the plate gains

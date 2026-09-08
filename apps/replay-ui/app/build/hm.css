@@ -12,7 +12,18 @@
  * the landing's canonical selected/live states, reused verbatim.
  */
 
-/* ── 1A. Tokens (index.html:474-478). Fonts load via <link> in layout. ── */
+/* ── 1A. Tokens (index.html:474-478). Fonts load via next/font in layout. ──
+ * THREE canvas type tokens, all pointing at the app's two faces:
+ *   --fs  the canvas's inherited sans (Geist)
+ *   --fx  the canvas CHROME sans: names, labels, controls, sentences
+ *   --fm  the canvas DATA mono (Geist Mono): figures, ids, plate ink
+ * --fs and --fx resolve to the same face today. They are separate names so a
+ * later chrome move sweeps --fx without disturbing what the canvas inherits.
+ * The plate below keeps every var(--fm) it has: the plate's claim is the
+ * monospace REGISTER, not any one monospace, and repointing --fm converts
+ * all seven plate declarations with zero plate edits. Both faces are
+ * 600/1000-unit monospaces, so the 5ch verb cell at §1B' and the
+ * 34-character .hm-sb budget below hold unchanged. */
 /* HELIOS 2026-08-22: the canvas's root ink is the ONE value in this file that
  * moves. Everything below it is hardware — the aluminium plate face and its
  * bezel, the screen stock, the keys, the jacks, the band internals — and
@@ -20,7 +31,7 @@
  * build.css, which loads after this file; the literal fallback keeps the
  * canvas rendering correctly if that layer ever fails to arrive.
  * It moves for the CANVAS only: §1B' below stops it at the plate. */
-.bc-root{--fs:var(--font-hanken),'Hanken Grotesk',system-ui,sans-serif;--fm:var(--font-plex-mono),'IBM Plex Mono',ui-monospace,monospace;
+.bc-root{--fs:var(--font-body);--fx:var(--font-body);--fm:var(--font-mono,ui-monospace);font-variant-numeric:tabular-nums;
   font-family:var(--fs);color:var(--bc-ink,#141210);-webkit-font-smoothing:antialiased}
 
 /* ── 1B. LAYER 1 — base hm-* block, verbatim from index.html lines 134-212 ── */

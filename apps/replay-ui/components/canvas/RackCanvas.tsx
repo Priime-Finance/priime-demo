@@ -4029,7 +4029,7 @@ function OrchWires({ rackRef, portfolio, measureKey }: { rackRef: React.RefObjec
             x={p.x}
             y={p.y}
             textAnchor="middle"
-            style={{ fontFamily: '"IBM Plex Mono",monospace', fontSize: 9, fill: "#141210" }}
+            style={{ fontFamily: "var(--fm)", fontSize: 9, fill: "#141210" }}
           >
             {p.label}
           </text>

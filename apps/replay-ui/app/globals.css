@@ -265,7 +265,6 @@
 :root{
   --o:#000000; --o2:#333333; --ink:#1a1a1a; --mut:#6f6c66; --faint:#a29e95;
   --bd:#e7e4dd; --dash:#d6d1c8; --panel:rgba(255,255,255,.5);
-  --mono:var(--font-geist-mono),"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 .nav{position:sticky;top:0;z-index:60;display:flex;justify-content:center;padding-top:14px;background:transparent;border:0;transition:padding-top .34s cubic-bezier(.2,.72,.2,1)}
 /* THE PILL IS THE LANDING'S PILL (founder, 2026-08-22: "the landing nav bar is
@@ -283,9 +282,11 @@
 .brand{text-decoration:none;display:flex;align-items:center;flex:none}
 .brand-logo{height:26px;width:auto;display:block;transition:height .34s cubic-bezier(.2,.72,.2,1)}
 .nav-links{display:flex;align-items:center;gap:clamp(8px,1.3vw,18px)}
-/* Landing face, size, weight and ink. Geist 11.5px/500 against Plex Mono
-   12.5px/400 was the difference a reader sees first. */
-.nav .link{font-family:var(--font-plex-mono),"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;letter-spacing:normal;color:#3C3833;text-decoration:none;font-weight:400;cursor:pointer;padding:8px 12px;border-radius:999px;transition:background .2s,color .2s,box-shadow .2s}
+/* Landing size and ink, in the app's one sans. The pill's links are words,
+   and words are Geist: a monospaced pill on every page is the definition of
+   the mono working "as main" (founder, 2026-09-08). The pill's drawing --
+   warm ground, hairline, throw, ink, height, is untouched. */
+.nav .link{font-family:var(--font-body);font-size:12.5px;letter-spacing:-.005em;color:#3C3833;text-decoration:none;font-weight:500;cursor:pointer;padding:8px 12px;border-radius:999px;transition:background .2s,color .2s,box-shadow .2s}
 .nav .link:hover{color:#0c0a08;background:rgba(255,255,255,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 1px 3px rgba(0,0,0,.07)}
 .nav .link.active{color:var(--o)}
 .nav-item{position:relative;display:inline-flex;align-items:center}
@@ -296,8 +297,6 @@
 .nav-item:hover .nav-menu{opacity:1;visibility:visible;transform:translateY(0)}
 .nav-menu a{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:9px;text-decoration:none}
 .nav-menu a:hover{background:rgba(0,0,0,.07)}
-.nm-t{font-weight:600;font-size:14px;color:#1a1a1a;letter-spacing:-.01em}
-.nm-d{font-family:var(--mono);font-size:10px;letter-spacing:.03em;color:#8a877f}
 .nav.nav--shrink{padding-top:8px}
 .nav.nav--shrink .wrap{padding:7px 20px;gap:20px;box-shadow:0 14px 34px -24px rgba(16,24,80,.5)}
 .nav.nav--shrink .brand-logo{height:23px}
@@ -371,13 +370,12 @@ body{ background:var(--p-ground) !important; }
 /* Primary CTA (nav-scoped .btn--orange uses a hardcoded gradient) -> blue. */
 .btn--orange,.nav .btn--orange{ background:#2B5CFF !important; background-image:none !important;
   border:1px solid #2B5CFF !important; color:#F5F2EB !important; text-shadow:none !important; }
-/* The NAV's Create vault key matches the landing's exactly: Plex Mono 12.5px,
-   #FFFAF5 ink, 9px 16px. The app was setting it in Geist 13px at #F5F2EB and
-   39.5px tall against the landing's 34.5px, so the pill's loudest element was
-   the one that agreed least. Scoped to `.nav` so other .btn--orange buttons
-   across the app keep their own sizing. */
-.nav .btn--orange{ font-family:var(--font-plex-mono),"IBM Plex Mono",ui-monospace,monospace !important;
-  font-size:12.5px !important; font-weight:400 !important; letter-spacing:normal !important;
+/* The NAV's Create vault key keeps the landing's metrics: 12.5px, #FFFAF5
+   ink, 9px 16px, 34.5px tall. The face is the app's one sans, because a key
+   is a control and a control is chrome. Scoped to `.nav` so other
+   .btn--orange buttons across the app keep their own sizing. */
+.nav .btn--orange{ font-family:var(--font-body) !important;
+  font-size:12.5px !important; font-weight:600 !important; letter-spacing:-.005em !important;
   color:#FFFAF5 !important; padding:9px 16px !important; border-radius:999px !important;
   line-height:1.25 !important; }
 /* Secondary -> pale blue-tint fill + brand-blue text. */
@@ -436,7 +434,7 @@ body>footer{margin-top:auto}
   transition:transform .16s cubic-bezier(.3,1.2,.4,1)}
 .nav-about.open .nav-about-card{transform:translateY(0) scale(1)}
 .nav-about-card a{display:block;padding:9px 11px;border-radius:8px;
-  font-size:12px;letter-spacing:.03em;font-weight:500;color:#2b2823;
+  font-size:12px;letter-spacing:-.005em;font-weight:500;color:#2b2823;
   text-decoration:none;white-space:nowrap;transition:background .15s,color .15s}
 .nav-about-card a:hover{background:rgba(20,16,12,.06);color:#0c0a08}
 /* Items stagger 30ms behind the panel (backwards-fill hides them through
@@ -855,7 +853,7 @@ input, textarea, [contenteditable]{ caret-color: var(--p-caret); }
   animation:dwsfade .2s ease-out}
 :root[data-theme="dark"] .dws-backdrop{background:rgba(0,0,0,.72)}
 .dws{width:min(360px,94vw);background:#070A1C;color:#E6F4FF;border:1px solid #1B2350;border-radius:20px;padding:26px;
-  font-family:var(--font-hanken),'Hanken Grotesk',system-ui,sans-serif;
+  font-family:var(--font-body);
   box-shadow:inset 0 2px 9px rgba(0,0,0,.7),0 40px 90px -30px rgba(4,7,31,.85);
   animation:dwsin .26s cubic-bezier(.3,1.2,.4,1)}
 .dws-kicker{font-family:var(--font-fraunces),'Fraunces',Georgia,serif;font-style:italic;font-size:14px;color:#7FB2FF;margin-bottom:10px}

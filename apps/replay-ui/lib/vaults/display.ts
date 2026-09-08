@@ -1,7 +1,7 @@
 /**
  * Small display helpers for the vault surfaces. Pure, clock-injected, and
  * deliberately terse: "5h ago", "in 11h". Anything that renders a *number*
- * lands in IBM Plex Mono at the call site; these only shape the string.
+ * lands in the mono at the call site; these only shape the string.
  */
 
 const MIN = 60e3;

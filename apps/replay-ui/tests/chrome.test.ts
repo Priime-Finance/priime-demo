@@ -18,11 +18,16 @@ const read = (rel: string) => readFileSync(path.join(APP, rel), "utf8");
 
 describe("root layout (1.1)", () => {
   const src = read("app/layout.tsx");
-  it("owns the five next/font faces as variables on <html>", () => {
-    for (const v of ["--font-geist", "--font-geist-mono", "--font-plex-mono", "--font-hanken", "--font-fraunces"]) {
+  /* THREE faces, not five (founder, 2026-09-08). IBM Plex Mono was the app's
+     SECOND monospace and Hanken Grotesk its SECOND grotesque; neither carried
+     a distinction the product makes. The full gate lives in
+     tests/type-faces.test.ts; this one holds the root layout to its own
+     contract of owning every face as a variable on <html>. */
+  it("owns the three next/font faces as variables on <html>", () => {
+    for (const v of ["--font-geist", "--font-geist-mono", "--font-fraunces"]) {
       expect(src).toContain(`variable: "${v}"`);
     }
-    expect(src).toContain("${hanken.variable} ${fraunces.variable}");
+    expect(src).toContain("${geist.variable} ${geistMono.variable} ${fraunces.variable}");
   });
   it("carries the PRETHEME script verbatim with its kill switch", () => {
     expect(src).toContain("/*pretheme-v5*/");
@@ -63,14 +68,18 @@ describe("globals.css (1.3)", () => {
     expect(css).not.toMatch(/data-rk|Monument|link--inert|link--create/);
   });
   it("carries the live pill, the About card, the Portfolio reveal and HELIOS dark", () => {
-    expect(css).toMatch(/\.nav \.link\{font-family:var\(--font-plex-mono\),"IBM Plex Mono"[^}]*font-size:12\.5px/);
+    /* The pill keeps the landing's 12.5px metric; the FACE is the app's one
+       sans, because the pill's links are words and a monospaced pill on
+       every page is the mono working "as main". */
+    expect(css).toMatch(/\.nav \.link\{font-family:var\(--font-body\);font-size:12\.5px/);
     expect(css).toContain(".nav-about-card{");
     expect(css).toContain("@keyframes navPortfolioBloom");
     expect(css).toContain(':root[data-theme="dark"] .nav .wrap{');
     expect(css).toContain("::view-transition-new(theme-glyph)");
   });
-  it("keeps the CTA blue in the nav's own Plex Mono register", () => {
+  it("keeps the CTA blue, at the landing's metrics, in the app's one sans", () => {
     expect(css).toMatch(/\.btn--orange,\.nav \.btn--orange\{ background:#2B5CFF !important/);
+    expect(css).toMatch(/\.nav \.btn--orange\{ font-family:var\(--font-body\) !important;\n\s*font-size:12\.5px !important/);
   });
   it("remaps every literal family name to a root-layout variable", () => {
     const literalFraunces = css.split("\n").filter((l) => l.includes("'Fraunces'") && !l.includes("var(--font-fraunces)"));

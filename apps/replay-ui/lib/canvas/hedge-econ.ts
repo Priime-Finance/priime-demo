@@ -1151,7 +1151,8 @@ export function hedgeGloss(h: HedgeEconomics | null): string | null {
 /**
  * The rule sentence: `Pays above 18.9% funding. This market prints 8.7%.`
  *
- * Rendered in Hanken 500 with the two numbers as inline mono tokens, reusing
+ * Rendered in the sans at 500 with the two numbers as inline mono tokens,
+ * reusing
  * `.rk-tip-b` + `.rk-tip-n` verbatim, so the panel and the tip are not
  * merely word-identical but PIXEL-identical. Use `hedgeSentenceParts` to get
  * that split; this returns the flat string for anywhere that cannot host
@@ -1202,11 +1203,13 @@ function ruleClauses(h: HedgeEconomics | null): { magnitude: Segment[]; teaching
  * teaching. Whatever sits last is what a long pair name eats first, so the
  * order of the clauses IS the priority — encoded, not left in a comment.
  *
- * `.rk-tip` is 296px with 15px padding, body 11.5px Hanken clamped to two
+ * `.rk-tip` is 296px with 15px padding, body 11.5px sans clamped to two
  * lines that CLIP SILENTLY. Mono runs are `.92em` and therefore wider per
  * character than the surrounding sans, so adding a number costs more than
- * adding a word: sans ≈ 5.75px, mono ≈ 6.35px, two lines = 532px, safe
- * budget 505px. Above a 5-character symbol the trailing teaching clause
+ * adding a word: sans ~ 6.14px (Geist 0.534em; it was 5.75px while the face
+ * was Hanken at 0.504em), mono ~ 6.35px, two lines = 532px, safe budget
+ * 505px. The sans got 6.8% wider in the type pass and the clause budget was
+ * NOT retuned with it. Above a 5-character symbol the trailing teaching clause
  * drops; the disclosure NEVER does.
  *
  * `Ejecting leaves` / `Adding takes`, not `Ejecting it leaves` — the `it `
