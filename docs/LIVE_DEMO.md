@@ -26,7 +26,7 @@ that needs no environment setup.
 against `deploy/targets/$TARGET.json`. There are two targets; an unknown
 `TARGET` is rejected by name. Base Sepolia is deliberately not one of them
 (no real Morpho Blue USDe/USDC market or Aerodrome pool there; see
-`docs/INTEGRATION_PLAN.md`, Deferred 7). Both targets share the same market,
+it would be less real than the fork). Both targets share the same market,
 tokens and strategy parameters (`deploy/fork.config.json`); only what
 genuinely differs by target lives in `deploy/targets/*.json`.
 
@@ -208,7 +208,7 @@ walkthrough that shells out to `cast wallet private-key` per step is not
 lighter than the script. `VAULT_SERVICE_JSON` is omitted because
 `apps/loop-server/src/env.ts` defaults it to `deploy/.fork/vault-service.json`,
 which happens to be correct for `TARGET=fork` and only `TARGET=fork` (see
-`docs/INTEGRATION_PLAN.md`, Deferred).
+`docs/specs/verifiable_vault_demo_closeout_v1.md`).
 
 ## The seam, at a glance
 

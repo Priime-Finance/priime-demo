@@ -29,7 +29,7 @@
  * Rows with no transaction (a deposit on this build is a local record until
  * the backend wires it) print an empty cell, never a dead key.
  *
- * TWO SOURCES, ONE RENDERER (integration D3, docs/INTEGRATION_PLAN.md). A
+ * TWO SOURCES, ONE RENDERER (integration decision D3). A
  * deployed loop's page (`LiveLoopDetail`) prints its own attested strikes,
  * mapped onto the SAME `OnchainExecution` shape the captured Base rows use,
  * and the captured rows below them under their own caption. So the table

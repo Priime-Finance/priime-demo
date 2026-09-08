@@ -38,7 +38,7 @@
 #
 # Base Sepolia is deliberately absent: it has no real Morpho Blue USDe/USDC
 # market, no Aerodrome USDe/USDC pool and no real USDe, so it would need mocks
-# and be LESS real than the fork. See docs/INTEGRATION_PLAN.md, Deferred 7.
+# and be LESS real than the fork, so it is deliberately not offered.
 
 [ -n "${DEPLOY:-}" ] || { echo "FATAL: target.sh sourced without \$DEPLOY set" >&2; exit 1; }
 

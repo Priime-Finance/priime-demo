@@ -144,5 +144,5 @@ only record of what they governed, reconstructed secondhand from the code
 that cites them; treat it as a pointer, not a substitute. Do not let this
 README's existence become a reason to leave the documents uncommitted
 indefinitely, and do not hand-edit citations across the 59 files that carry
-them to work around the gap (see `docs/INTEGRATION_PLAN.md` for why that
+them to work around the gap (see the closeout spec for why that
 was ruled out as an integration task).

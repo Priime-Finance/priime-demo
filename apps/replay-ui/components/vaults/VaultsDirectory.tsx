@@ -13,7 +13,7 @@
  * localStorage-derived numerals carry suppressHydrationWarning and refresh on
  * the post-mount reload.
  *
- * DEPLOYED LOOPS (integration Lane C, docs/INTEGRATION_PLAN.md D2). A loop
+ * DEPLOYED LOOPS (integration decision D2: one vault page). A loop
  * loop-server actually deployed is a record on this floor too, and it gets
  * Antoni's card, not a section of its own: the register is carried by what
  * the card SAYS, not by parking it below the grid under a different

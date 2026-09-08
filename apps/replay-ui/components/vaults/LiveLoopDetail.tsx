@@ -12,7 +12,7 @@
  * deployment cannot know is drawn with a placeholder number in it. A page with
  * four honest tiles beats a page with nine tiles and five inventions.
  *
- * MARKUP IS ANTONI'S, DATA IS JAKUB'S (docs/INTEGRATION_PLAN.md, ownership).
+ * MARKUP IS ANTONI'S, DATA IS JAKUB'S (the integration's ownership rule).
  * Every class on this page is already in `app/vaults/vaults.css` and
  * `canvas.css` and is used identically by `VaultDetail`: the header zone, the
  * stat band, the bounded panel with the sticky tab strip as its header, the
