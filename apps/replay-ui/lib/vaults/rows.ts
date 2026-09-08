@@ -2,9 +2,10 @@
  * Resolution layer: turning the captured journals into the numbers the vault
  * page renders.
  *
- * One vault, one source of truth per register. The record and the published
- * envelope come from `hero.ts` / `store.ts` and are modeled; the NAV, the
- * share price and the strike ledger come from the journals and are attested.
+ * One vault, one source of truth per register. The record comes from
+ * `hero.ts` / `store.ts` and is modeled; the NAV, the share price and the
+ * strike ledger come from the journals and are attested. `hero.ts` reads the
+ * NAV from here, so this file imports nothing from it.
  * Journals are read through `lib/source.ts` only.
  */
 
@@ -13,7 +14,6 @@ import type { Journal } from "@priime-demo/journal-schema";
 import { DEMO_JOURNALS } from "@/lib/source";
 
 import { HERO_SHARES_OUTSTANDING, settlingStrike, strikeRows, type StrikeRow } from "./attested";
-import { HERO_SLUG, HERO_VAULT, automationCountFor, resolveVault } from "./hero";
 
 /** The captured strikes backing the vault, newest first. */
 export function heroStrikes(): StrikeRow[] {
@@ -44,5 +44,3 @@ export function heroSettlingJournal(): Journal | null {
     .sort((a, b) => b.trigger.block - a.trigger.block);
   return settled[0] ?? null;
 }
-
-export { HERO_SLUG, HERO_VAULT, automationCountFor, resolveVault };

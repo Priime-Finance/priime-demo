@@ -71,8 +71,8 @@ interface StaticJournalEntry {
  * settled run.
  */
 export const DEMO_JOURNALS: readonly StaticJournalEntry[] = [
-  { journal: strikeSettled, label: "Validate — honest 3-of-3" },
-  { journal: strikeSabotage, label: "Sabotage — operator 3 diverges" },
+  { journal: strikeSettled, label: "Validate, honest 3-of-3" },
+  { journal: strikeSabotage, label: "Sabotage, operator 3 diverges" },
 ];
 
 /** Strike ids of the two demo captures, for deep links into `/debug` and tests. */

@@ -12,7 +12,8 @@
     "noEmit": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noUncheckedIndexedAccess": true,
+    // kit-verbatim lib/canvas, see docs/plans/LATEST_UI_PORT_SPEC.md A.3 #38
+    "noUncheckedIndexedAccess": false,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

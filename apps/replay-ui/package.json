@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@priime-demo/journal-schema": "workspace:*",
     "@priime-demo/loop-deploy": "workspace:*",
     "@tanstack/react-query": "^5.85.3",

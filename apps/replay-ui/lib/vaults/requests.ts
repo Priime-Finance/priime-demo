@@ -25,7 +25,7 @@ import {
   attestedNavUsd,
   sharesForDeposit,
 } from "./attested";
-import { VAULTS_EVENT } from "./store";
+import { VAULTS_EVENT } from "./events";
 
 /** Minimum deposit, matching the kit's register. */
 export const MIN_DEPOSIT_USD = 10;

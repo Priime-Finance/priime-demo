@@ -1,28 +1,34 @@
 "use client";
 
 /**
- * The verification canvas: the vault and its operators as one living board,
- * the hero of /vault. Drawn in the Priime Build hardware language and laid
- * out as the original system console was: the vault at the center, operator
- * 1 above it, operators 2 and 3 below, the attestation sink on Base at the
- * top right. Dashed sand wires are the position being read out; solid blue
- * wires are signed results converging on the quorum; a rejected submission
- * drops out as a dashed red line.
+ * The verification board: the vault and its operators as one living board,
+ * seated full width in the vault page's Verification section
+ * (docs/plans/LATEST_UI_PORT_SPEC.md E.8). Drawn in the Priime Build hardware
+ * language and laid out as the original system console was: the vault at the
+ * center, operator 1 above it, operators 2 and 3 below, the attestation sink
+ * on Base at the top right. Dashed wires are the position being read out;
+ * solid blue wires are signed results converging on the quorum; a rejected
+ * submission drops out as a dashed red line.
  *
  * Two levels share the board. The meta layer is the verification topology;
  * clicking the vault plate (or its lit key) zooms one level down into the
  * loop's internal canvas, the composition this vault was published from,
- * read only, with a handoff key to /build for actual editing.
+ * read only, with a handoff key to the canvas for actual editing.
  *
- * Playback is the same machine as the flat panel this replaces: `capture`
- * picks the recording, `runId` starts a run, `tMs` is the playback clock and
- * `null` means the finished strike (the server render, the reduced-motion
- * render, and the resting state). Nothing here mutates a journal; the
- * corrupted run is a second capture, not an edit of the first.
+ * Playback: `capture` picks the recording, `run` starts a run at
+ * `startAtMs`, `tMs` is the playback clock and `null` means the finished
+ * strike (the server render, the reduced-motion render, and the resting
+ * state). The first run starts on first intersection (threshold .3, once):
+ * the strike IS the entrance. A press starts its run where the press lands
+ * (`pressStartMs`, verification-model.ts), so the corrupt press lands the
+ * rejection at +160 ms and the restore press the green at +160 ms, each
+ * derived from the timeline at call time. Nothing here mutates a journal;
+ * the corrupted run is a second capture, not an edit of the first.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
+import { useBuildHref } from "@/lib/host";
 import { buildTimeline, deriveReplayState } from "@/lib/replay";
 import {
   buildPipelineView,
@@ -31,7 +37,10 @@ import {
   type NodeView,
   type PipelineView,
 } from "@/lib/vaults/pipeline";
-import { fmtPct, type VaultRecord } from "@/lib/vaults/store";
+import type { VaultRecord } from "@/lib/vaults/store";
+
+import { useInView } from "./useInView";
+import { innerLaneModel, pressStartMs, saboteurOperatorId, type InnerLanePlate } from "./verification-model";
 
 const AWAITING = "awaiting";
 
@@ -42,7 +51,7 @@ const BOARD_H = 760;
 /**
  * Plate geometry. Every plate is 244 wide (.vc-hw); the heights differ because
  * each plate carries a different screen, and they are what the plates actually
- * render at — measured in the browser 2026-08-27: operator 225.7, vault 292.2,
+ * render at, measured in the browser 2026-08-27: operator 225.7, vault 292.2,
  * attestation sink 245.7. A jack is 13px across and protrudes 17px, so its
  * centre sits 10.5px outside the plate edge, on that edge's midline. Wire ends
  * are derived from these rather than written out, so the plugs stay welded to
@@ -136,6 +145,12 @@ const LANE_TOP = 270;
 /** Lane jack centre line: LANE_TOP - 17 (jack offset) + 6.5 (jack radius) + 3.5. */
 const LANE_JACK_Y = LANE_TOP - 7;
 
+/** One playback run: its id and where on the timeline it starts. */
+interface Run {
+  id: number;
+  startAtMs: number;
+}
+
 interface VerificationCanvasProps {
   capture: Capture;
   onCapture: (capture: Capture) => void;
@@ -147,51 +162,61 @@ interface VerificationCanvasProps {
 export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: VerificationCanvasProps) {
   const journal = useMemo(() => captureJournal(capture), [capture]);
   const timeline = useMemo(() => buildTimeline(journal), [journal]);
+  const buildHref = useBuildHref();
 
-  const [runId, setRunId] = useState(0);
+  const [run, setRun] = useState<Run>({ id: 0, startAtMs: 0 });
   const [tMs, setTMs] = useState<number | null>(null);
   const [level, setLevel] = useState<"meta" | "inner">("meta");
+  /** The run whose rejected wire has finished drawing, so it rests dashed. */
+  const [drawnRun, setDrawnRun] = useState(0);
 
-  // Autoplay once, after hydration; server and first client render agree.
+  // Autoplay on first intersection (threshold .3, rootMargin -8%, once): the
+  // strike is the entrance. Server and first client render agree (run 0, the
+  // resting frame); the run starts when the board scrolls into view.
+  const { ref: wrapRef, inView } = useInView<HTMLDivElement>();
   useEffect(() => {
-    setRunId(1);
-  }, []);
+    if (!inView) return;
+    setRun((r) => (r.id === 0 ? { id: 1, startAtMs: 0 } : r));
+  }, [inView]);
 
   useEffect(() => {
-    if (runId === 0) return;
+    if (run.id === 0) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setTMs(null);
       return;
     }
-    setTMs(0);
-    const timers = timeline.events.map((event) =>
-      setTimeout(() => {
-        setTMs(event.atMs);
-      }, event.atMs),
-    );
+    // The clock seeds at the run's start: every event at or before it is
+    // already on screen in the first frame, every later one fires at its own
+    // offset from that start, so the timeline's spacing is kept.
+    const start = run.startAtMs;
+    setTMs(start);
+    const timers = timeline.events
+      .filter((event) => event.atMs > start)
+      .map((event) =>
+        setTimeout(() => {
+          setTMs(event.atMs);
+        }, event.atMs - start),
+      );
     timers.push(
-      setTimeout(() => {
-        setTMs(null);
-      }, timeline.durationMs),
+      setTimeout(
+        () => {
+          setTMs(null);
+        },
+        Math.max(0, timeline.durationMs - start),
+      ),
     );
     return () => {
       timers.forEach(clearTimeout);
     };
-  }, [runId, timeline]);
+  }, [run, timeline]);
 
   // Which operator the sabotage capture records as the liar. Derived from the
   // capture itself rather than hardcoded: only that node's switch is live,
   // because only that journal exists to replay.
-  const saboteurId = useMemo(() => {
-    const sabotage = captureJournal("corrupted");
-    const sabotageTimeline = buildTimeline(sabotage);
-    const settled = deriveReplayState(sabotage, sabotageTimeline.durationMs, sabotageTimeline);
-    return settled.operators.find((o) => o.matchesWinningHash === false)?.id ?? null;
-  }, []);
+  const saboteurId = useMemo(() => saboteurOperatorId(), []);
 
   // Scale the fixed board to the container. Measured before paint and on
   // every container resize, so the board always fits; there is no manual FIT.
-  const wrapRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -210,16 +235,29 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, []);
+  }, [wrapRef]);
 
   const state = deriveReplayState(journal, tMs ?? timeline.durationMs, timeline);
   const view: PipelineView = buildPipelineView(journal, state);
   const playing = tMs !== null;
   const corrupted = capture === "corrupted";
+  const rejectedOnScreen = view.nodes.some((n) => n.step === "rejected");
 
+  /**
+   * The corrupt / restore press. The capture flips and the run starts where
+   * the press lands on the capture it opens (F.5): the first rejected
+   * submission minus the press lead on the corrupt press, the honest
+   * operator's accepted submission minus the press lead on restore.
+   */
   const toggleCapture = () => {
-    onCapture(corrupted ? "honest" : "corrupted");
-    setRunId((id) => id + 1);
+    const next: Capture = corrupted ? "honest" : "corrupted";
+    onCapture(next);
+    setRun((r) => ({ id: r.id + 1, startAtMs: pressStartMs(next) }));
+  };
+
+  /** `Replay the strike`: the full run from 0. */
+  const replay = () => {
+    setRun((r) => ({ id: r.id + 1, startAtMs: 0 }));
   };
 
   return (
@@ -262,16 +300,35 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
                 })}
                 {SUB_WIRES.map((wire, index) => {
                   const node = view.nodes[index];
-                  const cls =
-                    node?.reported !== true
-                      ? "vc-wire vc-wire--ghost"
-                      : node.step === "rejected"
-                        ? "vc-wire vc-wire--rejected"
-                        : `vc-wire vc-wire--hot${playing ? " vc-draw" : ""}`;
+                  if (node?.reported !== true) {
+                    return (
+                      <path
+                        key={`sub-${String(index)}-${String(run.id)}-idle`}
+                        className="vc-wire vc-wire--ghost"
+                        d={wire.d}
+                      />
+                    );
+                  }
+                  if (node.step === "rejected") {
+                    // Draws in on the press (pathLength + the dash trick),
+                    // then rests dashed once the draw has finished.
+                    const draw = playing && drawnRun !== run.id;
+                    return (
+                      <path
+                        key={`sub-${String(index)}-${String(run.id)}-rejected`}
+                        className={`vc-wire vc-wire--rejected${draw ? " vc-draw" : ""}`}
+                        d={wire.d}
+                        pathLength={draw ? 1 : undefined}
+                        onAnimationEnd={() => {
+                          setDrawnRun(run.id);
+                        }}
+                      />
+                    );
+                  }
                   return (
                     <path
-                      key={`sub-${String(index)}-${String(runId)}-${node?.step ?? "idle"}`}
-                      className={cls}
+                      key={`sub-${String(index)}-${String(run.id)}-${node.step}`}
+                      className={`vc-wire vc-wire--hot${playing ? " vc-draw" : ""}`}
                       d={wire.d}
                       pathLength={1}
                     />
@@ -299,8 +356,13 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
                 <text className="vc-wiretag" x={860} y={204}>
                   3 hashes, 1 number
                 </text>
-                {corrupted && (
-                  <text className="vc-wiretag vc-wiretag--bad" x={900} y={441}>
+                {corrupted && rejectedOnScreen && (
+                  <text
+                    key={`tag-bad-${String(run.id)}`}
+                    className="vc-wiretag vc-wiretag--bad"
+                    x={900}
+                    y={441}
+                  >
                     hash mismatch, rejected
                   </text>
                 )}
@@ -381,13 +443,7 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
               <BasePlate view={view} />
 
               <div className="vc-chrome">
-                <button
-                  type="button"
-                  className="vc-key"
-                  onClick={() => {
-                    setRunId((id) => id + 1);
-                  }}
-                >
+                <button type="button" className="vc-key" onClick={replay}>
                   <span className="vc-led" />
                   Replay the strike
                 </button>
@@ -406,7 +462,7 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
             <div className="vc-layer vc-layer--inner" aria-hidden={level !== "inner"} inert={level !== "inner"}>
               <div className="vc-crumb">
                 <div className="vc-lane">
-                  <em>PRIIME OPERATOR</em> ▸ {vault.name.toUpperCase()}
+                  <em>Priime Operator</em> ▸ {vault.name}
                 </div>
                 <div className="vc-cap">
                   The same canvas, one level down: the composition this vault was published from.
@@ -423,7 +479,7 @@ export function VerificationCanvas({ capture, onCapture, vault, navPerShare }: V
                   <span className="vc-led" />
                   ◂ Back to operators
                 </button>
-                <a className="vc-key vc-key--ok" href="/build">
+                <a className="vc-key vc-key--ok" href={buildHref}>
                   <span className="vc-led" />
                   Edit in Priime Build
                 </a>
@@ -586,11 +642,15 @@ function BasePlate({ view }: { view: PipelineView }) {
 
 /* ─────────────────────────────────────────────── the inner composition lane ── */
 
+/**
+ * The composition this vault was published from, read off the live record
+ * through the adapter (`innerLaneModel`): S1 the market, S2 the applied
+ * leverage, S3 the compound cadence, S4 the modeled APY. A plate whose value
+ * the record does not carry prints nothing in that slot; nothing here types
+ * a fallback figure.
+ */
 function InnerLane({ vault, thresholdLabel }: { vault: VaultRecord; thresholdLabel: string }) {
-  const param = (label: string, fallback: string): string =>
-    vault.params.find((p) => p.label === label)?.value ?? fallback;
-  const moduleName = (index: number, fallback: string): string =>
-    vault.moduleLines[index]?.name ?? fallback;
+  const model = useMemo(() => innerLaneModel(vault), [vault]);
 
   const arcs = LANE_X.slice(0, -1).map((x, index) => {
     const next = LANE_X[index + 1];
@@ -605,6 +665,9 @@ function InnerLane({ vault, thresholdLabel }: { vault: VaultRecord; thresholdLab
       to,
     };
   });
+
+  const jacksFor = (index: number): readonly string[] =>
+    index === 0 ? ["tout"] : index === LANE_X.length - 1 ? ["tin"] : ["tin", "tout"];
 
   return (
     <>
@@ -621,81 +684,44 @@ function InnerLane({ vault, thresholdLabel }: { vault: VaultRecord; thresholdLab
         )}
       </svg>
 
-      <LanePlate
-        x={LANE_X[0]}
-        name={moduleName(0, "Liquidity source")}
-        n="S1"
-        st="Market · Morpho Blue"
-        bdg="unhedged"
-        big={vault.market}
-        rowL="Venue"
-        rowV={vault.venue}
-        jacks={["tout"]}
-      />
-      <LanePlate
-        x={LANE_X[1]}
-        name={moduleName(1, "Dynamic leverage")}
-        n="S2"
-        st="Protection envelope"
-        bdg="● Armed"
-        bdgOk
-        big={param("Target leverage", "5.0x")}
-        rowL="HF floor"
-        rowV={param("Health factor floor", "1.08x")}
-        jacks={["tin", "tout"]}
-      />
-      <LanePlate
-        x={LANE_X[2]}
-        name={moduleName(2, "Auto-compound")}
-        n="S3"
-        st="Compounding"
-        bdg="● Armed"
-        bdgOk
-        big={param("Compound cadence", "24h")}
-        rowL="Min net spread"
-        rowV={param("Min net spread", "0.25%")}
-        jacks={["tin", "tout"]}
-      />
-      <LanePlate
-        x={LANE_X[3]}
-        name="Vault"
-        n="S4"
-        st="Net APY"
-        bdg="modeled"
-        big={fmtPct(vault.modeledApy)}
-        foot={
-          <>
-            NAV attested by Priime Operator · <em>quorum {thresholdLabel}</em>
-          </>
-        }
-        jacks={["tin"]}
-      />
+      {model.plates.map((plate, index) => {
+        const x = LANE_X[index];
+        if (x === undefined) return null;
+        const isVault = index === model.plates.length - 1;
+        return (
+          <LanePlate
+            key={plate.n}
+            x={x}
+            plate={plate}
+            bdg={isVault ? "modeled" : index === 0 ? "unhedged" : plate.armed ? "● Armed" : "not composed"}
+            bdgOk={!isVault && index !== 0 && plate.armed}
+            foot={
+              isVault ? (
+                <>
+                  NAV attested by Priime Operator · <em>quorum {thresholdLabel}</em>
+                </>
+              ) : undefined
+            }
+            jacks={jacksFor(index)}
+          />
+        );
+      })}
     </>
   );
 }
 
 function LanePlate({
   x,
-  name,
-  n,
-  st,
+  plate,
   bdg,
   bdgOk = false,
-  big,
-  rowL,
-  rowV,
   foot,
   jacks,
 }: {
   x: number;
-  name: string;
-  n: string;
-  st: string;
+  plate: InnerLanePlate;
   bdg: string;
   bdgOk?: boolean;
-  big: string;
-  rowL?: string;
-  rowV?: string;
   foot?: React.ReactNode;
   jacks: readonly string[];
 }) {
@@ -703,19 +729,19 @@ function LanePlate({
     <div className="vc-hw" style={{ left: x, top: LANE_TOP }}>
       <div className="vc-body">
         <div className="vc-tag">
-          <span className="vc-nm">{name}</span>
-          <span className="vc-n">{n}</span>
+          <span className="vc-nm">{plate.label}</span>
+          <span className="vc-n">{plate.n}</span>
         </div>
         <div className="vc-scr" style={{ height: 118 }}>
           <div className="vc-st">
-            <span>{st}</span>
+            <span>{plate.status}</span>
             <span className={`vc-bdg${bdgOk ? " vc-bdg--ok" : ""}`}>{bdg}</span>
           </div>
-          <div className="vc-big">{big}</div>
-          {rowL !== undefined && rowV !== undefined && (
+          <div className="vc-big">{plate.value ?? ""}</div>
+          {plate.row !== null && (
             <div className="vc-srow">
-              <span>{rowL}</span>
-              <b>{rowV}</b>
+              <span>{plate.row.label}</span>
+              <b>{plate.row.value}</b>
             </div>
           )}
           {foot !== undefined && <div className="vc-foot">{foot}</div>}

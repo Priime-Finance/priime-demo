@@ -1,14 +1,13 @@
 {
-  "_comment": "M3 fork harness config: pinned Base mainnet state for the USDe/USDC Morpho Blue loop. All addresses verified on-chain at the pinned block and against official sources (Morpho docs, Ethena/Basescan, Circle, Aerodrome/Basescan). Consumed by deploy/fork.sh and the loop entry script; downstream code must read parameters from here, not hardcode them.",
+  "_comment": "SHARED PROTOCOL BASE for every deploy target. Pinned Base mainnet state for the USDe/USDC Morpho Blue loop: all addresses verified on-chain at the pinned block and against official sources (Morpho docs, Ethena/Basescan, Circle, Aerodrome/Basescan). Read by deploy/fork.sh, vault-service.sh and enter-loop.sh under BOTH TARGET=fork and TARGET=mainnet, and everything below is identical across the two, because the fork is a fork OF BASE at the block pinned here: same USDC, same USDe, same Morpho Blue, same Aerodrome pool. Only what genuinely differs between an anvil fork and Base itself (chain id, RPC, keys, funding, cron cadence, state dir) lives in deploy/targets/<target>.json. Downstream code must read parameters from here, not hardcode them. Kept under its original name so existing references and docs still resolve.",
   "fork": {
+    "_comment": "Anvil-only: which upstream chain and block the fork is taken FROM. The chain id the fork serves (31337), its port and the strike cadence moved to deploy/targets/fork.json, which is the source of truth for anything target-shaped. Ignored entirely under TARGET=mainnet.",
     "rpc_url_env": "BASE_RPC_URL",
     "rpc_url_default": "https://mainnet.base.org",
     "block_number": 49911282,
     "block_timestamp": 1786611911,
     "block_date_utc": "2026-08-13T09:05:11Z",
-    "source_chain_id": 8453,
-    "fork_chain_id": 31337,
-    "fork_port": 8545
+    "source_chain_id": 8453
   },
   "tokens": {
     "usde": {
@@ -52,8 +51,7 @@
     "provenance": "GeckoTerminal USDe pools on Base (deepest USDe/USDC pool); Basescan label 'Aerodrome: SlipStream Swap Router'; pool token0/token1/balances/liquidity and router.factory==pool.factory confirmed on-chain at pinned block"
   },
   "service": {
-    "_comment": "Vault WAVS service (one service manager, one workflow: cron -> vault-nav -> aggregator -> PriimeVault). twap_window_secs bounds the Aerodrome TWAP used for min(par, TWAP) collateral pricing; inputs_block_lag is how far behind head the component pins its reads (NAV-03 self-determined height); observation_cardinality is the pool ring-buffer size ensured at bring-up so the TWAP window stays answerable across the loop-entry swaps (cardinality is 1 on mainnet at the pinned block).",
-    "cron_schedule": "*/10 * * * * *",
+    "_comment": "Vault WAVS service (one service manager, one workflow: cron -> vault-nav -> aggregator -> PriimeVault). twap_window_secs bounds the Aerodrome TWAP used for min(par, TWAP) collateral pricing; inputs_block_lag is how far behind head the component pins its reads (NAV-03 self-determined height); observation_cardinality is the pool ring-buffer size ensured at bring-up so the TWAP window stays answerable across the loop-entry swaps (cardinality is 1 on mainnet at the pinned block). These three are properties of the market and the component, so they are shared across targets. The strike CADENCE is not: it is a cost, and it lives per target in deploy/targets/<target>.json.",
     "twap_window_secs": 1800,
     "inputs_block_lag": 2,
     "observation_cardinality": 64

@@ -1,27 +1,6 @@
 @import "tailwindcss";
 @import "../lib/design/tokens.css";
 
-/* Monument Extended — self-hosted display face for the three home
-   editorial titles. Pangram Pangram web license confirmed by Antoni
-   2026-05-14. Files at /public/fonts/. local() comes first so installed
-   copies render instantly (no network fetch); url() falls back for
-   visitors without the font installed. */
-@font-face {
-  font-family: "Monument Extended";
-  src: local("Monument Extended"), local("MonumentExtended-Regular"),
-       url("/fonts/MonumentExtended-Regular.otf") format("opentype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Monument Extended";
-  src: local("Monument Extended Ultrabold"), local("MonumentExtended-Ultrabold"),
-       url("/fonts/MonumentExtended-Ultrabold.otf") format("opentype");
-  font-weight: 800;
-  font-style: normal;
-  font-display: swap;
-}
 
 /* ============================================================================
    autoloop design tokens — warm-stone dark + honey-amber brand
@@ -286,32 +265,60 @@
 :root{
   --o:#000000; --o2:#333333; --ink:#1a1a1a; --mut:#6f6c66; --faint:#a29e95;
   --bd:#e7e4dd; --dash:#d6d1c8; --panel:rgba(255,255,255,.5);
-  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 .nav{position:sticky;top:0;z-index:60;display:flex;justify-content:center;padding-top:14px;background:transparent;border:0;transition:padding-top .34s cubic-bezier(.2,.72,.2,1)}
-.nav .wrap{position:relative;isolation:isolate;width:auto;max-width:calc(100vw - 24px);height:auto;margin:0;display:flex;align-items:center;justify-content:space-between;gap:clamp(16px,2vw,32px);padding:10px 12px 10px 22px;border-radius:999px;background:linear-gradient(177deg,rgba(255,255,255,.30),rgba(255,255,255,.08) 46%,rgba(255,255,255,.18));-webkit-backdrop-filter:blur(8px) saturate(2.1) brightness(1.07);backdrop-filter:blur(8px) saturate(2.1) brightness(1.07);border:1px solid rgba(255,255,255,.62);box-shadow:inset 0 1.4px .5px rgba(255,255,255,.98),inset 1.5px 2px 3px rgba(255,255,255,.55),inset -1.5px -2px 10px rgba(255,255,255,.30),inset 0 -1px 2px rgba(20,16,12,.06),0 8px 20px -6px rgba(20,16,12,.16),0 24px 52px -16px rgba(20,16,12,.30);transition:padding .34s cubic-bezier(.2,.72,.2,1),gap .34s,box-shadow .34s,background .34s}
-.nav .wrap::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;background:radial-gradient(120% 80% at 26% -16%,rgba(255,255,255,.75),rgba(255,255,255,0) 44%),linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,0) 38%)}
+/* THE PILL IS THE LANDING'S PILL (founder, 2026-08-22: "the landing nav bar is
+   the right ref"). What stood here was the older Liquid Glass treatment: a
+   transparent face faked with six inset white shadows, a saturate/brightness
+   backdrop and a radial sheen. The landing retired all of that for one warm
+   face, one hairline and one throw, and the pill is the single element present
+   on every page of BOTH hosts, so a divergence here is the most visible
+   inconsistency on the property. Values are copied from the built landing,
+   measured, not eyeballed. */
+.nav .wrap{position:relative;isolation:isolate;width:auto;max-width:calc(100vw - 24px);height:auto;margin:0;display:flex;align-items:center;justify-content:space-between;gap:26px;padding:12px 26px;border-radius:999px;background:rgba(255,252,246,.86);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid rgba(216,210,194,.7);box-shadow:0 18px 44px -26px rgba(16,24,80,.45);transition:padding .34s cubic-bezier(.2,.72,.2,1),gap .34s,box-shadow .34s,background .34s}
+/* Sheen removed with the glass: the landing pill carries no highlight layer. */
+.nav .wrap::before{content:none}
 .nav .wrap>*:not(.nav-mobile){position:relative;z-index:1}
 .brand{text-decoration:none;display:flex;align-items:center;flex:none}
 .brand-logo{height:26px;width:auto;display:block;transition:height .34s cubic-bezier(.2,.72,.2,1)}
 .nav-links{display:flex;align-items:center;gap:clamp(8px,1.3vw,18px)}
-.nav .link{font-size:11.5px;letter-spacing:.05em;color:#2b2823;text-decoration:none;font-weight:500;cursor:pointer;padding:8px 12px;border-radius:999px;transition:background .2s,color .2s,box-shadow .2s}
+/* Landing size and ink, in the app's one sans. The pill's links are words,
+   and words are Geist: a monospaced pill on every page is the definition of
+   the mono working "as main" (founder, 2026-09-08). The pill's drawing --
+   warm ground, hairline, throw, ink, height, is untouched. */
+.nav .link{font-family:var(--font-body);font-size:12.5px;letter-spacing:-.005em;color:#3C3833;text-decoration:none;font-weight:500;cursor:pointer;padding:8px 12px;border-radius:999px;transition:background .2s,color .2s,box-shadow .2s}
 .nav .link:hover{color:#0c0a08;background:rgba(255,255,255,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 1px 3px rgba(0,0,0,.07)}
 .nav .link.active{color:var(--o)}
+.nav-item{position:relative;display:inline-flex;align-items:center}
+.nav-item.has-menu{padding-bottom:18px;margin-bottom:-18px}
+.caret{margin-left:4px;font-size:9px;color:var(--faint);transition:transform .18s}
+.nav-item:hover .caret{transform:rotate(180deg);color:var(--o)}
+.nav-menu{position:absolute;top:100%;left:0;min-width:236px;padding:8px;margin-top:12px;background:linear-gradient(157deg,#fff,#f1efeb);border:1px solid var(--bd);border-radius:14px;box-shadow:0 18px 40px -16px rgba(0,0,0,.28),0 1px 0 rgba(255,255,255,.92) inset;opacity:0;visibility:hidden;transform:translateY(-6px);transition:opacity .18s,transform .18s,visibility .18s;z-index:60}
+.nav-item:hover .nav-menu{opacity:1;visibility:visible;transform:translateY(0)}
+.nav-menu a{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:9px;text-decoration:none}
+.nav-menu a:hover{background:rgba(0,0,0,.07)}
 .nav.nav--shrink{padding-top:8px}
-.nav.nav--shrink .wrap{padding:5px 10px 5px 18px;gap:clamp(8px,1.5vw,22px);box-shadow:inset 0 1.2px .5px rgba(255,255,255,.95),inset 1px 1.5px 3px rgba(255,255,255,.5),0 6px 16px -6px rgba(20,16,12,.18),0 14px 32px -14px rgba(20,16,12,.26)}
+.nav.nav--shrink .wrap{padding:7px 20px;gap:20px;box-shadow:0 14px 34px -24px rgba(16,24,80,.5)}
 .nav.nav--shrink .brand-logo{height:23px}
 .nav.nav--shrink .link{font-size:11px;padding:6px 10px}
 .nav .btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;text-decoration:none;font-weight:600;border:1px solid var(--bd);background:linear-gradient(180deg,#fff,#f0eee9);color:#1a1a1a;padding:9px 16px;font-size:13px;cursor:pointer;transition:transform .15s,box-shadow .2s;font-family:inherit;white-space:nowrap}
 .nav .btn:hover{transform:translateY(-1px)}
 .nav .btn--orange{background:linear-gradient(180deg,#333333,#000000);border-color:#000000;color:#fff;box-shadow:0 6px 16px -6px rgba(0,0,0,.5)}
+.nav .btn--ghost{background:rgba(255,255,255,.55);border-color:var(--bd);color:#1a1a1a}
 .nav-burger{display:none;flex-direction:column;justify-content:center;gap:5px;width:40px;height:40px;padding:9px;background:none;border:0;cursor:pointer}
 .nav-burger span{display:block;width:22px;height:2px;border-radius:2px;background:#1a1a1a;transition:transform .26s,opacity .2s}
 .nav.nav-open .nav-burger span:nth-child(1){transform:translateY(7px) rotate(45deg)}
 .nav.nav-open .nav-burger span:nth-child(2){opacity:0}
 .nav.nav-open .nav-burger span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
 .nav-mobile{display:none}
-
+.ptabs{margin:0 0 28px}
+.ptabs-l{display:block;font-family:var(--font-fraunces),'Fraunces',Georgia,serif;font-style:italic;font-size:12.5px;letter-spacing:0;text-transform:none;color:#2B5CFF;margin-bottom:10px}
+.ptabs-row{display:flex;gap:4px;border-bottom:1px solid var(--bd);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.ptabs-row::-webkit-scrollbar{display:none}
+.ptab{position:relative;font-family:inherit;font-size:13px;letter-spacing:-.01em;font-weight:500;color:var(--mut);text-decoration:none;padding:11px 14px;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .18s;display:inline-flex;align-items:center;gap:5px}
+.ptab:hover{color:var(--ink)}
+.ptab.on{color:var(--o);border-bottom-color:var(--o);font-weight:600}
+.ptab-ext{font-size:10px;opacity:.6}
 @media(max-width:900px){
   .nav .wrap{width:calc(100vw - 20px);padding:9px 10px 9px 18px}
   .nav.nav--shrink .wrap{padding:6px 9px 6px 16px}
@@ -357,35 +364,27 @@
   --glass-bg-default:rgba(255,250,245,.62) !important; --glass-bg-hero:rgba(255,252,248,.58) !important; --glass-bg-quiet:rgba(245,242,235,.70) !important;
   --bd:#E5DFCF !important; --dash:#D8D2C2 !important; --panel:rgba(255,250,245,.55) !important;
 }
-body{ background:#F5F2EB !important; }
+/* HELIOS: was a literal #F5F2EB, which no [data-theme] block can outrank.
+   --p-ground IS #F5F2EB in light, so this is byte-identical there. */
+body{ background:var(--p-ground) !important; }
 /* Primary CTA (nav-scoped .btn--orange uses a hardcoded gradient) -> blue. */
 .btn--orange,.nav .btn--orange{ background:#2B5CFF !important; background-image:none !important;
   border:1px solid #2B5CFF !important; color:#F5F2EB !important; text-shadow:none !important; }
+/* The NAV's Create vault key keeps the landing's metrics: 12.5px, #FFFAF5
+   ink, 9px 16px, 34.5px tall. The face is the app's one sans, because a key
+   is a control and a control is chrome. Scoped to `.nav` so other
+   .btn--orange buttons across the app keep their own sizing. */
+.nav .btn--orange{ font-family:var(--font-body) !important;
+  font-size:12.5px !important; font-weight:600 !important; letter-spacing:-.005em !important;
+  color:#FFFAF5 !important; padding:9px 16px !important; border-radius:999px !important;
+  line-height:1.25 !important; }
 /* Secondary -> pale blue-tint fill + brand-blue text. */
 .btn:not(.btn--orange){ background:rgba(43,92,255,.08) !important;
   color:#2B5CFF !important; border:1px solid rgba(43,92,255,.22) !important; }
 
-/* ── FOUNDER PASS 2026-08-20: "Create vault" nav link — quiet outline pill
-      in the blue system. Sans, not mono: chrome labels never set mono
-      (mono is for data only; the landing renders this label sans). ── */
-.nav .link--create{font-size:11.5px;letter-spacing:.02em;color:#2B5CFF;
-  border:1px solid rgba(43,92,255,.35);border-radius:999px;padding:7px 14px}
-.nav .link--create:hover{background:rgba(43,92,255,.08);color:#1B2FEE;box-shadow:none}
-
-/* ── Inert nav chrome (2026-08-25): this app serves the canvas, the vault
-      directory and the replay console. The remaining landing labels keep the
-      nav's shape and rhythm but are not links, so nothing in the pill can land
-      on a 404. Same type, same spacing, no pointer, no hover lift. ── */
-.nav .link--inert{cursor:default;color:#8a867f;opacity:.55}
-.nav .link--inert:hover{background:none;box-shadow:none;color:#8a867f;opacity:.55}
-.nav-mobile .link--inert{padding:13px 2px;font-size:16px;font-weight:500;color:#8a867f;opacity:.55;
-  border-bottom:1px solid rgba(0,0,0,.06);cursor:default}
-
 /* ── DESIGN PASS 2026-08-20: footer seam. The dark footer band must sit at
       the true bottom of the viewport on short pages (/portfolio) — no cream
       strip beneath it. Body becomes a column; the footer takes the slack. ── */
-/* RainbowKitProvider inserts a div[data-rk] between body and the page chrome,
-   so the flex chain must pass through it for the footer to take the slack. */
 body{display:flex;flex-direction:column;min-height:100dvh}
 /* …and a flex item whose cross-axis margins are `auto` (main carries
    `mx-auto`) opts out of stretch and shrink-wraps to its own intrinsic
@@ -397,6 +396,511 @@ body{display:flex;flex-direction:column;min-height:100dvh}
    ceiling from `max-w-7xl` is kept verbatim, so nothing at or above
    1280px moves, and the shrink-to-fit behaviour below it is preserved. */
 body>main{max-width:min(80rem,100%)}
-body>div[data-rk]{flex:1;display:flex;flex-direction:column}
-div[data-rk]>footer{margin-top:auto}
 body>footer{margin-top:auto}
+
+/* ── NAV V2 2026-08-21: About dropdown + connected-only Portfolio. ────────
+      Additive; the base .nav / .link grammar above is untouched. */
+
+/* About: trigger reads exactly like a .link (the class is shared); the
+   button chrome is stripped here. Chevron rotates 180° when open. */
+.nav-about{position:relative;display:inline-flex;align-items:center}
+.nav .nav-about-trigger{display:inline-flex;align-items:center;gap:5px;
+  background:none;border:0;font-family:inherit;-webkit-appearance:none;appearance:none}
+.nav .nav-about-trigger:hover{color:#0c0a08;background:rgba(255,255,255,.6);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 1px 3px rgba(0,0,0,.07)}
+.nav-about-caret{flex:none;transition:transform .2s cubic-bezier(.3,1.2,.4,1)}
+.nav-about-trigger[aria-expanded="true"] .nav-about-caret{transform:rotate(180deg)}
+
+/* Panel structure (hover-continuity fix, same day). LIVE BUG it replaces:
+   the old ::after bridge was only trigger-width+20px while the card is
+   ~180px, so diagonal travel toward the card's flanks crossed .wrap, fired
+   pointerleave, and the 150ms timer closed a panel the pointer could no
+   longer rescue (closed = pointer-events:none). Now .nav-about-menu is a
+   transparent WRAPPER — positioning + z-index + an 8px hover apron
+   (padding-top) spanning the card's FULL width, flush at top:100% against
+   the container's bottom edge. Crossing trigger→gap→card never leaves the
+   .nav-about subtree, so no pointerleave fires on any diagonal; the 150ms
+   JS delay only covers true exits. The visible card lives inside. */
+.nav-about-menu{position:absolute;top:100%;left:50%;min-width:180px;z-index:70;
+  padding-top:8px;transform:translateX(-50%);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .16s cubic-bezier(.3,1.2,.4,1),visibility .16s}
+.nav-about.open .nav-about-menu{opacity:1;visibility:visible;pointer-events:auto}
+/* Card: warm-white on the --bd hairline (the --vx-line value). Enters 160ms
+   from translateY(6px) scale(.98) + the wrapper's fade; closes the same way. */
+.nav-about-card{padding:6px;background:#FFFDFA;border:1px solid var(--bd);
+  border-radius:12px;box-shadow:0 14px 30px -18px rgba(6,16,64,.35);
+  transform:translateY(6px) scale(.98);
+  transition:transform .16s cubic-bezier(.3,1.2,.4,1)}
+.nav-about.open .nav-about-card{transform:translateY(0) scale(1)}
+.nav-about-card a{display:block;padding:9px 11px;border-radius:8px;
+  font-size:12px;letter-spacing:-.005em;font-weight:500;color:#2b2823;
+  text-decoration:none;white-space:nowrap;transition:background .15s,color .15s}
+.nav-about-card a:hover{background:rgba(20,16,12,.06);color:#0c0a08}
+/* Items stagger 30ms behind the panel (backwards-fill hides them through
+   the delay); resting state is visible, so reduced-motion just lands. */
+.nav-about.open .nav-about-card a{animation:navAboutItem .18s cubic-bezier(.3,1.2,.4,1) both}
+.nav-about.open .nav-about-card a:nth-child(2){animation-delay:30ms}
+@keyframes navAboutItem{from{opacity:0;transform:translateY(3px)}}
+
+/* Portfolio reveal: the item mounts only after connect, so the animation
+   runs exactly once — slide down 4px + fade + a one-shot blue underglow
+   bloom. Resting state carries no animation styles. */
+.nav .link--reveal{animation:navPortfolioIn .35s cubic-bezier(.3,1.2,.4,1) both,
+  navPortfolioBloom .5s ease-out .08s both}
+@keyframes navPortfolioIn{from{opacity:0;transform:translateY(-4px)}}
+@keyframes navPortfolioBloom{
+  0%{box-shadow:0 8px 16px -8px rgba(43,92,255,0)}
+  40%{box-shadow:0 8px 18px -6px rgba(43,92,255,.38)}
+  100%{box-shadow:0 8px 16px -12px rgba(43,92,255,0)}}
+
+/* Mobile: About flattens to a Fraunces-italic group label with the two
+   links indented beneath it (no dropdown). */
+.nav-mobile-group{display:flex;flex-direction:column}
+.nav-mobile-kicker{display:block;font-family:var(--font-fraunces),'Fraunces',Georgia,serif;font-style:italic;
+  font-size:13px;color:#6f6b63;padding:12px 2px 2px;border-bottom:0}
+.nav-mobile a.nav-mobile-sub{padding:11px 2px 11px 16px;font-size:15px}
+.nav-mobile-group a.nav-mobile-sub:last-child{border-bottom:1px solid rgba(0,0,0,.06)}
+
+@media (prefers-reduced-motion:reduce){
+  .nav-about-menu{transition:none}
+  .nav-about-card{transition:none;transform:none}
+  .nav-about.open .nav-about-card a{animation:none}
+  .nav-about-caret{transition:none}
+  .nav .link--reveal{animation:none}
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   HELIOS DARK (theme-v1) — appended LAST so it wins on source order as well
+   as on specificity. Every value here resolves through the --p-* layer in
+   lib/design/tokens.css; nothing invents a colour.
+
+   THE RULING: the cream and the navy swap jobs. This app is the easy half,
+   because its canvas ALREADY IS the navy hardware — plate screens #070A1C,
+   keys and fills #0A0E2A, panel rails #10173A, bezels #1B2350. Those stay
+   exactly where they are. What changes is the ground they sit on: #04060F,
+   chosen because a proposed #0A0E20 measured 1.011:1 against the hardware
+   key and would have made every hardware module on the property vanish.
+
+   !important APPEARS ONLY where the ELECTRIC BLUE block above declares the
+   same custom property !important. An !important custom property cannot be
+   beaten by a plain one at any specificity, so the dark column has to match
+   it declaration for declaration. It is marked, not hidden.
+   ════════════════════════════════════════════════════════════════════════ */
+:root[data-theme="dark"]{
+  /* ── The Tailwind neutral ramp. This is the single highest-leverage flip in
+        the app: every bg-stone-* / text-stone-* / border-stone-* utility
+        resolves through these. It is a REFLECTION, not a shift — a light
+        scale that encodes magnitude through DARKNESS must encode the same
+        magnitude through LIGHTNESS in dark. High numbers stay surfaces and
+        drop below the hardware; low numbers stay ink and rise to warm cream.
+
+        800 and 700 become warm hairlines AT ALPHA rather than opaque navy,
+        because that is how dark separates: a lift plus a hairline. In light,
+        700 (#d6d1c8) is STRONGER than 800 (#e7e4dd), so 700 takes the
+        stronger alpha — the reflection again.
+
+        200 / 100 / 50 all resolve to --p-ink. There is exactly ONE warm white
+        in this system and three distinct near-blacks cannot survive the flip
+        as three distinct near-whites without minting shades. ── */
+  --color-stone-950: var(--p-ground);
+  --color-stone-925: var(--p-panel);
+  --color-stone-900: var(--p-sunken);
+  --color-stone-800: var(--p-line);
+  --color-stone-700: var(--p-line-strong);
+  --color-stone-600: var(--p-faint);
+  --color-stone-500: var(--p-muted);
+  --color-stone-400: var(--p-muted-soft);
+  --color-stone-300: var(--p-body);
+  --color-stone-200: var(--p-ink);
+  --color-stone-100: var(--p-ink);
+  --color-stone-50:  var(--p-ink);
+
+  /* The honey and violet ramps (the brand accent) are MODE-CONSTANT and get
+     NO dark variant. #2B5CFF fill with an #FFFAF5 label measures 4.96:1 and
+     passes in both modes, so the element a user clicks most is byte-identical
+     across the flip. The pale rungs (#E6F4FF / #B8D9FF / #4D8BFF) are already
+     the on-dark blue register. Nothing to do, said out loud so nobody
+     helpfully re-tints them. */
+
+  /* Functional. Text-legal on the left, marks on the right. */
+  --color-healthy:     var(--p-ok);
+  --color-healthy-dim: var(--ok-dim);
+  --color-warning:     var(--p-warn);
+  --color-warning-dim: var(--warn-dim);
+  --color-danger:      var(--p-danger);
+  --color-danger-dim:  var(--no-dim);
+  --color-info:        var(--p-muted);
+  --color-info-dim:    var(--p-line);
+
+  /* Gain / loss. The 50-300 rungs are TEXT and lift to the text-legal green;
+     the 400-600 rungs are dots and fills and stay on --p-ok-mark #267E50,
+     which clears the 3:1 non-text floor and would fail the 4.5:1 text floor.
+     Green survives as a dot and fails as the word beside the dot. */
+  --color-emerald-50:  var(--p-ok);
+  --color-emerald-100: var(--p-ok);
+  --color-emerald-200: var(--p-ok);
+  --color-emerald-300: var(--p-ok);
+  --color-emerald-400: var(--p-ok-mark);
+  --color-emerald-500: var(--p-ok-mark);
+  --color-emerald-600: var(--p-ok-mark);
+  /* Rose: the two text rungs lift (light #c0392b is 3.55:1 on the dark ground
+     and fails); the fill rungs stay put so a danger button keeps its weight. */
+  --color-rose-200: var(--p-danger);
+  --color-rose-300: var(--p-danger);
+  /* Amber: same split. 300/400 are fills and stay. */
+  --color-amber-100: var(--p-warn);
+  --color-amber-200: var(--p-warn);
+  --color-amber-500: var(--p-warn);
+  --color-amber-900: var(--p-warn);
+
+  /* ── SiteNav port tokens. --o / --o2 / --bd / --dash / --panel are declared
+        !important in the ELECTRIC BLUE block, so they must be here. ── */
+  --o:     var(--p-accent) !important;
+  --o2:    var(--p-accent-lg) !important;
+  --bd:    var(--p-line) !important;
+  --dash:  var(--p-line-strong) !important;
+  --panel: rgba(10,14,42,.55) !important;
+  --ink:   var(--p-ink);
+  --mut:   var(--p-muted);
+  --faint: var(--p-faint);
+
+  /* ── Liquid Glass. Family A (glass over a plate) is the dangerous one: a
+        62%-opaque warm white over near-black becomes a near-opaque cream
+        block, the worst possible outcome. It inverts into warm ink at a low
+        alpha over the plate beneath. The white edge highlights become warm
+        ink at the ruled alphas — white insets on navy do not read as a bevel,
+        they read as a glow, and they are the single largest source of the
+        halo effect. The drop shadows get DARKER, never lighter: lightening a
+        drop shadow on a dark ground manufactures a grey halo around every
+        card and is the fastest route to generic dark UI. ── */
+  --glass-bg-default: rgba(245,242,235,.07) !important;
+  --glass-bg-hero:    rgba(245,242,235,.09) !important;
+  --glass-bg-quiet:   rgba(245,242,235,.05) !important;
+  --glass-bg-default-solid: var(--p-panel) !important;
+  --glass-bg-hero-solid:    var(--p-raised) !important;
+  --glass-bg-quiet-solid:   var(--p-sunken) !important;
+  --glass-edge-top: rgba(245,242,235,.16);
+  --glass-edge-bot: rgba(245,242,235,.06);
+  --glass-inner-hl:      inset 0 1px 0 rgba(245,242,235,.07);
+  --glass-inner-hl-hero: inset 0 1px 0 rgba(245,242,235,.10);
+  --glass-shadow:     0 12px 40px -12px rgba(0,0,0,.62);
+  --glass-shadow-hi:  0 18px 60px -16px rgba(0,0,0,.70);
+  --glass-shadow-low: 0 4px 16px -8px rgba(0,0,0,.55);
+}
+
+/* Selection and caret follow the tokens in both modes. The existing rule
+   paints a SOLID accent behind selected text, which turns a selected
+   paragraph into a blue wash — the wash failure triggered by the user rather
+   than by us. A tint in both modes instead. */
+::selection{ background-color: var(--p-select-bg); color: var(--p-select-fg); }
+input, textarea, [contenteditable]{ caret-color: var(--p-caret); }
+
+/* ── D-2, THE DUAL-PURPOSE SPLIT ─────────────────────────────────────────
+   A token name cannot see the CSS property it is used in, which is exactly
+   why `text-stone-950` breaks under a name-level alias. Every one of its uses
+   in this codebase is the LABEL ON A FILL, never the page ground: six sit on
+   the blue CTA (bg-honey-400 / bg-[var(--color-honey-400)]) and two on a
+   rose danger fill. Following --color-stone-950 down to #04060F would put a
+   near-black label on #2B5CFF at 3.20:1 AND break the mode-constancy of the
+   primary CTA, which is the one element that must be byte-identical across
+   the flip. So the label follows the FILL, not the page.
+
+   The two `bg-stone-100 text-stone-950` chips are the minority of the
+   minority: bg-stone-100 flips to a cream fill, so their label has to go the
+   other way or it is cream on cream. Both classes are literal in the markup,
+   so the pair is addressable and the loop closes here rather than in a
+   handoff nobody reads. */
+:root[data-theme="dark"] .text-stone-950{ color: var(--p-on-accent); }
+:root[data-theme="dark"] .bg-stone-100.text-stone-950,
+:root[data-theme="dark"] .bg-stone-50.text-stone-950{ color: var(--p-panel); }
+
+/* ── The nav pill. The most visible object on the property, sticky across
+      every screen, and a third glass case: it must stay legible over the
+      ground, over raised surfaces and over both cobalt fields. Its light
+      stack carries ~14 rgba(255,255,255,…) insets; on navy every one of them
+      is halo. They go, and the pill is defined by its edge instead.
+      brightness(1.07) drops to 1.0 or the frost blooms. ── */
+:root[data-theme="dark"] .nav .wrap{
+  background:rgba(10,14,42,.82);
+  -webkit-backdrop-filter:blur(14px) saturate(1.5);
+  backdrop-filter:blur(14px) saturate(1.5);
+  border:1px solid rgba(245,242,235,.14);
+  box-shadow:0 18px 44px -26px rgba(0,0,0,.65);
+}
+:root[data-theme="dark"] .nav .wrap::before{ background:none; }
+:root[data-theme="dark"] .nav.nav--shrink .wrap{
+  box-shadow:0 14px 34px -24px rgba(0,0,0,.7);
+}
+/* The dark pill already matched the landing; the light one now does too, so
+   the ::before override below is redundant but harmless and kept for safety
+   against a future re-introduction of the sheen. */
+:root[data-theme="dark"] .nav .link{ color:var(--p-body); }
+/* the dark body-ink rule above outweighs `.nav .link.active` on specificity,
+   so the current-page ink is restated at dark scope — on the accent-TEXT
+   rung, per the accent split below: #2B5CFF is legal as a fill and illegal
+   as a word on navy. */
+:root[data-theme="dark"] .nav .link.active{ color:var(--p-accent-text,#7FB2FF); }
+:root[data-theme="dark"] .nav .link:hover,
+:root[data-theme="dark"] .nav .nav-about-trigger:hover{
+  color:var(--p-ink); background:var(--p-accent-wash); box-shadow:none;
+}
+:root[data-theme="dark"] .nav-burger span{ background:var(--p-ink); }
+:root[data-theme="dark"] .nav-about-card{
+  background:var(--p-raised); border-color:var(--p-line);
+  box-shadow:var(--p-sh-float);
+}
+:root[data-theme="dark"] .nav-about-card a{ color:var(--p-body); }
+:root[data-theme="dark"] .nav-about-card a:hover{
+  background:var(--p-accent-wash); color:var(--p-ink);
+}
+:root[data-theme="dark"] .nav-mobile{
+  background:rgba(10,14,42,.94);
+  border:1px solid rgba(245,242,235,.14);
+  box-shadow:0 20px 44px -16px rgba(0,0,0,.7);
+}
+:root[data-theme="dark"] .nav-mobile a{
+  color:var(--p-ink); border-bottom-color:var(--p-line-quiet);
+}
+:root[data-theme="dark"] .nav-mobile-kicker{ color:var(--p-muted); }
+:root[data-theme="dark"] .nav-mobile-group a.nav-mobile-sub:last-child{
+  border-bottom-color:var(--p-line-quiet);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   THE APPEARANCE TOGGLE
+   ------------------------------------------------------------------------
+   One 14px ring with its right half filled. Rotating a half-filled disc
+   180deg moves the fill to the other side, so the animation IS the state
+   readout rather than a decoration attached to it — and because the rotation
+   is plain CSS keyed on [data-theme], the RESTING state is correct on the
+   first painted frame with zero JS.
+
+   At rest the control is --p-muted: it must not be the loudest thing in the
+   pill, the Create vault CTA holds that beat. Hover reuses the sibling
+   nav-link hover exactly. :focus-visible ONLY, never :focus, so a mouse click
+   leaves no ring. The press is 90ms at 94% — inside the perceptual-immediacy
+   window, and with no overshoot, because a button that springs past its own
+   size under a fingertip reads as bounce, not hardware.
+   ════════════════════════════════════════════════════════════════════════ */
+.theme-toggle{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:26px;height:26px;margin:-5px 0;padding:0;border:0;background:none;
+  border-radius:999px;color:var(--p-muted);cursor:pointer;
+  -webkit-appearance:none;appearance:none;font:inherit;line-height:0;
+  transition:color .12s ease-out,background .12s ease-out,
+             transform .09s cubic-bezier(.2,0,.3,1);
+}
+.theme-toggle:hover{ color:var(--p-ink); background:var(--p-accent-wash); }
+.theme-toggle:focus{ outline:none }
+.theme-toggle:focus-visible{
+  outline:none;
+  box-shadow:0 0 0 2px var(--p-focus-gap),0 0 0 4px var(--p-focus-ring);
+}
+.theme-toggle:active{ transform:scale(.94) }
+
+/* view-transition-name MUST be unique among RENDERED elements. The desktop
+   pill toggle and the mobile sheet row BOTH exist in the markup at all
+   widths, and a duplicate name ABORTS the transition silently — turning the
+   flip into an instant cut with no warning and no error. The mobile copy
+   therefore takes its own name. */
+.theme-glyph{
+  display:block;width:14px;height:14px;view-transition-name:theme-glyph;
+}
+.theme-glyph--m{ view-transition-name:theme-glyph-m }
+:root[data-theme="dark"] .theme-glyph{ transform:rotate(180deg) }
+
+/* The live region is a SEPARATE NODE from the button. The button holds focus
+   at the moment of the flip, and mutating the aria-label of a focused element
+   already triggers an announcement; a live region on the same node
+   double-announces. */
+.theme-status{
+  position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;
+  overflow:hidden;white-space:nowrap;clip:rect(0 0 0 0);clip-path:inset(50%);
+}
+
+/* Mobile gets a LABEL. Icon-only is defensible in a dense desktop pill; in a
+   full-width sheet with labelled rows above it, an unlabelled glyph is an
+   orphan. */
+.nvm-theme{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  width:100%;font-family:inherit;font-size:16px;font-weight:500;
+  color:#1a1a1a;background:none;border:0;-webkit-appearance:none;
+  appearance:none;padding:13px 2px;text-align:left;cursor:pointer;
+  transition:color .12s ease-out;
+}
+:root[data-theme="dark"] .nvm-theme{ color:var(--p-ink) }
+.nvm-theme:focus{ outline:none }
+.nvm-theme:focus-visible{
+  outline:none;border-radius:8px;
+  box-shadow:0 0 0 2px var(--p-focus-gap),0 0 0 4px var(--p-focus-ring);
+}
+.nvm-theme-v{
+  display:inline-flex;align-items:center;gap:8px;
+  color:var(--p-muted);font-size:12.5px;font-weight:400;
+}
+.tw{ font-weight:inherit;font-style:inherit }
+.tw-d{ display:none }
+:root[data-theme="dark"] .tw-l{ display:none }
+:root[data-theme="dark"] .tw-d{ display:inline }
+
+/* ── MOTION. ONE GPU-composited crossfade, 180ms.
+      A CSS colour transition on the ground is rejected on measurement, not on
+      taste: backdrop-filter is used heavily here (the nav pill, every .glass
+      tier, the scroll edge, the mobile sheet) and a colour transition forces
+      every one of those blur layers to re-sample on every frame. The
+      view-transition path takes one snapshot before the DOM change and one
+      after, then cross-dissolves two GPU textures; the blur is baked into
+      each snapshot and never re-sampled, and the cost is independent of
+      element count.
+
+      ASYMMETRIC TIMING: a symmetric 50/50 dissolve between cream and navy
+      passes through a washed slate mid-frame, and that mid-frame is the whole
+      reason a naive crossfade reads cheap. The destination dominates from
+      ~35% in.
+
+      mix-blend-mode:normal and isolation:auto are REQUIRED OVERRIDES, not
+      polish: Chrome's default pseudo-element style uses plus-lighter, which
+      with cream and navy ADDS and produces a bright flash at the midpoint on
+      every single flip. ── */
+::view-transition-group(root){ animation-duration:180ms }
+::view-transition-image-pair(root){ isolation:auto }
+::view-transition-old(root),::view-transition-new(root){
+  mix-blend-mode:normal;animation:none;
+}
+::view-transition-old(root){ animation:p-out 120ms cubic-bezier(.4,0,1,1) both }
+::view-transition-new(root){ animation:p-in 180ms cubic-bezier(0,0,.2,1) both }
+@keyframes p-out{ to{ opacity:0 } }
+@keyframes p-in{ from{ opacity:0 } }
+
+/* The glyph rotation rides INSIDE the transition. After it, it would be
+   swallowed by the root snapshot and crossfade in place, losing the state
+   signal. cubic-bezier(.3,1.2,.4,1) is the curve already on .nav-about-caret
+   two elements to its left — the new control moves the way its neighbour
+   already moves, which is what keeps it from reading as bolted on. The same
+   overshoot is WRONG on the root crossfade, where it would clamp opacity
+   above 1 and produce a flat hold instead of an ease. */
+::view-transition-old(theme-glyph),::view-transition-old(theme-glyph-m){
+  animation:g-out 180ms cubic-bezier(.3,1.2,.4,1) both;
+}
+::view-transition-new(theme-glyph),::view-transition-new(theme-glyph-m){
+  animation:g-in 180ms cubic-bezier(.3,1.2,.4,1) both;
+}
+@keyframes g-out{ to{ transform:rotate(180deg);opacity:0 } }
+@keyframes g-in{ from{ transform:rotate(-180deg);opacity:0 } }
+
+/* Reduced motion BYPASSES, it does not zero: a zero-duration view transition
+   still runs the full snapshot machinery and still freezes a frame, so
+   bypassing is both instant and cheaper (the JS guard does that). This is
+   belt and braces for any future path. CRITICAL: the glyph still SWAPS, the
+   label still updates, the status region still announces. Reduced motion
+   removes the MOTION, never the INFORMATION. */
+@media (prefers-reduced-motion:reduce){
+  .theme-toggle,.theme-glyph,.nvm-theme{ transition:none }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*){ animation:none !important }
+}
+
+/* ---------------------------------------------------------------------------
+   THE NAV WORDMARK. Found in verification, measured, not guessed.
+
+   `.brand-logo` is a plain raster <img src="/brand/priime-logo-lightbg.png"> — a BLACK
+   wordmark plus a blue glyph on transparency. Nothing in the token layer can
+   reach the pixels inside a bitmap, so when the pill flipped to
+   rgba(10,14,42,.82) the mark went black-on-navy: measured 1.19:1 against the
+   pill. The logo is the most-repeated object on the property and it was
+   invisible on every dark page.
+
+   The fix is the shipped idiom, not a new commission: the static site solves
+   this exact case at site/assets/_nav.py:342 by using the PNG as a MASK so it
+   paints --p-ink, and the same PNG is already used as a mask by
+   `.footv2 .wordmark`. Mirrored here verbatim so the two properties agree.
+
+   `filter:invert()` is rejected on two counts, both from §9: it yields
+   #FFFFFF, a COLD white leaking a neutral into the ink column, and it
+   hue-shifts the blue glyph to orange.
+
+   The bitmap is shifted out of its own content box so only the masked
+   background paints; the box stays exactly where it was, so the pill's
+   geometry does not move and no markup changes. Guarded on @supports so a UA
+   without masking keeps the untouched raster rather than a cream brick.
+
+   Light is untouched: this whole block is dark-scoped. */
+@supports ((-webkit-mask-image:url(/brand/priime-logo-lightbg.png)) or (mask-image:url(/brand/priime-logo-lightbg.png))){
+  :root[data-theme="dark"] .brand-logo{
+    background-color:var(--p-ink,#F5F2EB);
+    -webkit-mask:url(/brand/priime-logo-lightbg.png) no-repeat center/contain;
+    mask:url(/brand/priime-logo-lightbg.png) no-repeat center/contain;
+    object-fit:none;
+    object-position:-99999px -99999px;
+    overflow:hidden;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   THE DEMO WALLET SHEET (components/wallet/DemoWalletSheet.tsx). The Review
+   card's navy `.pf` material (build.css .pf / .pf-publish / .pf-ghostlink),
+   carried here because the sheet is mounted in the root layout and opens on
+   /portfolio too, where build.css is not loaded. Navy in both modes: an
+   overlay is not a module, and this one is already the dark register, so it
+   is byte-identical across the flip. The backdrop matches .bcrev-backdrop
+   declaration for declaration (light scrim rgba(20,18,15,.55), dark
+   rgba(0,0,0,.72)); the sheet carries both class names so build.css's own
+   rule and this one agree on the canvas.
+   ------------------------------------------------------------------------ */
+.dws-backdrop{position:fixed;inset:0;z-index:130;background:rgba(20,18,15,.55);display:grid;place-items:center;padding:20px;
+  animation:dwsfade .2s ease-out}
+:root[data-theme="dark"] .dws-backdrop{background:rgba(0,0,0,.72)}
+.dws{width:min(360px,94vw);background:#070A1C;color:#E6F4FF;border:1px solid #1B2350;border-radius:20px;padding:26px;
+  font-family:var(--font-body);
+  box-shadow:inset 0 2px 9px rgba(0,0,0,.7),0 40px 90px -30px rgba(4,7,31,.85);
+  animation:dwsin .26s cubic-bezier(.3,1.2,.4,1)}
+.dws-kicker{font-family:var(--font-fraunces),'Fraunces',Georgia,serif;font-style:italic;font-size:14px;color:#7FB2FF;margin-bottom:10px}
+.dws-line{font-size:13.5px;line-height:1.5;color:#B8D9FF;margin:0 0 18px}
+.dws-acts{display:flex;flex-direction:column;align-items:stretch}
+.dws-connect{display:inline-flex;align-items:center;justify-content:center;width:100%;height:46px;border-radius:999px;
+  border:1px solid #4D8BFF;background:#2B5CFF;color:#fff;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;
+  transition:.16s;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+.dws-connect:hover{background:#4D8BFF}
+.dws-connect:hover,.dws-connect:focus-visible{box-shadow:0 0 30px rgba(77,139,255,.6),inset 0 1px 0 rgba(255,255,255,.18)}
+.dws-ghost{display:block;width:100%;margin-top:12px;padding:2px 0;background:none;border:0;cursor:pointer;
+  font-family:inherit;font-style:normal;font-size:13px;color:#7FB2FF;text-align:center}
+.dws-ghost:hover{color:#B8D9FF}
+/* Connect error, in the sheet's own register: the wallet library's first
+   line only, never its stack. */
+.dws-err{margin:12px 0 0;font-size:12.5px;line-height:1.45;color:#FF9A9A}
+
+/* THE NAV'S WALLET SLOT. Antoni reserved the right cluster for the live
+   connect key (PR #15); this is that key, in the nav's own pill language
+   rather than a second one. Quiet by default so the blue Create vault CTA
+   stays the only loud thing in the cluster; connected, it prints the address
+   in the data face because an address is a reading, not a word. */
+.nav-wallet{display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:999px;
+  border:1px solid var(--p-line);background:transparent;color:var(--p-ink);
+  font-family:var(--font-body);font-size:12.5px;letter-spacing:0;cursor:pointer;
+  transition:border-color .15s ease,background .15s ease}
+.nav-wallet:hover{border-color:var(--p-ink);background:color-mix(in srgb,var(--p-ink) 6%,transparent)}
+.nav-wallet:focus-visible{outline:2px solid #2B5CFF;outline-offset:2px}
+.nav-wallet--on{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.01em}
+
+@keyframes dwsfade{from{opacity:0}to{opacity:1}}
+@keyframes dwsin{0%{opacity:0;transform:scale(.97) translateY(6px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+  .dws-backdrop,.dws{animation:none}
+}
+
+/* globals.css: the coming-soon register, ONE owner */
+.soon-tag{display:inline-flex;align-items:center;font-family:inherit;font-style:normal;font-size:11px;font-weight:500;letter-spacing:normal;text-transform:none;line-height:1;color:#6f6c66;background:transparent;border:1px solid #d8d3c8;border-radius:999px;padding:3px 9px;white-space:nowrap;opacity:1}
+:root[data-theme="dark"] .soon-tag{color:var(--p-muted,#A8A398);border-color:var(--p-line,rgba(245,242,235,.12))}
+[data-soon]{cursor:default;background:transparent;box-shadow:none;transform:none}
+[data-soon]:hover{transform:none;box-shadow:none}
+[data-soon]>:not(.soon-tag):not([data-soon-help]){opacity:.62}
+[data-soon] [data-soon-num],[data-soon] .mt-apy,[data-soon] .vx-card-apy b{color:#6f6c66;font-weight:500}
+[data-soon] [data-soon-chip],[data-soon] .vx-tag{color:#6f6b63;background:transparent;border-color:#e7e4dd}
+[data-soon] [data-soon-press]{pointer-events:none}
+[data-soon] .hm-key{opacity:.62;pointer-events:none}
+[data-soon] .hm-led{background:#3a322f;box-shadow:none}
+[data-soon] .hm-key:active{transform:none;transition-duration:.16s}
+.rk-slot[data-soon]:hover,.rk-addlane[data-soon]:hover,.cpz-addlane[data-soon]:hover{border-color:var(--bc-line-invite);color:inherit;background:transparent}
+.vx-card[data-soon]:hover .vx-ds-line{animation:none}

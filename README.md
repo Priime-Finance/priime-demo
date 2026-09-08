@@ -12,10 +12,14 @@ operator and its lie is rejected while the honest quorum settles the truth.
 components/
   hello-nav/          # operator component (wavs:operator@2.7.0), returns nav=42
   hello-aggregator/   # aggregator component (wavs:aggregator@2.7.0), submits to the handler
+  vault-nav/          # operator component (priime-vault-nav): prices a real loop's NAV
 contracts/
-  src/HelloNavHandler.sol   # service handler: validates operator sigs, records the attested NAV
+  src/HelloNavHandler.sol   # M1 handler: validates operator sigs, records the attested NAV
+  src/PriimeVault.sol       # live-loop handler, one per deployed loop; strategist holds the exit key
+  src/MockServiceManager.sol, src/interfaces/
 deploy/
-  deploy.sh           # one command: build -> deploy -> cron fires -> result on-chain
+  deploy.sh           # M1 only: one command, build -> deploy -> cron fires -> result on-chain
+  fork.sh, vault-service.sh, enter-loop.sh, run-live-demo.sh, target.sh   # the live demo; see docs/LIVE_DEMO.md
 schema/
   journal.v1.schema.json    # frozen backend/frontend seam (JSON Schema 2020-12), source of truth
   samples/                  # honest + sabotage journal fixtures
@@ -23,9 +27,14 @@ crates/journal/       # Rust serde types for the journal (deny_unknown_fields)
 packages/journal-schema/    # TypeScript types + re-exported schema
 packages/loop-deploy/       # loop control-plane library: service.json mutation, handler deploys, loop registry
 apps/loop-server/           # authenticated HTTP API deploying user loops as workflows (see its README)
+apps/replay-ui/             # Next.js frontend: the build canvas, the vault pages (see its README)
 ```
 
-Each component has its own README explaining what it does and why.
+Each component has its own README explaining what it does and why. This
+top-level README covers the M1 hello-world pipeline below, the minimal path
+through WAVS. For the fuller demo (compose a loop in the browser, publish
+it, watch real attested strikes land on a live `PriimeVault`), see
+`docs/LIVE_DEMO.md`.
 
 ## M1: hello-world through the full WAVS pipeline (on anvil)
 

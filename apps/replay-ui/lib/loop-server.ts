@@ -11,9 +11,33 @@ export interface LoopServerConfig {
   token: string;
 }
 
-export function loopServerConfig(): LoopServerConfig {
+/**
+ * The token `deploy/run-live-demo.sh` already hands loop-server, so a clone
+ * with no .env.local can publish against a local fork without being told a
+ * secret first. It is not one: the same string is committed in that script
+ * and printed three times in docs/LIVE_DEMO.md.
+ *
+ * IT APPLIES TO LOCALHOST ONLY. loop-server deploys handlers with a funded
+ * owner key, so a default that reached a remote host would be a published
+ * credential for a service that spends money. Off localhost the variable is
+ * required and its absence is fatal, which is the same rule
+ * `deploy/targets/mainnet.json` keeps: the fork defaults everything, a real
+ * chain defaults nothing.
+ */
+const LOCAL_DEV_TOKEN = "demo-token-0123456789abcdef";
+
+function isLocal(baseUrl: string): boolean {
+  try {
+    const { hostname } = new URL(baseUrl);
+    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function loopServerConfig(): LoopServerConfig {
   const baseUrl = process.env.LOOP_SERVER_URL ?? "http://127.0.0.1:8090";
-  const token = process.env.LOOP_SERVER_TOKEN ?? "";
+  const token = process.env.LOOP_SERVER_TOKEN ?? (isLocal(baseUrl) ? LOCAL_DEV_TOKEN : "");
   return { baseUrl: baseUrl.replace(/\/$/, ""), token };
 }
 
@@ -22,7 +46,9 @@ export function loopServerConfig(): LoopServerConfig {
 export async function loopServerFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const { baseUrl, token } = loopServerConfig();
   if (token === "") {
-    throw new Error("LOOP_SERVER_TOKEN is not set");
+    throw new Error(
+      "LOOP_SERVER_TOKEN is not set, and loop-server is not on localhost so the demo default does not apply",
+    );
   }
   const headers = new Headers(init.headers);
   headers.set("authorization", `Bearer ${token}`);

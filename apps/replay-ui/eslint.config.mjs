@@ -82,6 +82,37 @@ export default tseslint.config(
   },
 
   {
+    // The files tsconfig.strict.json holds to `noUncheckedIndexedAccess`
+    // (docs/plans/LATEST_UI_PORT_SPEC.md A.3 #38). The repo-wide program has
+    // the flag off for the kit-verbatim canvas, so an indexed read's `!` looks
+    // unnecessary here while the strict gate depends on it.
+    files: [
+      "tests/**/*.ts",
+      "lib/journal.ts",
+      "lib/source.ts",
+      "lib/replay.ts",
+      "lib/format.ts",
+      "lib/vaults/attested.ts",
+      "lib/vaults/requests.ts",
+      "lib/vaults/pipeline.ts",
+      "lib/vaults/rows.ts",
+      "lib/demo-scope.ts",
+      "lib/wallet.ts",
+    ],
+    rules: {
+      "@typescript-eslint/no-unnecessary-type-assertion": "off",
+    },
+  },
+
+  {
+    // Two type files copied verbatim from build.priime.finance and held
+    // byte-identical to it (docs/plans/LATEST_UI_PORT_SPEC.md C.0.5), so the
+    // stylistic preset yields to the source rather than the other way round.
+    files: ["lib/strategy-factory/**/*.ts"],
+    rules: { "@typescript-eslint/array-type": "off" },
+  },
+
+  {
     // Config and tooling files: outside the TS program, so type-aware rules
     // have nothing to read.
     files: ["**/*.mjs", "**/*.js", "**/*.cjs"],

@@ -6,11 +6,18 @@
  * stays in data.defKey. "/" never appears in loop ids or module keys.
  */
 
-import type { LoopId, ModuleKey } from "./types";
+import { ORCHESTRATOR_NODE_ID, type LoopId, type ModuleKey } from "./types";
 
 /** Node id = `${loopId}/${defKey}`. */
 export function nodeId(loopId: LoopId, key: ModuleKey): string {
   return `${loopId}/${key}`;
+}
+
+export function parseNodeId(id: string): { loopId: LoopId; key: ModuleKey } | null {
+  if (id === ORCHESTRATOR_NODE_ID) return null;
+  const i = id.indexOf("/");
+  if (i <= 0) return null;
+  return { loopId: id.slice(0, i), key: id.slice(i + 1) as ModuleKey };
 }
 
 /**
@@ -23,6 +30,28 @@ export function nodeId(loopId: LoopId, key: ModuleKey): string {
 export function marketKeyOf(candidateId: string): string {
   if (!candidateId) return "";
   return candidateId.split(":").pop() ?? "";
+}
+
+/**
+ * The whole v2 candidate id, split once. `${venue}:${chainId}:${pair}:${marketKey}`.
+ *
+ * `marketKeyOf` above takes the last segment and is enough for every consumer
+ * that only needs the market. A caller that needs the venue or the pair used
+ * to split the id a second time in `components/vaults/live-loop.ts`, which is
+ * the bug the comment above warns about, so the parse lives here with the
+ * rest of the format and the callers keep only their wording.
+ *
+ * Null for a v1 `${venue}:${id}` id or anything else that is not four
+ * segments; a caller that gets null prints the raw id rather than guessing.
+ */
+export function candidateSegments(
+  candidateId: string,
+): { venue: string; chainId: string; pair: string; marketKey: string } | null {
+  const parts = candidateId.split(":");
+  if (parts.length < 4) return null;
+  const [venue, chainId, pair, marketKey] = parts;
+  if (!venue || !chainId || !pair || !marketKey) return null;
+  return { venue, chainId, pair, marketKey };
 }
 
 const LOOP_ID_RE = /^loop_(\d+)$/;

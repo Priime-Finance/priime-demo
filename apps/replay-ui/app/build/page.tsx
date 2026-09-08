@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import RackCanvas from "@/components/canvas/RackCanvas";
-import { templateById } from "@/lib/canvas/templates";
 import "./hm.css";
 import "./build.css";
 
@@ -11,17 +10,15 @@ export const metadata: Metadata = {
 };
 
 /**
- * /build                   → the recursive loop builder (the canvas)
- * /build?template=<id>     → the canvas preloaded with a registry template
- *                            (lib/canvas/templates.ts); unknown ids fall back
- *                            to the normal empty canvas, never an error.
+ * /build → the recursive loop builder, blank.
+ *
+ * One workflow is live on this build (docs/plans/LATEST_UI_PORT_SPEC.md A.2),
+ * so the canvas always opens on its own blank lane. `?new=1` is honoured by
+ * the canvas itself (it declines to load a stored draft and offers it back).
+ * `?template`, `?demo`, `?seed` and `?strategy` are the live site's deep links
+ * into compositions this build lists as coming soon; they are read by nothing
+ * here and open the same blank canvas.
  */
-export default async function BuildPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const sp = await searchParams;
-  const template = templateById(typeof sp.template === "string" ? sp.template : "");
-  return <RackCanvas templateId={template?.id} />;
+export default function BuildPage() {
+  return <RackCanvas />;
 }

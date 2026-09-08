@@ -22,13 +22,21 @@
 #   7. starts the WAVS node against the fork, deploys the service, and waits
 #      for the first cron strike to land in the vault (updateCount >= 1).
 #
-# Writes $FORKDIR/vault-service.json for enter-loop.sh (vault, manager,
-# strategist). Strategy numbers stay in fork.config.json (LOOP-03).
+# Writes $STATE_DIR/vault-service.json for enter-loop.sh (vault, manager,
+# strategist). Strategy numbers stay in fork.config.json (LOOP-03), which is
+# shared by every target because the fork IS Base at a pinned block.
+#
+# Target-aware: TARGET=fork (default) is the pinned anvil fork and behaves
+# exactly as it always has; TARGET=mainnet is Base itself, where the operator
+# is funded by a real transfer instead of anvil_setBalance and a block is
+# waited for instead of mined. See deploy/target.sh.
 #
 # Prereqs:
-#   deploy/fork.sh                                   # pinned Base fork on :8545
+#   deploy/fork.sh                                   # TARGET=fork only: pinned Base fork on :8545
 #   ipfs daemon                                      # api on :5001
 #   docker images: ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15, poa-middleware:1.0.1
+#   TARGET=mainnet: PRIIME_RPC_URL + the four role keys named in
+#                   deploy/targets/mainnet.json, and a treasury holding ETH.
 #
 # Re-runnable: fresh manager + vault + node each run (restart fork.sh for a
 # pristine chain).
@@ -36,23 +44,17 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # priime-demo
 DEPLOY="$ROOT/deploy"
-CFG="$DEPLOY/fork.config.json"
-FORKDIR="$DEPLOY/.fork"
+source "$DEPLOY/target.sh"                        # TARGET, RPC, CHAIN, STATE_DIR, CRON_SCHEDULE, helpers
+FORKDIR="$STATE_DIR"
 HOME_DIR="$FORKDIR/wavs-vault"                    # node home (wavs.toml, service.json)
 WAVS_IMG="ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15"
 POA_IMG="ghcr.io/lay3rlabs/poa-middleware:1.0.1"
 NODE="wavs-vault"
 GATEWAY="http://127.0.0.1:8080/ipfs/"
-MNEMONIC="test test test test test test test test test test test junk"   # anvil default
-
-say() { echo; echo "== $* =="; }
-cfg() { jq -r "$1" "$CFG"; }
 
 # --- 0. config + keys -------------------------------------------------------
-FORK_PORT="${FORK_PORT:-$(cfg .fork.fork_port)}"
-FORK_CHAIN_ID=$(cfg .fork.fork_chain_id)
-RPC="http://localhost:$FORK_PORT"
-CHAIN="evm:$FORK_CHAIN_ID"
+FORK_PORT="$RPC_PORT"
+FORK_CHAIN_ID="$CHAIN_ID"
 
 USDC=$(cfg .tokens.usdc.address)
 USDE=$(cfg .tokens.usde.address)
@@ -62,19 +64,22 @@ ORACLE=$(cfg .morpho.market.params.oracle)
 IRM=$(cfg .morpho.market.params.irm)
 LLTV=$(cfg .morpho.market.params.lltv)
 POOL=$(cfg .swap_route.pool)
-CRON=$(cfg .service.cron_schedule)
+CRON="$CRON_SCHEDULE"                             # per target: 10s on the fork, hourly on Base
 TWAP_WINDOW=$(cfg .service.twap_window_secs)
 BLOCK_LAG=$(cfg .service.inputs_block_lag)
 OBS_CARD=$(cfg .service.observation_cardinality)
+OPERATOR_GAS=$(tcfg_req .funding.operator_gas_wei)
 
-# Mnemonic accounts originate transactions only (7702 delegation code is
-# inert for origination): index 0 funds/owns, index 4 is the strategist.
-key()  { cast wallet private-key --mnemonic "$MNEMONIC" --mnemonic-index "$1"; }
-addr() { cast wallet address     --mnemonic "$MNEMONIC" --mnemonic-index "$1"; }
-K0=$(key 0)
-STRATEGIST=$(addr 4)
+# Role keys come from the target: the anvil mnemonic on the fork (where
+# accounts originate transactions only, 7702 delegation code being inert for
+# origination), named env vars on a live chain. owner funds and owns,
+# strategist is the only account vault.execute() accepts.
+K0=$(role_key owner)
+STRATEGIST=$(role_addr strategist)
 # Ephemeral per-run node mnemonic: operator = index 0, signing key = index 1
 # (same layout deploy.sh uses on plain anvil). Both fresh, so code-free EOAs.
+# Target-independent: fresh keys are correct on Base too, they just have to be
+# funded for real (see fund_account below) instead of conjured.
 NODE_MNEMONIC=$(cast wallet new-mnemonic | sed -n '/Phrase:/{n;p;}' | xargs)
 [ "$(echo "$NODE_MNEMONIC" | wc -w | xargs)" = "12" ] || { echo "FATAL: could not generate node mnemonic"; exit 1; }
 OPERATOR=$(cast wallet address --mnemonic "$NODE_MNEMONIC" --mnemonic-index 0)
@@ -82,35 +87,53 @@ K_OP=$(cast wallet private-key --mnemonic "$NODE_MNEMONIC" --mnemonic-index 0)
 SIGNING=$(cast wallet address --mnemonic "$NODE_MNEMONIC" --mnemonic-index 1)
 
 # --- 1. preconditions -------------------------------------------------------
-say "preconditions"
-[ -f "$FORKDIR/anvil.pid" ] && kill -0 "$(cat "$FORKDIR/anvil.pid")" 2>/dev/null \
-  || { echo "FATAL: no running fork (pidfile $FORKDIR/anvil.pid); start it with: deploy/fork.sh"; exit 1; }
-[ "$(cast chain-id --rpc-url "$RPC")" = "$FORK_CHAIN_ID" ] \
-  || { echo "FATAL: chainId mismatch on :$FORK_PORT; is this the fork.sh anvil?"; exit 1; }
+say "preconditions (TARGET=$TARGET, chain $CHAIN_ID)"
+require_chain_up            # fork: anvil pidfile + chain id; live: chain id
+require_gas owner "$(role_addr owner)"     # no-op on the fork; anvil pre-funds
 [ "$(cast code "$MORPHO" --rpc-url "$RPC")" != "0x" ] \
-  || { echo "FATAL: Morpho Blue has no code; :$FORK_PORT is not a Base fork. Run deploy/fork.sh"; exit 1; }
+  || { echo "FATAL: Morpho Blue has no code at $RPC; this is not Base (nor a fork of it)"; exit 1; }
 curl -sf -X POST "http://127.0.0.1:5001/api/v0/id" >/dev/null 2>&1 \
   || { echo "FATAL: IPFS api not reachable on :5001 (run: ipfs daemon)"; exit 1; }
 docker info >/dev/null 2>&1 || { echo "FATAL: docker daemon not running"; exit 1; }
 
-# RPC as seen from inside containers (Docker Desktop needs host.docker.internal).
-DOCKER_RPC=""
-for cand in "http://localhost:$FORK_PORT" "http://host.docker.internal:$FORK_PORT"; do
-  if docker run --rm --network host --entrypoint cast "$POA_IMG" chain-id --rpc-url "$cand" >/dev/null 2>&1; then
-    DOCKER_RPC="$cand"; break
-  fi
-done
-[ -n "$DOCKER_RPC" ] || { echo "FATAL: fork not reachable from inside docker"; exit 1; }
-DOCKER_WS="${DOCKER_RPC/http/ws}"
+# RPC as seen from inside containers.
+if [ "$IS_FORK" = "1" ]; then
+  # A port on this machine: Docker Desktop needs host.docker.internal, Linux
+  # with --network host is happy with localhost. Probe both.
+  DOCKER_RPC=""
+  for cand in "http://localhost:$FORK_PORT" "http://host.docker.internal:$FORK_PORT"; do
+    if docker run --rm --network host --entrypoint cast "$POA_IMG" chain-id --rpc-url "$cand" >/dev/null 2>&1; then
+      DOCKER_RPC="$cand"; break
+    fi
+  done
+  [ -n "$DOCKER_RPC" ] || { echo "FATAL: fork not reachable from inside docker"; exit 1; }
+  DOCKER_WS="${DOCKER_RPC/http/ws}"
+else
+  # A remote URL resolves the same inside the container as outside.
+  DOCKER_RPC="$RPC"
+  docker run --rm --network host --entrypoint cast "$POA_IMG" chain-id --rpc-url "$DOCKER_RPC" >/dev/null 2>&1 \
+    || { echo "FATAL: $RPC not reachable from inside docker"; exit 1; }
+  # https -> wss by the same substitution. Providers that serve websockets on
+  # a different host need PRIIME_WS_URL set explicitly.
+  DOCKER_WS="${PRIIME_WS_URL:-${DOCKER_RPC/http/ws}}"
+fi
 # host[:port] the components actually dial (wavs.toml http_endpoint below);
 # scopes component --http-hosts instead of the chain being wide open.
-DOCKER_RPC_HOST="${DOCKER_RPC#http://}"
-# The IPFS gateway must be reachable from the same container vantage point;
-# reuse the host that worked for the RPC (kubo's gateway listens on 0.0.0.0).
-DOCKER_HOST_NAME="${DOCKER_RPC#http://}"; DOCKER_HOST_NAME="${DOCKER_HOST_NAME%:*}"
+DOCKER_RPC_HOST="${DOCKER_RPC#http://}"; DOCKER_RPC_HOST="${DOCKER_RPC_HOST#https://}"
+DOCKER_RPC_HOST="${DOCKER_RPC_HOST%%/*}"
+# The IPFS gateway is always local, whatever the chain is. On the fork the
+# host that reached the chain also reaches kubo (which listens on 0.0.0.0), so
+# reuse it. On a live target the chain is a remote URL and says nothing about
+# the container's view of this machine, so assume the --network host case and
+# let IPFS_DOCKER_HOST override it (Docker Desktop: host.docker.internal).
+if [ "$IS_FORK" = "1" ]; then
+  DOCKER_HOST_NAME="${DOCKER_RPC#http://}"; DOCKER_HOST_NAME="${DOCKER_HOST_NAME%:*}"
+else
+  DOCKER_HOST_NAME="${IPFS_DOCKER_HOST:-localhost}"
+fi
 GATEWAY="http://$DOCKER_HOST_NAME:8080/ipfs/"
 curl -sf "http://127.0.0.1:8080/ipfs/" -o /dev/null -w '' 2>/dev/null || true
-echo "fork ok: block $(cast block-number --rpc-url "$RPC"); container RPC $DOCKER_RPC; gateway $GATEWAY"
+echo "chain ok: block $(cast block-number --rpc-url "$RPC"); container RPC $DOCKER_RPC; gateway $GATEWAY"
 
 # --- 2. build components + contracts ----------------------------------------
 say "build components (wasm32-wasip2) + contracts"
@@ -154,7 +177,9 @@ EOF
 POA=(docker run --rm --network host -v "$FORKDIR/nodes-vault:/root/.nodes" --env-file "$FORKDIR/poa-vault.env" "$POA_IMG")
 "${POA[@]}" deploy >/dev/null
 SM=$(jq -r '.addresses.POAStakeRegistry' "$FORKDIR/nodes-vault/poa_deploy.json")
-cast rpc anvil_mine --rpc-url "$RPC" >/dev/null 2>&1 || true
+# The deploy container has returned but its last transaction may not be in a
+# block the next reader sees. On the fork we mine one; on a live chain we wait.
+mine_or_wait
 "${POA[@]}" owner_operation updateStakeThreshold 1 >/dev/null
 "${POA[@]}" owner_operation updateQuorum 1 1 >/dev/null
 echo "service manager: $SM"
@@ -215,8 +240,11 @@ echo "service cid: $SVC_CID"
 # --- 7. register the operator (ephemeral keys) ------------------------------
 say "register operator + signing key"
 [ "$(cast code "$SIGNING" --rpc-url "$RPC")" = "0x" ] \
-  || { echo "FATAL: signing key $SIGNING has code on the fork"; exit 1; }
-cast rpc anvil_setBalance "$OPERATOR" 0xde0b6b3a7640000 --rpc-url "$RPC" >/dev/null
+  || { echo "FATAL: signing key $SIGNING has code on chain $CHAIN_ID"; exit 1; }
+# The operator pays for its own updateOperatorSigningKey below, so it needs
+# gas. On the fork that is anvil_setBalance; on a live chain it is a real
+# transfer from the treasury key. funding.operator_gas_wei is per target.
+fund_account gas "$OPERATOR" "$OPERATOR_GAS"
 cast send "$SM" "registerOperator(address,uint256)" "$OPERATOR" 1000 --private-key "$K0" --rpc-url "$RPC" >/dev/null
 # Signing-key registration signs the raw keccak (no EIP-191 prefix) -> --no-hash.
 ENC=$(cast abi-encode "f(address)" "$OPERATOR"); MSG=$(cast keccak "$ENC")
@@ -238,15 +266,20 @@ docker run --rm --network host -v "$HOME_DIR:/data" "$WAVS_IMG" wavs-cli deploy-
   --wavs-endpoint http://localhost:8041 --ipfs-gateway "$GATEWAY"
 
 # --- 9. wait for the first cron strike --------------------------------------
-say "await first attested NAV strike (pre-position NAV: 0)"
-for i in $(seq 1 18); do
+# The budget is per target because the cadence is: 90s covers the fork's
+# 10-second cron several times over, while an hourly mainnet cron needs more
+# than an hour of patience. Both come from targets/<target>.json.
+STRIKE_TRIES=$(( $(tcfg_req .service.first_strike_timeout_secs) / 5 ))
+say "await first attested NAV strike (pre-position NAV: 0; cron $CRON, up to $((STRIKE_TRIES * 5))s)"
+for i in $(seq 1 "$STRIKE_TRIES"); do
   sleep 5
   UPDATES=$(cast call "$VAULT" 'updateCount()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
   if [ "$UPDATES" != "0" ]; then
     NAV=$(cast call "$VAULT" 'nav()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
     IB=$(cast call "$VAULT" 'lastInputsBlock()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
     jq -n --arg vault "$VAULT" --arg sm "$SM" --arg strategist "$STRATEGIST" --arg node "$NODE" --arg template_workflow_id "$WID" \
-      '{vault: $vault, service_manager: $sm, strategist: $strategist, node: $node, template_workflow_id: $template_workflow_id}' \
+      --arg target "$TARGET" --arg chain_id "$CHAIN_ID" \
+      '{vault: $vault, service_manager: $sm, strategist: $strategist, node: $node, template_workflow_id: $template_workflow_id, target: $target, chain_id: $chain_id}' \
       > "$FORKDIR/vault-service.json"
     echo "SUCCESS: updateCount=$UPDATES nav=$NAV inputsBlock=$IB"
     echo "vault=$VAULT  serviceManager=$SM  node=$NODE (docker logs $NODE)"
