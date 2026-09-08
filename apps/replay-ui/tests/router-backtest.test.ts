@@ -27,6 +27,8 @@
 
 import { describe, expect, it } from "vitest";
 
+import { HOUSE_FEES } from "@/lib/canvas/fees";
+
 import {
   DEMO_BAR_ONE_WAY_BREAKEVEN,
   DEMO_BAR_REGISTER_FLOOR,
@@ -297,7 +299,7 @@ describe("router-history: the capture, its gaps and its owners", () => {
     expect(fl).toHaveLength(89);
     for (let i = 0; i < fl.length; i += 1) {
       const row = ROUTER_HISTORY_ALIGNED[i] as RouterHistoryAlignedRow;
-      expect((fl[i] as { apy: number }).apy).toBeCloseTo(row.aaveUsdcSupplyApy * 0.8, 12);
+      expect((fl[i] as { apy: number }).apy).toBeCloseTo(row.aaveUsdcSupplyApy * (1 - HOUSE_FEES.computeOnYield), 12);
     }
   });
 

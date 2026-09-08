@@ -248,7 +248,7 @@ describe("copilot route", () => {
     /* Differenced BEFORE rounding: 3.08 minus 2.97 would print 0.11. */
     expect(rt.gapPp).toBe(Number(((today.loop! - today.floor!) * 100).toFixed(2)));
     expect(rt.floor.candidateId).toBe(ROUTER_FLOOR_CANDIDATE_ID);
-    expect(rt.floor.venueLabel).toBe("Aave USDC · Base");
+    expect(rt.floor.venueLabel).toBe("Aave v3 · Base");
     expect(rt.floor.modules).toEqual(["liquidity-source", "redemption-route"]);
     expect(rt.floor.settlementDays).toBe(0);
     expect(rt.floor.redemptionRoute.length).toBeGreaterThan(0);

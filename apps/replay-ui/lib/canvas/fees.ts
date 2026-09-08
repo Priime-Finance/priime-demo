@@ -18,7 +18,7 @@
  * ── THE IDENTITY, ONE OWNER, EXACT ORDERING (R1) ──────────────────────────
  *
  *     venueNet  = repriceAtLeverage(row, appliedL, comp).economics.netApy
- *     afterFee  = venueNet > 0 ? venueNet * (1 - 0.20) : venueNet
+ *     afterFee  = venueNet > 0 ? venueNet * (1 - HOUSE_FEES.computeOnYield) : venueNet
  *     published = afterFee + compoundDelta(afterFee, comp.compound)
  *
  * The ordering is not cosmetic. Compounding the AFTER-fee yield is what a
@@ -40,14 +40,16 @@
  *
  * The fee is charged on YIELD, at harvest. A lane modeling below zero harvests
  * nothing, so the fee term is zero there and the loss is not softened by a
- * fifth of itself. That is also what keeps the fee safe to insert into every
- * downstream gate: multiplying a positive by 0.8 stays positive, so
+ * share of itself. That is also what keeps the fee safe to insert into every
+ * downstream gate: multiplying a positive by (1 − fee) stays positive, so
  * `review-gating`'s `netApy <= 0` refusal cannot newly trip, and the breakeven
- * leverage of R4 is fee-invariant because 0.8 x 0 = 0.
+ * leverage of R4 is fee-invariant because (1 − fee) x 0 = 0.
  *
  * ── THE SETTLEMENT FEE IS NOT AN APY ──────────────────────────────────────
  *
- * 2% of each deposit is a ONE-TIME charge on principal. Amortizing it into an
+ * A settlement fee is a ONE-TIME charge on principal (zero in this demo since
+ * the 2026-09-08 ruling; the machinery stays so a schedule that charges one
+ * again prints it from the same owner). Amortizing it into an
  * annualized rate would require a holding-period assumption the product does
  * not have and the depositor has not made. It appears in `feeRows()` and in no
  * arithmetic in this codebase. `fee-identity.test.ts` pins that.
@@ -71,7 +73,13 @@ import { DEMO_SCOPE } from "@/lib/demo-scope";
  * prints it; priime.finance/docs is a different repository and still does.
  * That page is the remaining copy of the overclaim.
  */
-export const HOUSE_FEES = { computeOnYield: 0.20, settlementOnDeposit: 0.02 } as const;
+/* FOUNDER RULING 2026-09-08: in this demo the compute fee is 10% of yield and
+   there is NO settlement fee. The published docs on priime.finance still say
+   20% and 2%; that site and the data room are out of scope by the same ruling,
+   so the demo's schedule is its own and this line is the one place it is set.
+   A zero settlement fee removes its row from `feeRows()` and its line from the
+   deposit rail rather than printing a `0%` charge. */
+export const HOUSE_FEES = { computeOnYield: 0.1, settlementOnDeposit: 0 } as const;
 
 /**
  * THE FEE TERM ITSELF, as an APY fraction and as a POSITIVE MAGNITUDE — the
@@ -166,8 +174,20 @@ export function apyCaption(): string {
  */
 export function feeRows(record?: FeeRecordRef | null): { label: string; value: string }[] {
   return [
-    { label: "Compute fee", value: "20% of yield, at harvest" },
-    { label: "Settlement fee", value: "2% of each deposit" },
+    {
+      label: "Compute fee",
+      value: `${Math.round(HOUSE_FEES.computeOnYield * 100)}% of yield, at harvest`,
+    },
+    /* Present only while the schedule charges it (founder, 2026-09-08: it
+       does not). A row reading `0% of each deposit` is a price on nothing. */
+    ...(HOUSE_FEES.settlementOnDeposit > 0
+      ? [
+          {
+            label: "Settlement fee",
+            value: `${Math.round(HOUSE_FEES.settlementOnDeposit * 100)}% of each deposit`,
+          },
+        ]
+      : []),
     { label: "Management fee", value: "none on idle capital" },
     {
       label: "Withdrawal",

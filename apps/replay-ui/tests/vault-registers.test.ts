@@ -245,10 +245,10 @@ describe("the router instrument prints the owners and nothing else", () => {
   const read = routerReadout(ROUTER_AUTOMATION);
 
   it("the reading is the gap at TWO decimals, because one erases it", () => {
-    expect(read.gapText).toBe("+0.10pp");
+    expect(read.gapText).toBe("+0.12pp");
     // At one decimal the whole subject of the card rounds away.
-    expect(read.loopText).toBe("3.08%");
-    expect(read.floorText).toBe("2.97%");
+    expect(read.loopText).toBe("3.46%");
+    expect(read.floorText).toBe("3.34%");
     expect(read.asOfText).toBe("Sep 7, 2026");
   });
 

@@ -122,7 +122,7 @@ export const OVERVIEW_NOTE =
 
 /** The Verification panel's prose and the mandatory README line (E.8). */
 const VERIFICATION_PROSE =
-  "Three operators re-execute the NAV from one component digest and one input block. The quorum attests the number only when their result hashes agree, so a single operator cannot move the NAV it reports.";
+  "Three operators on TEN, the trustless execution network, re-execute the NAV from one component digest and one input block. The quorum attests the number only when their result hashes agree, so a single operator cannot move the NAV it reports.";
 const REPLAYING_LINE =
   "Replaying captured journal. These strikes were recorded on Base and are replayed here; the page is not polling a live chain.";
 
@@ -468,13 +468,12 @@ export default function VaultDetail({ slug }: { slug: string }) {
   const heroRegister = useMemo(() => {
     const r = vault?.automations?.router ?? null;
     if (!r || r.lanes.length < 2) return null;
-    /* THE RECORD'S OWN APPLIED LEVERAGE, AND WHY A ROUTED RECORD OFTEN HAS
-       NONE. `publishedModelRecord` publishes `appliedLeverage` only where the
-       lanes AGREE on it (MTX-2), and this pair does not: the loop runs at
-       2.50x and the lending lane at 1.00x. So the number above is the vault AS
-       COMPOSED, both lanes at their own leverages, and the line says that
-       rather than naming one lane's dial over a blended figure. A record that
-       does state one leverage names it, which is the single-lane shape. */
+    /* THE RECORD'S OWN APPLIED LEVERAGE. `publishedModelRecord` publishes
+       `appliedLeverage` where the LOOP lanes agree on it (MTX-2, and since
+       2026-09-08 the treasury lane casts no vote), so the routed loop + USDC
+       lending record states 2.50x and the line names it, as G3 rules. A record
+       that states none is the vault AS COMPOSED, both lanes at their own
+       leverages, and the line says that rather than blending a figure. */
     const lev = vault?.appliedLeverage ?? vault?.automations?.leverage?.targetLeverage ?? null;
     return typeof lev === "number" && Number.isFinite(lev)
       ? `published at ${lev.toFixed(2)}x, modeled`
@@ -553,7 +552,13 @@ export default function VaultDetail({ slug }: { slug: string }) {
     }
     if (a?.compound) {
       push("Compound cadence", `${a.compound.cadenceHours}h`);
-      push("Harvest threshold", `$${a.compound.thresholdUsd}`);
+      push("Harvest threshold", `${a.compound.thresholdUsd}`);
+    }
+    if (a?.redemption) {
+      /* The exit, in the instrument's own two strings. `Exit` heads both rows
+         so the family rule never folds them into the `Settlement fee` row. */
+      push("Exit route", a.redemption.routeLabel);
+      push("Exit settlement", a.redemption.settlementText);
     }
     if (typeof ceiling?.capacityUsd === "number") {
       push(
@@ -888,8 +893,8 @@ export default function VaultDetail({ slug }: { slug: string }) {
                   <span>Verification</span>
                   <b>
                     {attested && quorumLabel !== null
-                      ? `Operator quorum (WAVS), ${quorumLabel} required · attested`
-                      : "Operator quorum (WAVS), every action co-signed · modeled"}
+                      ? `Operator quorum (TEN), ${quorumLabel} required · attested`
+                      : "Operator quorum (TEN), every action co-signed · modeled"}
                   </b>
                 </div>
               </div>

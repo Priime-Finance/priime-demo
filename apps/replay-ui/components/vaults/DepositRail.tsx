@@ -21,7 +21,7 @@
  */
 
 import { useRef, useState } from "react";
-import { depositAfterSettlement, settlementFeeUsd, withdrawalLine } from "@/lib/canvas/fees";
+import { HOUSE_FEES, depositAfterSettlement, settlementFeeUsd, withdrawalLine } from "@/lib/canvas/fees";
 import { MIN_DEPOSIT_USD } from "@/lib/canvas/param-schema";
 import { HERO_SLUG } from "@/lib/demo-scope";
 import { heroNavPerShare } from "@/lib/vaults/rows";
@@ -442,17 +442,23 @@ export default function DepositRail({
         </div>
         {apyOk ? (
           <>
-            {/* The settlement fee is charged once on the deposit and never
-                inside a rate (`lib/canvas/fees.ts`): the dollars below are
-                earned on the principal that is actually deployed. */}
-            <div className="vxj-row">
-              <span>Settlement fee, 2% of the deposit</span>
-              <b>{fmtUsdFull(settlementFeeUsd(basis))}</b>
-            </div>
-            <div className="vxj-row">
-              <span>Deployed</span>
-              <b>{fmtUsdFull(deployed)}</b>
-            </div>
+            {/* A settlement fee is charged once on the deposit and never
+                inside a rate (`lib/canvas/fees.ts`). The schedule charges
+                none (founder, 2026-09-08), so neither the charge nor the
+                `Deployed` line prints: a deposit that is deployed whole has
+                nothing to itemize. Both return the moment the owner charges. */}
+            {HOUSE_FEES.settlementOnDeposit > 0 ? (
+              <>
+                <div className="vxj-row">
+                  <span>Settlement fee, {Math.round(HOUSE_FEES.settlementOnDeposit * 100)}% of the deposit</span>
+                  <b>{fmtUsdFull(settlementFeeUsd(basis))}</b>
+                </div>
+                <div className="vxj-row">
+                  <span>Deployed</span>
+                  <b>{fmtUsdFull(deployed)}</b>
+                </div>
+              </>
+            ) : null}
             <div className="vxj-row">
               <span>{negative ? "Projected monthly change" : "Projected monthly earnings"}</span>
               <b className={negative ? "vx-pnl neg" : undefined}>{fmtUsdFull(deployed * monthlyRate(apy))}</b>
@@ -465,7 +471,9 @@ export default function DepositRail({
         ) : null}
         <div className="vx-dep-note">
           {apyOk
-            ? "At the current modeled rate, on the deposit net of its settlement fee."
+            ? HOUSE_FEES.settlementOnDeposit > 0
+              ? "At the current modeled rate, on the deposit net of its settlement fee."
+              : "At the current modeled rate, on the whole deposit."
             : "This vault's composition never priced, so no rate is projected here."}
         </div>
       </div>

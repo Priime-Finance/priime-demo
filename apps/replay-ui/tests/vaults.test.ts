@@ -594,11 +594,12 @@ describe("the hero record's two rates are labelled by how they were obtained", (
     expect(rows.find((r) => r.label === "Measured series")?.value).toBe(
       `${ROUTER_MEASURED_ON} · ${ROUTER_HISTORY_SOURCES.loopReward.provider}`,
     );
-    /* The hero prices the TYPED row at the seed leverage, and it is 4.3%: the
-       one live workflow the demo is built around (Install defaults seats
-       Dynamic leverage at 2.50x) depends on this row supporting leverage. */
+    /* The hero prices the TYPED row at the seed leverage, and it is 4.8% at
+       the 10% compute fee (founder, 2026-09-08): the one live workflow the
+       demo is built around (Install defaults seats Dynamic leverage at 2.50x)
+       depends on this row supporting leverage. */
     expect(publishedNetApy(repriceAtLeverage(demoMarketCandidate(), HERO_SEED_LEVERAGE), false)).toBeCloseTo(
-      0.0428,
+      0.04815,
       3,
     );
   });
@@ -745,7 +746,7 @@ describe("the ledger's relocation rows", () => {
     /* Item 5: the direction and the gap. The size clause is gone because the
        action word already states it: the whole lane relocated. */
     const detail = routerMoveDetail(measuredRouterReplay().moves[0]!, ROUTED_LANES);
-    expect(detail).toBe("Leveraged loop to USDC lending, +10.66pp");
+    expect(detail).toBe("Leveraged loop to USDC lending, +10.97pp");
     expect(RELOCATION_ACTION).toBe("Capital relocated");
   });
 
@@ -800,8 +801,10 @@ describe("an older single-lane record renders exactly as it did", () => {
     expect(a.leverage).not.toBeNull();
     expect(a.compound).not.toBeNull();
     expect(a.hedge).toBeNull();
-    // The three shipped instruments, and nothing else in the object.
-    expect(Object.keys(a).sort()).toEqual(["compound", "hedge", "leverage", "router"]);
+    // The shipped instruments, and nothing else in the object. `redemption`
+    // rides beside `router`: null here, seated only where the module is.
+    expect(Object.keys(a).sort()).toEqual(["compound", "hedge", "leverage", "redemption", "router"]);
+    expect(a.redemption).toBeNull();
   });
 
   it("adds no ledger row and no module to the roster", () => {

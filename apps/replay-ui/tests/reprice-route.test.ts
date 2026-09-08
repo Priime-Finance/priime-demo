@@ -68,7 +68,7 @@ describe("POST /api/canvas/reprice", () => {
        inside: the TYPED row at the seed leverage, 4.28%. It is deliberately
        NOT the router's measured day (3.08%): two questions, two labels (G3),
        and the rail must keep answering the canvas's one. */
-    expect(a).toBeCloseTo(0.0428, 4);
+    expect(a).toBeCloseTo(0.04815, 4);
     expect(a).not.toBe(routerPublishedToday()!.loop);
     expect((fromRail as Ok).candidate?.economics?.loopLeverage).toBeCloseTo(HERO_SEED_LEVERAGE, 6);
   });

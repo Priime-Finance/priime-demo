@@ -35,7 +35,7 @@ describe("the register", () => {
   it("names one live vault of two lanes", () => {
     expect(HERO_SLUG).toBe("verifiable-usde-loop");
     expect(HERO_MARKET_ID).toBe("morpho-blue-base:8453:USDe-USDC:0x54cf9be5");
-    expect(FLOOR_MARKET_ID).toBe("template:treasury-floor:treasury-ausdc-base:ausdc");
+    expect(FLOOR_MARKET_ID).toBe("template:treasury-floor:treasury-ausdc-base:usdc");
     expect(DEMO_MARKET_ID).toBe(HERO_MARKET_ID);
     expect(DEMO_SCOPE).toEqual({
       liveMarketId: HERO_MARKET_ID,
@@ -98,7 +98,7 @@ describe("the register", () => {
        when the copilot reaches outside the register described the register
        before the floor lane landed. */
     expect(COPILOT_REJECT_COMING_SOON).toBe(
-      "that market is coming soon; only the USDe/USDC loop and the Aave USDC lending reserve are live in this build",
+      "that market is coming soon; only the USDe/USDC loop and the Aave v3 Base USDC reserve are live in this build",
     );
     expect(DEMO_SCOPE.liveMarketIds).toHaveLength(2);
   });
@@ -190,7 +190,10 @@ describe("the withdrawal row", () => {
     expect(withdrawalLine({ slug: "steady-eth-loop" })).toBe("no exit rail on a modeled record");
     expect(withdrawalLine()).toBe("no exit rail on a modeled record");
     const rows = feeRows({ slug: HERO_SLUG });
-    expect(rows.map((r) => r.label)).toEqual(["Compute fee", "Settlement fee", "Management fee", "Withdrawal"]);
-    expect(rows[3]!.value).toBe(WITHDRAWAL_ATTESTED_LINE);
+    /* Three rows since the founder's 2026-09-08 ruling: no settlement fee, so
+       no settlement row. */
+    expect(rows.map((r) => r.label)).toEqual(["Compute fee", "Management fee", "Withdrawal"]);
+    expect(rows[0]!.value).toBe("10% of yield, at harvest");
+    expect(rows[2]!.value).toBe(WITHDRAWAL_ATTESTED_LINE);
   });
 });

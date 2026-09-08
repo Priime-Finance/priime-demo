@@ -62,7 +62,7 @@ describe("demoVenues", () => {
       expect(row).toBeDefined();
       expect(discoverAbsence(row)).toBeNull();
       expect(seatedLeverage(row)).toBe(1);
-      expect(row.venueLabel).toBe("Aave USDC · Base");
+      expect(row.venueLabel).toBe("Aave v3 · Base");
     });
   });
 
@@ -81,21 +81,21 @@ describe("demoVenues", () => {
         false,
       );
       // The dock ladder's last rung, at the precision the canvas prints.
-      expect(`${((canvas ?? 0) * 100).toFixed(1)}%`).toBe("4.3%");
-      // And it is NOT the measured day: 4.28% modeled against 3.08% measured.
+      expect(`${((canvas ?? 0) * 100).toFixed(1)}%`).toBe("4.8%");
+      // And it is NOT the measured day: 4.82% modeled against 3.46% measured.
       expect(canvas).not.toBe(today.loop);
-      expect(`${((today.loop ?? 0) * 100).toFixed(1)}%`).toBe("3.1%");
+      expect(`${((today.loop ?? 0) * 100).toFixed(1)}%`).toBe("3.5%");
     });
 
     it("prices the floor lane at the router's own floor number", () => {
       const floorRow = payload.venues.find((v) => v.venue === "treasury-ausdc-base")!.unhedged[0]!;
       expect(publishedNetApy(floorRow, false)).toBe(today.floor);
-      expect(`${((today.floor ?? 0) * 100).toFixed(1)}%`).toBe("3.0%");
+      expect(`${((today.floor ?? 0) * 100).toFixed(1)}%`).toBe("3.3%");
     });
 
     it("leaves the gap the router instrument reads, at two decimals", () => {
       const gapPp = ((today.loop ?? 0) - (today.floor ?? 0)) * 100;
-      expect(gapPp.toFixed(2)).toBe("0.10");
+      expect(gapPp.toFixed(2)).toBe("0.12");
     });
   });
 

@@ -359,6 +359,13 @@
 .vxk-cell{flex:1 1 0;min-width:0;height:10px;border-radius:1px;background:var(--vx-line)}
 .vxk-cell--on{background:var(--vx-blue)}
 .vxk-lab{margin-top:6px;font-size:10.5px;color:var(--vx-faint);letter-spacing:.02em}
+/* THE MEASURED STRIP INSIDE AN INSTRUMENT (2026-09-08): a lane's own history
+   under the reading, in the Performance chart's grammar at a third of its
+   height. The chart's dark rules (`.vx-spark line/text/stop`) already reach
+   it, and the caption is the router clock's own register. */
+.vxs{margin:2px 0 14px}
+.vxs .vx-spark{height:64px}
+.vxs-lab{margin-top:6px;font-size:10.5px;color:var(--vx-faint);letter-spacing:.02em}
 
 .vxe-wrap{position:relative;margin:6px 0 8px}
 .vxe-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;gap:2px}

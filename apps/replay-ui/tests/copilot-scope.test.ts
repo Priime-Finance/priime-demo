@@ -32,7 +32,7 @@ const EM_DASH = "—";
 
 /** The D.1 bytes as ratified. A change here is a deliberate prompt edit.
  *  Moved 2026-09-07 by WP-4: the register went from one live workflow to two. */
-const PROMPT_SHA256 = "540b6383d1d5a307cc5e2cb28d47f5fc9b00675b8018cfbcdda765424cf3de31";
+const PROMPT_SHA256 = "ffda728a57a6842bfb1c1fe13568af856a5092f0f2f2e4c8194e7e4205e5368d";
 
 describe("D.1 the system prompt", () => {
   it("is the ratified bytes", () => {

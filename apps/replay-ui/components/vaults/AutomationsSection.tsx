@@ -35,6 +35,7 @@ import {
   currentHedgeMarginPct,
   currentLeverage,
   currentNetDelta,
+  deleverageDrift,
   deleverageDriftLine,
   fmtHf,
   fmtLev,
@@ -51,22 +52,36 @@ import {
   recordModuleNames,
   recordVenueParts,
   type LeverageAutomation,
+  type RedemptionAutomation,
   type RouterAutomation,
+  type VaultAutomations,
   type VaultRecord,
 } from "@/lib/vaults/store";
 /* MINUS is U+2212, the ledger's one sign glyph for numeric runs; `pct` is the
    product's one % formatter and carries it. An ASCII hyphen beside mono
    tabular digits is the drift the glyph sweep (2026-08-24) removed. */
-import { MINUS, pct } from "@/lib/canvas/format";
+import { MINUS, fmtCapacityUsd, pct, usd } from "@/lib/canvas/format";
 import { openingCase } from "@/lib/canvas/graph-ops";
 import { collarForfeit, type CollarForfeit } from "@/lib/canvas/templates";
 /* The router's two published rates and its measured decisions, each from its
    one owner. The card retypes neither. */
 import { routerPublishedToday } from "@/lib/canvas/router-history";
 import { measuredRouterReplay, routerDayLabel } from "@/lib/canvas/router-replay";
+/* The two lanes' own measured histories: the reserve's unborrowed liquidity
+   under the Redemption route card, the pair's drift under Dynamic leverage.
+   Each from its one owner, each labelled with its own window. */
+import {
+  COLLATERAL_PRICE_PAIR,
+  RESERVE_LIQUIDITY_VENUE,
+  collateralDrift,
+  reserveLiquidityLatest,
+  reserveLiquidityLow,
+  reserveLiquiditySeries,
+} from "@/lib/canvas/lane-history";
 
 import type { CSSProperties } from "react";
 
+import Sparkline from "./Sparkline";
 import { useCountUp } from "./useCountUp";
 import { useInView } from "./useInView";
 
@@ -323,6 +338,128 @@ function routerNoteDay(): string {
 /** `3.00pp`, unsigned, for a threshold that is a magnitude and not a delta. */
 function ppMagnitude(frac: number, dp = 2): string {
   return `${Math.abs(frac * 100).toFixed(dp)}pp`;
+}
+
+/** A pp value already in percent, signed with the ledger's glyph, for the
+ *  drift strip's three printed values. */
+function ppDelta(v: number): string {
+  const rounded = Number(v.toFixed(2));
+  const body = Math.abs(rounded === 0 ? 0 : v).toFixed(2);
+  return `${rounded < 0 ? MINUS : rounded > 0 ? "+" : ""}${body}pp`;
+}
+
+/** The loop lane's pair on a routed record, the record's market otherwise. */
+function loopPairOf(v: VaultRecord): string {
+  return v.automations?.router?.lanes?.find((l) => l.family === "loop")?.market ?? v.market;
+}
+
+/**
+ * THE PAIR'S MEASURED DRIFT UNDER THE ENVELOPE (2026-09-08), as one pure read.
+ *
+ * The card drew the bands and the cascade and nothing that moved: a reader
+ * could see WHERE the trim fires and not whether the pair has ever come near
+ * it. The strip is the pair's own price over the captured window against its
+ * first day, in the same unit the foot states the trigger in, so the two
+ * numbers in the caption are comparable by eye: the worst day the window
+ * held, and how far the cascade's first action sits. Null off the one pair
+ * the capture covers; nothing is drawn from a series the product does not
+ * hold.
+ */
+export interface DriftStrip {
+  /** Percent, oldest first, the first day at zero. */
+  series: number[];
+  label: string;
+}
+
+export function leverageDriftStrip(vault: VaultRecord, lev: LeverageAutomation): DriftStrip | null {
+  if (loopPairOf(vault) !== COLLATERAL_PRICE_PAIR) return null;
+  const d = collateralDrift();
+  if (!d) return null;
+  const trigger = deleverageDrift(lev);
+  const parts = [
+    `${COLLATERAL_PRICE_PAIR}, ${d.days} days from ${routerDayLabel(d.from)}`,
+    `worst day ${ppSigned(d.worst.drift)}`,
+  ];
+  if (trigger !== null) parts.push(`trim after ${ppMagnitude(trigger)}`);
+  return { series: d.points.map((p) => p.drift * 100), label: parts.join(" · ") };
+}
+
+/**
+ * EVERY STRING THE REDEMPTION CARD PRINTS, AS ONE PURE READ, pinned by test
+ * the way the router's is.
+ */
+export interface RedemptionReadout {
+  kicker: string;
+  role: string;
+  settlementText: string;
+  readingLine: string;
+  provenance: string;
+  /** The reserve's unborrowed liquidity, where the capture covers the venue. */
+  strip: { series: number[]; label: string } | null;
+  tableHead: string;
+  rows: { cond: string; val: string; act: string; tone: "tgt" | "del"; lit: boolean }[];
+  foot: { k: string; v: string; href?: string }[];
+}
+
+export function redemptionReadout(
+  r: RedemptionAutomation,
+  bookUsd: number,
+  /** The levered lane's label on a routed record, so the second row can name
+   *  what the router rebuilds; null on a single lane, which prints one row. */
+  routedLoopLabel: string | null,
+): RedemptionReadout {
+  const venueName = r.venueLabel.split("·")[0]?.trim() || r.venueLabel;
+  const latest = r.venue === RESERVE_LIQUIDITY_VENUE ? reserveLiquidityLatest() : null;
+  const low = r.venue === RESERVE_LIQUIDITY_VENUE ? reserveLiquidityLow() : null;
+  const series = latest ? reserveLiquiditySeries() : [];
+  const strip =
+    latest && low && series.length >= 2
+      ? {
+          series,
+          label: `Unborrowed liquidity, ${series.length} days · low ${fmtCapacityUsd(low.usd)} · book ${fmtCapacityUsd(bookUsd)}`,
+        }
+      : null;
+  const readingLine = latest
+    ? `${r.routeLabel} · ${fmtCapacityUsd(latest.usd)} unborrowed in the reserve, measured ${routerDayLabel(latest.date)}`
+    : [r.routeLabel, r.window ?? "runs continuously", r.minUsd !== null ? `minimum ${usd(r.minUsd)}` : null]
+        .filter((x): x is string => typeof x === "string")
+        .join(" · ");
+  const rows: RedemptionReadout["rows"] = [
+    { cond: "Withdrawal request", val: r.settlementText, act: r.routeLabel, tone: "tgt", lit: true },
+  ];
+  if (routedLoopLabel !== null) {
+    rows.push({
+      cond: "Router leaves this lane",
+      val: "same route",
+      act: `Withdraw, then rebuild the ${routedLoopLabel}`,
+      tone: "del",
+      lit: false,
+    });
+  }
+  const foot: RedemptionReadout["foot"] = [
+    { k: "Route", v: r.routeLabel },
+    { k: "Settlement", v: r.settlementText },
+    { k: "Minimum", v: r.minUsd !== null ? usd(r.minUsd) : "none" },
+    { k: "Daily limit", v: r.limitUsd !== null ? usd(r.limitUsd) : "none" },
+  ];
+  if (latest) foot.push({ k: "Unborrowed", v: fmtCapacityUsd(latest.usd) });
+  if (r.marketUrl) {
+    const host = r.marketUrl.replace(/^https?:\/\//, "").split("/")[0] ?? r.marketUrl;
+    foot.push({ k: "Reserve", v: host, href: r.marketUrl });
+  }
+  return {
+    kicker: `${venueName} · Exit`,
+    role: r.laneLabel
+      ? `Leaves the ${r.laneLabel} lane by its published route.`
+      : "Leaves the position by its published route.",
+    settlementText: r.settlementText,
+    readingLine,
+    provenance: r.reading,
+    strip,
+    tableHead: "The route · as the issuer publishes it",
+    rows,
+    foot,
+  };
 }
 
 /**
@@ -691,6 +828,7 @@ function LeverageInstrument({
      omitted rather than dashed: an unmeasured trigger must not render under a
      measured label. */
   const driftText = deleverageDriftLine(lev);
+  const drift = leverageDriftStrip(vault, lev);
 
   const zone = hf < floorHf ? 0 : hf < delevHf ? 1 : leverUpHf !== null && hf > leverUpHf ? 3 : 2;
   const zonePhrase =
@@ -724,6 +862,12 @@ function LeverageInstrument({
           </span>
           <i className="vxe-live">live</i>
         </div>
+        {drift ? (
+          <div className="vxs">
+            <Sparkline series={drift.series} height={64} fill={false} format={ppDelta} />
+            <div className="vxs-lab">{drift.label}</div>
+          </div>
+        ) : null}
         <div className="vxe-wrap">
           <div className="vxe-bar" aria-hidden>
             <span className="vxe-z vxe-z--em" style={{ flexGrow: wEm }} />
@@ -1298,6 +1442,97 @@ function CollarInstrument({
   );
 }
 
+/* ── 7. The redemption route: the exit, its window, the reserve's depth ── */
+
+function RedemptionInstrument({
+  vault,
+  r,
+  bookUsd,
+  routedLoopLabel,
+}: {
+  vault: VaultRecord;
+  r: RedemptionAutomation;
+  bookUsd: number;
+  routedLoopLabel: string | null;
+}) {
+  const { ref, inView } = useInView<HTMLDivElement>();
+  const read = redemptionReadout(r, bookUsd, routedLoopLabel);
+  return (
+    <div ref={ref} className={`vxi${inView ? " vxi--in" : ""}`}>
+      <div className="vxi-head">
+        <div>
+          <span className="vxi-kick">{read.kicker}</span>
+          <h3 className="vxi-title">Redemption route</h3>
+          <p className="vxi-role">{read.role}</p>
+        </div>
+        <ArmedChip vault={vault} />
+      </div>
+      <div className="vxi-body">
+        <div className="vxe-read">
+          <b>{read.settlementText}</b>
+          <span>{read.readingLine}</span>
+          {/* The window is the issuer's own statement, and the tag says so. */}
+          <i className="vxe-modeled">{read.provenance}</i>
+        </div>
+        {read.strip ? (
+          <div className="vxs">
+            <Sparkline series={read.strip.series} height={64} fill={false} format={fmtCapacityUsd} />
+            <div className="vxs-lab">{read.strip.label}</div>
+          </div>
+        ) : null}
+        <div className="vxc">
+          <div className="vxc-k">{read.tableHead}</div>
+          <div className="vxc-rows">
+            {read.rows.map((row, i) => (
+              <div
+                key={row.cond}
+                className={`vxc-row${row.lit ? " vxc-row--on" : ""}`}
+                style={{ "--i": i } as CSSProperties}
+              >
+                <span className={`vxc-dot vxc-dot--${row.tone}`} />
+                <span className="vxc-cond">{row.cond}</span>
+                <b className="vxc-val">{row.val}</b>
+                <span className="vxc-arr">→</span>
+                <span className="vxc-act">{row.act}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="vxi-foot">
+        {read.foot.map((f) => (
+          <span key={f.k}>
+            {f.k} ·{" "}
+            <b>
+              {f.href ? (
+                <a href={f.href} target="_blank" rel="noreferrer">
+                  {f.v}
+                </a>
+              ) : (
+                f.v
+              )}
+            </b>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** ONE note, one voice (founder, 2026-09-07): extended by clause, never
+ *  stacked as a second italic line. */
+function sectionNote(a: VaultAutomations | undefined): string {
+  const parts = ["Envelope, bands and thresholds are the vault's published parameters."];
+  if (a?.router) {
+    parts.push(
+      `The router's rates are modeled from rates measured on ${routerNoteDay()}, and every move it decides starts in shadow.`,
+    );
+  }
+  const reserve = a?.redemption?.venue === RESERVE_LIQUIDITY_VENUE ? reserveLiquidityLatest() : null;
+  if (reserve) parts.push(`The reserve's liquidity is measured on ${routerDayLabel(reserve.date)}.`);
+  return parts.join(" ");
+}
+
 /* ── section ── */
 
 /** Modules that are the position itself, not something running on top of it. */
@@ -1340,6 +1575,7 @@ export default function AutomationsSection({
   /* Or the router prints twice: once as this instrument and once as a prose
      row in `Also installed` 400px below it. */
   if (a?.router) covered.add(ROUTER_MODULE.toLowerCase());
+  if (a?.redemption) covered.add("redemption route");
   // Through the one list the Overview chips print (DL-2), so a module can
   // appear here under no other spelling than the chip it sits beside.
   const others = recordModuleNames(vault).filter((m) => {
@@ -1360,6 +1596,7 @@ export default function AutomationsSection({
 
   const instruments =
     Boolean(a?.router) ||
+    Boolean(a?.redemption) ||
     Boolean(a?.leverage) ||
     Boolean(a?.hedge) ||
     compoundShown ||
@@ -1379,6 +1616,15 @@ export default function AutomationsSection({
           {collar ? <CollarInstrument vault={vault} cfg={collar} nowMs={nowMs} /> : null}
           {a?.hedge ? <HedgeInstrument vault={vault} nowMs={nowMs} /> : null}
           {compoundShown ? <CompoundInstrument vault={vault} nowMs={nowMs} tvlUsd={tvlUsd} /> : null}
+          {/* The exit last: it is the last thing the position does. */}
+          {a?.redemption ? (
+            <RedemptionInstrument
+              vault={vault}
+              r={a.redemption}
+              bookUsd={tvlUsd}
+              routedLoopLabel={a?.router?.lanes.find((l) => l.family === "loop")?.label ?? null}
+            />
+          ) : null}
           {others.length > 0 ? (
             <div className="vx-panel">
               <div className="vx-panel-h">Also installed</div>
@@ -1394,11 +1640,7 @@ export default function AutomationsSection({
               not published parameters, so on a routed record the section's own
               sentence is extended rather than a second italic note stacked
               under it. */}
-          <p className="vxd-note">
-            {a?.router
-              ? `Envelope, bands and thresholds are the vault's published parameters. The router's rates are modeled from rates measured on ${routerNoteDay()}, and every move it decides starts in shadow.`
-              : "Envelope, bands and thresholds are the vault's published parameters."}
-          </p>
+          <p className="vxd-note">{sectionNote(a)}</p>
         </>
       ) : (
         <div className="vx-panel">

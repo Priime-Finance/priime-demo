@@ -36,7 +36,7 @@ const LANES: PublishedLane[] = [
   },
   {
     venue: "treasury-ausdc-base",
-    venueLabel: "Aave USDC · Base",
+    venueLabel: "Aave v3 · Base",
     market: "USDC reserve",
     label: "USDC lending",
     family: "treasury",

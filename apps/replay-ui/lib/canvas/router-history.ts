@@ -89,7 +89,7 @@ export const ROUTER_HISTORY_SOURCES = {
     provider: "DefiLlama yields",
     pool: "7e0661bf-8cf3-45e6-9424-31916d4c7b84",
     url: "https://yields.llama.fi/chart/7e0661bf-8cf3-45e6-9424-31916d4c7b84",
-    label: "Aave v3 Base, USDC reserve, supply APY",
+    label: "Aave v3 Base main market (proto_base_v3), USDC reserve, supply APY",
   },
   loopReward: {
     provider: "DefiLlama yields",
@@ -315,7 +315,7 @@ export function loopPublishedApyByDay(L: number = HERO_SEED_LEVERAGE): readonly 
 // ── The floor lane's published series ─────────────────────────────────────
 
 /** The issuer row R1 names: Aave v3 Base, USDC reserve, the treasury family. */
-export const ROUTER_FLOOR_CANDIDATE_ID = "template:treasury-floor:treasury-ausdc-base:ausdc";
+export const ROUTER_FLOOR_CANDIDATE_ID = "template:treasury-floor:treasury-ausdc-base:usdc";
 
 /** The shipped row, found by id rather than by index. */
 const FLOOR_ROW: HandAuthoredCandidate | null =
@@ -346,7 +346,7 @@ export function floorRowForRate(apy: number): HandAuthoredCandidate | null {
   const register = treasuryIssuerRegisterFor(ROUTER_FLOOR_CANDIDATE_ID);
   const fit = treasuryModel({
     venue: "treasury-ausdc-base",
-    token: "aUSDC",
+    token: "USDC",
     facts: { ...facts, apyMean30d: apy },
     redemption,
     ...(register ? { register } : {}),

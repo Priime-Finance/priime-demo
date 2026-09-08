@@ -39,7 +39,7 @@ export const HERO_MARKET_ID = "morpho-blue-base:8453:USDe-USDC:0x54cf9be5";
  * module is a leaf; `tests/catalog-server.test.ts` pins the two against each
  * other so a rename in templates.ts cannot leave this stale.
  */
-export const FLOOR_MARKET_ID = "template:treasury-floor:treasury-ausdc-base:ausdc";
+export const FLOOR_MARKET_ID = "template:treasury-floor:treasury-ausdc-base:usdc";
 
 /**
  * The register, exact. `label` is the tag (sentence case, two words, no dot);
@@ -96,7 +96,7 @@ export const REVIEW_REASON_COMING_SOON = "a coming-soon module is on this lane";
  * reads as the register.
  */
 export const COPILOT_REJECT_COMING_SOON =
-  "that market is coming soon; only the USDe/USDC loop and the Aave USDC lending reserve are live in this build";
+  "that market is coming soon; only the USDe/USDC loop and the Aave v3 Base USDC reserve are live in this build";
 
 function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;

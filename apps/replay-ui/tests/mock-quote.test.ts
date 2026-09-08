@@ -16,10 +16,10 @@
  * nothing is re-typed to match.
  *
  * The published series on this row, all four stops, for a reader:
- *   1.00x  composed 4.00%  published 3.20%
+ *   1.00x  composed 4.00%  published 3.60%
  *   2.50x  composed 5.35%  published 4.28%
  *   3.00x  composed 5.80%  published 4.64%
- *   3.25x  composed 6.02%  published 4.82%
+ *   3.25x  composed 6.02%  published 5.42%
  * It RISES in leverage, which is why `Install defaults` seats Dynamic leverage
  * and why the demo has an opening move at all. See the install-chain test.
  */
@@ -70,18 +70,18 @@ describe("the demo row", () => {
 
 describe("publishedNetApy on the demo row", () => {
   it.each([
-    [2.5, 0.0428],
-    [3.0, 0.0464],
-    [3.25, 0.0482],
+    [2.5, 0.04815],
+    [3.0, 0.0522],
+    [3.25, 0.05423],
   ])("lands at the fee-inside number at %sx", (L, expected) => {
     const priced = repriceAtLeverage(row, L);
     const published = publishedNetApy(priced, false);
     expect(published).not.toBeNull();
     expect(Math.abs(published! - expected)).toBeLessThan(0.0005);
-    // The venue fact is the same composition with no house fee: 20% of a positive number.
+    // The venue fact is the same composition with no house fee: 10% of a positive number.
     const venue = composedNetApy(priced, false);
     expect(venue).not.toBeNull();
-    expect(published! / venue!).toBeCloseTo(0.8, 10);
+    expect(published! / venue!).toBeCloseTo(0.9, 10);
   });
 
   it("rises in leverage on the typed pair, which is why the dial is offered", () => {
@@ -100,8 +100,8 @@ describe("publishedNetApy on the demo row", () => {
        removed. */
     const published = publishedNetApy(repriceAtLeverage(row, HERO_SEED_LEVERAGE), false)!;
     const measured = routerPublishedToday()!.loop!;
-    expect(published).toBeCloseTo(0.0428, 4);
-    expect(measured).toBeCloseTo(0.0308, 4);
+    expect(published).toBeCloseTo(0.04815, 4);
+    expect(measured).toBeCloseTo(0.0346, 4);
     expect(published).not.toBe(measured);
   });
 });

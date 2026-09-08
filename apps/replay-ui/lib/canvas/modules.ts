@@ -415,7 +415,7 @@ export const MODULE_DEFS: Record<ModuleKey, AxisModuleDef> = {
              The labels are `VENUE_LABELS`' own words (opportunities.ts) and
              not a second spelling — the same convention every row above
              follows. */
-          { value: "treasury-ausdc-base", label: "Aave USDC · Base" },
+          { value: "treasury-ausdc-base", label: "Aave v3 · Base" },
           { value: "treasury-buidl-ethereum", label: "BUIDL · Ethereum" },
           { value: "treasury-usyc-ethereum", label: "USYC · Ethereum" },
           { value: "treasury-ousg-ethereum", label: "OUSG · Ethereum" },

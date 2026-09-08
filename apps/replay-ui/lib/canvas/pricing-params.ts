@@ -20,10 +20,6 @@
  * the price and the published record with it.
  */
 
-/* eslint-disable @typescript-eslint/prefer-optional-chain --
- * Kit-verbatim file, ported from build.priime.finance eb6d33a. The findings
- * are the typed presets reading kit idioms; not rewriting kit logic to satisfy
- * lint, per the integration's own directive (the RackCanvas.tsx precedent). */
 
 import { nodeFor, type LaneFamily } from "./graph-ops";
 import { fbForComposition } from "./mock-quote";
@@ -314,6 +310,11 @@ export interface PublishedModel {
   capacityBinding: string | null;
   chainId: number | null;
   blockNumber: number | null;
+  /** The treasury lane's exit, as the lanes that seat `redemption-route`
+   *  agree on it: which of the issuer's routes, and the window that route
+   *  publishes. Null off every lane without the module. */
+  exitRouteId: string | null;
+  exitSettlementDays: number | null;
 }
 
 /** One lane, as the canvas holds it: its composition plus its live quote. */
@@ -336,17 +337,42 @@ export interface RecordLane {
 }
 
 /**
- * One value across every lane, or null.
+ * One value across the lanes that VOTE, or null.
  *
  * An averaged envelope is not an envelope: two lanes at 2.00x and 4.00x are
  * not a vault at 3.00x, and a vault page drawing one protection band over
- * two different positions is drawing a band that protects neither.
+ * two different positions is drawing a band that protects neither. But a
+ * lane that has no such quantity casts no vote. This used to take EVERY
+ * lane, so on the loop + USDC lending pair the treasury lane voted null on
+ * the loop's leverage and the record published `appliedLeverage: null`,
+ * which the reader takes as a DECLINED envelope: the Dynamic leverage card
+ * fell to an `Also installed` prose row, Parameters lost its envelope rows
+ * and the Verification canvas printed `NOT COMPOSED` on a loop the canvas
+ * had priced at 2.50x (founder, 2026-09-08). The caller now hands in only
+ * the lanes the quantity is a fact about, and those must agree.
  */
 function agreed<T>(lanes: RecordLane[], read: (l: RecordLane) => T | null | undefined): T | null {
   if (lanes.length === 0) return null;
   const head = read(lanes[0]);
   if (head === null || head === undefined) return null;
   return lanes.every((l) => read(l) === head) ? head : null;
+}
+
+/**
+ * A module's dials across the lanes that SEAT it: the one lane's where one
+ * does, the shared value where several do and agree (by content, since these
+ * are objects), null otherwise. A lane without the module casts no vote, for
+ * the reason `agreed` gives.
+ */
+function seated<T>(lanes: RecordLane[], read: (l: RecordLane) => T | null | undefined): T | null {
+  const holders = lanes.filter((l) => {
+    const v = read(l);
+    return v !== null && v !== undefined;
+  });
+  if (holders.length === 0) return null;
+  const head = read(holders[0]) as T;
+  const key = JSON.stringify(head);
+  return holders.every((l) => JSON.stringify(read(l)) === key) ? head : null;
 }
 
 /**
@@ -365,35 +391,39 @@ export function publishedModelRecord(
    *  the size the vault actually opens with. */
   openingTvlUsd = 25_000,
 ): PublishedModel {
-  const single = lanes.length === 1;
-  const first = single ? lanes[0] : null;
-  const hedge = first?.p.hedge ?? null;
-  const compound = first?.p.compound ?? null;
-  /* ONLY THE FAMILY'S OWN PARAMS (MTX-2, founder-approved 2026-09-01).
-     `liqLtv`, `appliedLeverage` and the three HF bands describe the borrow
-     leg only the loop family runs. A dnlp or collar lane's quote still
-     carries all three — `mockQuote` clamps and bands whatever leverage it is
-     handed — and publishing them verbatim stamped the collar record with
-     `appliedLeverage: 2.869` and health bands for a leg that does not exist
-     (the safety-buffer descriptor default, clamped at the lt fallback). Off
-     the loop family the record declines to state them; the reader's
-     `declinedNull` treats that as "no envelope", which is the truth. */
-  const hf = first && first.family === "loop" ? (first.bands?.hf ?? null) : null;
+  /* ONLY THE FAMILY'S OWN PARAMS (MTX-2, founder-approved 2026-09-01), AND
+     ONLY THE FAMILY VOTES (2026-09-08). `liqLtv`, `appliedLeverage` and the
+     three HF bands describe the borrow leg only the loop family runs. A dnlp
+     or collar lane's quote still carries all three, `mockQuote` clamps and
+     bands whatever leverage it is handed, and publishing them verbatim
+     stamped the collar record with `appliedLeverage: 2.869` and health bands
+     for a leg that does not exist. Off the loop family the record declines to
+     state them; the loop lanes that are there vote among themselves. */
+  const loops = lanes.filter((l) => l.family === "loop");
+  const hf = seated(loops, (l) => l.bands?.hf ?? null);
+  /* Each module's dials from the lanes that seat it. A single lane is its own
+     one holder, so a single-lane record is byte for byte what it was. */
+  const hedge = seated(lanes, (l) => l.p.hedge);
+  const compound = seated(lanes, (l) => l.p.compound);
+  const exit = seated(lanes, (l) => l.p.exit);
   /* The HL margin ladder is coin-dependent (`deriveHlMarginBands` off the
      coin's own max leverage) and the canvas payload carries no HL coin
      table, so it exists only when the live reprice rail supplied it. Absent,
      the field publishes null rather than a literal that happens to match one
      coin. The reader's own 13 → 28 backfill is documented as exactly that. */
-  const margin = first?.bands?.margin ?? null;
+  const margin = seated(
+    lanes.filter((l) => l.p.hedge),
+    (l) => l.bands?.margin ?? null,
+  );
   return {
-    liqLtv: agreed(lanes, (l) => (l.family === "loop" ? l.lt : null)),
-    appliedLeverage: agreed(lanes, (l) => (l.family === "loop" ? l.appliedLeverage : null)),
+    liqLtv: agreed(loops, (l) => l.lt),
+    appliedLeverage: agreed(loops, (l) => l.appliedLeverage),
     hfTargetBps: hf?.hfTargetBps ?? null,
     hfDeleverageBps: hf?.hfDeleverageBps ?? null,
     hfFloorBps: hf?.hfFloorBps ?? null,
     hedgeLeverage: hedge?.hedgeLeverage ?? null,
     reserveFraction: hedge?.reserveFraction ?? null,
-    hlCoin: first ? (first.p.hlCoin ?? first.rowHlCoin ?? null) : null,
+    hlCoin: seated(lanes, (l) => l.p.hlCoin ?? l.rowHlCoin ?? null),
     // DERIVED, not tuned (modules.ts R1). The band is a function of the
     // escrow fraction the two hedge dials set and of the size being resized,
     // so it still moves with the composition, and the reader stops falling
@@ -410,5 +440,7 @@ export function publishedModelRecord(
     capacityBinding,
     chainId: agreed(lanes, (l) => l.p.chainId),
     blockNumber: agreed(lanes, (l) => l.blockNumber),
+    exitRouteId: exit?.exitPath ?? null,
+    exitSettlementDays: exit?.settlementDays ?? null,
   };
 }

@@ -46,9 +46,41 @@ import {
   FLOOR_PAIR_TURNOVER_PCT_WEEK,
 } from "@/lib/canvas/floor-pair";
 import type { OrchestratorDials } from "@/lib/canvas/orchestrator/types";
-import { routerRuleSentence, type PublishedLane, type PublishedRouter } from "@/lib/vaults/store";
+import { EXIT_ROUTE_OPTIONS } from "@/lib/canvas/modules";
+import type { LanePricingParams } from "@/lib/canvas/pricing-params";
+import { issuerRedemptionTerms } from "@/lib/canvas/templates";
+import {
+  routerRuleSentence,
+  type PublishedLane,
+  type PublishedLaneExit,
+  type PublishedRouter,
+} from "@/lib/vaults/store";
 
-export type { PublishedLane, PublishedRouter };
+export type { PublishedLane, PublishedLaneExit, PublishedRouter };
+
+/**
+ * THE LANE'S EXIT, AS THE RECORD CARRIES IT (2026-09-08).
+ *
+ * A treasury lane seats `redemption-route`, and until now the record said
+ * nothing about it: the two-lane publish wrote `Lane 1` / `Lane 2` rows and
+ * the vault page listed the module as prose under `Also installed`. The lane
+ * now carries which of the issuer's routes it leaves by and the window THAT
+ * route publishes, read off the issuer's own routes (`issuerRedemptionTerms`)
+ * for the route the builder held, and off the lane's pinned window only where
+ * the issuer no longer lists the route. The label is the issuer's own where it
+ * has one, the module vocabulary's otherwise; nothing here types a figure.
+ */
+export function publishedLaneExit(p: LanePricingParams): PublishedLaneExit | null {
+  const exit = p.exit;
+  if (!exit) return null;
+  const route = issuerRedemptionTerms(p.candidateId)?.routes.find((r) => r.id === exit.exitPath) ?? null;
+  return {
+    routeId: exit.exitPath,
+    routeLabel:
+      route?.label ?? EXIT_ROUTE_OPTIONS.find((o) => o.value === exit.exitPath)?.label ?? exit.exitPath,
+    settlementDays: route ? route.settlementDays : exit.settlementDays,
+  };
+}
 
 /**
  * The router block for a published record, or null when no router is on.

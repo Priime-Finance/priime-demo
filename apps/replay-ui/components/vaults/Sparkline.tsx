@@ -25,12 +25,19 @@ export default function Sparkline({
   height = 120,
   fill = true,
   markPoints = false,
+  format,
 }: {
   series: number[];
   height?: number;
   fill?: boolean;
   markPoints?: boolean;
+  /** How the three printed values (max, min, terminal) read. The share-value
+   *  charts keep the four-decimal default; an instrument strip in dollars or
+   *  in pp passes its own owner's formatter rather than printing
+   *  `18643434.0000`. */
+  format?: (v: number) => string;
 }) {
+  const fmt = format ?? ((v: number) => v.toFixed(4));
   const svgRef = useRef<SVGSVGElement>(null);
   const [w, setW] = useState(320);
   const [seen, setSeen] = useState(false);
@@ -128,10 +135,10 @@ export default function Sparkline({
       {spanRaw > 0 ? (
         <>
           <text x={w - pad - 2} y={rulings[0] - 4} textAnchor="end" fontSize="9" fontFamily={mono} fill="#6f6b63">
-            {max.toFixed(4)}
+            {fmt(max)}
           </text>
           <text x={w - pad - 2} y={rulings[2] + 11} textAnchor="end" fontSize="9" fontFamily={mono} fill="#6f6b63">
-            {min.toFixed(4)}
+            {fmt(min)}
           </text>
         </>
       ) : null}
@@ -164,7 +171,7 @@ export default function Sparkline({
         strokeWidth="2"
         paintOrder="stroke"
       >
-        {last.toFixed(4)}
+        {fmt(last)}
       </text>
     </svg>
   );

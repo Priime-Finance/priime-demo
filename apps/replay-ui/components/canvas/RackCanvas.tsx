@@ -171,7 +171,7 @@ import { seatedPortfolioAllocationsBps, withSeatedAllocations } from "@/lib/canv
    route 500'd on `Cannot access 'CONCENTRATION_BASE_FLOOR_PCT' before
    initialization`. Kept directly under the orchestrator import so the order is
    stated rather than accidental. The cycle itself is not WP-1's to unpick. */
-import { publishedRouter, type PublishedLane } from "@/lib/canvas/published-lanes";
+import { publishedLaneExit, publishedRouter, type PublishedLane } from "@/lib/canvas/published-lanes";
 import { typedRateRows } from "@/lib/canvas/router-history";
 import CopilotPanel from "./CopilotPanel";
 import {
@@ -2296,6 +2296,17 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
             .join(" · "),
         };
       });
+      /* THE LOOP LANE'S OWN ENVELOPE, ON THE ROUTED RECORD (2026-09-08). The
+         record states `appliedLeverage` and `liqLtv` off the loop family now
+         (`publishedModelRecord`), so Parameters prints the same two rows the
+         single-lane record prints, under the same labels, and the page does
+         not lose the leverage the canvas priced the moment a second lane
+         arrives. `VaultDetail` dedupes on the exact label. */
+      params = [
+        ...params,
+        ...(appliedLeverage !== null ? [{ label: APPLIED_LEVERAGE_LABEL, value: levText }] : []),
+        ...(liqLtv !== null ? [{ label: "Liquidation LTV", value: pct(liqLtv) }] : []),
+      ];
     }
     const hasHedge = single && first ? !!nodeFor(first.loop, "hedge") : false;
     const kind: { strategy: StrategyKind; strategyLabel: string; defaultName: string; summary: string } =
@@ -2428,6 +2439,8 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
               family: l.family,
               publishedApy: l.netApy,
               allocationBps: allocBps[l.loop.id] ?? 0,
+              /* The lane's exit, off the issuer's own routes (2026-09-08). */
+              exit: publishedLaneExit(l.p),
             }));
             return { lanes: publishedLanes, router: publishedRouter(orchDials, publishedLanes) };
           })()

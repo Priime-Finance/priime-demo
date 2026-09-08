@@ -64,7 +64,7 @@ export const REGIME_MECHANISM: Record<RegimeId, string> = {
   "incentive-halves":
     "The USDe incentive halves from 2026-07-25, so the loop's reason to exist weakens and the router moves to the floor and stays.",
   "usdc-squeeze":
-    "Aave USDC supply lifts 5pp for 20 days from 2026-08-10, then reverts, so the reverse has to clear the same bar on its own.",
+    "Aave v3 USDC supply lifts 5pp for 20 days from 2026-08-10, then reverts, so the reverse has to clear the same bar on its own.",
   whipsaw:
     "The two published series cross in runs of growing length, so the sustain, the cooldown, the reverse-edge lock and the payback gate each get to refuse.",
 };

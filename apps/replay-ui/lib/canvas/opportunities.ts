@@ -83,7 +83,7 @@ export const VENUE_LABELS: Record<CanvasVenueId, string> = {
      (WP-2 builds it from `vaults-data.json`), not of the venue id: a label
      here that attributes a fund to a manager is a second, unsourced spelling
      of a fact the row already carries. */
-  "treasury-ausdc-base": "Aave USDC · Base",
+  "treasury-ausdc-base": "Aave v3 · Base",
   "treasury-buidl-ethereum": "BUIDL · Ethereum",
   "treasury-usyc-ethereum": "USYC · Ethereum",
   "treasury-ousg-ethereum": "OUSG · Ethereum",

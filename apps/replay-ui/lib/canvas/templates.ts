@@ -54,6 +54,7 @@
 
 import { isHandAuthored, type LoopGraph, type ModuleKey, type PortfolioGraph } from "./types";
 import { pct } from "./format";
+import { venueLabel } from "./labels";
 import {
   isTemplateVenue,
   projectVenueDocV2,
@@ -1166,6 +1167,9 @@ export interface TreasuryIssuerFacts {
   /** Smallest size the issuer accepts into the fund, USD, or null where none
    *  was found in the documents named in `minSubscriptionSource`. */
   minSubscriptionUsd: number | null;
+  /** The venue's own page for the market this row is priced on, where the
+   *  venue has one (Aave's reserve overview). Null on a fund. */
+  marketUrl?: string | null;
   /** The document the subscription minimum was read from, or where it was
    *  looked for and not found. */
   minSubscriptionSource: string;
@@ -1240,10 +1244,16 @@ const TREASURY_ISSUERS: readonly TreasuryIssuer[] = [
        so the route settles same-block and the exit picker states that rather
        than inventing a window. */
     venue: "treasury-ausdc-base",
-    token: "aUSDC",
+    /* THE ASSET, NOT THE RECEIPT (founder, 2026-09-08). The row printed
+       `aUSDC` on every surface and read as a different market from the one
+       the founder pointed at, which is this one: the Aave v3 Base MAIN market
+       (`proto_base_v3`), native USDC 0x8335…9213, the reserve DefiLlama pool
+       7e0661bf reads. The position is the aToken; the market is USDC. */
+    token: "USDC",
     facts: {
-      fundName: "Aave v3 Base, USDC reserve",
-      holds: "USDC supplied to the Aave v3 Base lending pool",
+      fundName: "Aave v3 Base main market, USDC reserve",
+      holds: "USDC supplied to the Aave v3 Base main market (proto_base_v3)",
+      marketUrl: "https://app.aave.com/reserve-overview/?underlyingAsset=0x833589fcd6edb6e08f4c7c32d4f71b54bda02913&marketName=proto_base_v3",
       fundTvlUsd: 18_760_507,
       apyMean30d: 0.0370119,
       volatility30d: 0,
@@ -1263,7 +1273,7 @@ const TREASURY_ISSUERS: readonly TreasuryIssuer[] = [
           window: null,
           reading: "stated",
           source:
-            "Aave v3 withdraw is atomic while the reserve holds unborrowed liquidity. DefiLlama yields, aave-v3 Base USDC pool, supply APY 3.70119% on $18,760,507 supplied, fetched 2026-09-03.",
+            "Aave v3 withdraw is atomic while the reserve holds unborrowed liquidity. DefiLlama yields, aave-v3 Base USDC pool 7e0661bf (proto_base_v3, USDC 0x8335…9213), supply APY 3.70119% on $18,760,507 unborrowed (tvlUsd is supplied minus borrowed), fetched 2026-09-03.",
         },
       ],
       transferRestriction: "None. USDC is freely transferable and the aToken is not permissioned.",
@@ -1281,9 +1291,9 @@ const TREASURY_ISSUERS: readonly TreasuryIssuer[] = [
        and not `fund readings`: the RATE beside it is measured on a later day
        and says so itself. */
     register: {
-      capacityBinding: "the reserve's supplied liquidity",
+      capacityBinding: "the reserve's unborrowed liquidity",
       legLabel: "Reserve supply rate, measured",
-      asOfNote: "Supply depth measured 2026-09-03. No block pinned.",
+      asOfNote: "Unborrowed liquidity measured 2026-09-03. No block pinned.",
     },
   },
   {
@@ -1677,6 +1687,22 @@ export function treasuryIssuerRegisterFor(
   return candidateId ? (treasuryIssuerFor(candidateId)?.register ?? null) : null;
 }
 
+/**
+ * The issuer behind a VENUE, for a reader that holds no candidate id: the
+ * published record names its lane's venue slug (`treasury-ausdc-base`) and,
+ * on a single-lane record, only the venue's label (`Aave USDC · Base`). Both
+ * spellings resolve here, through the one label owner, so the Redemption
+ * route instrument can re-read the issuer's terms off the record alone.
+ */
+export function issuerRedemptionByVenue(
+  venueOrLabel: string | null | undefined,
+): { venue: string; terms: IssuerRedemptionTerms; marketUrl: string | null } | null {
+  const q = (venueOrLabel ?? "").trim();
+  if (!q) return null;
+  const hit = TREASURY_ISSUERS.find((i) => i.venue === q || venueLabel(i.venue) === q);
+  return hit ? { venue: hit.venue, terms: hit.redemption, marketUrl: hit.facts.marketUrl ?? null } : null;
+}
+
 /** The measured fund facts behind this row, or null on every other row. */
 export function treasuryIssuerFacts(
   candidateId: string | null | undefined,
@@ -1712,9 +1738,14 @@ export function settlementDaysOf(terms: IssuerRedemptionTerms): number {
  * plans around; it is the absence of a wait, and the words say so.
  */
 export function settlementWindowValue(route: ExitRoute): string {
-  const d = route.settlementDays;
-  if (d <= 0) return "same day";
-  return `${d} business ${d === 1 ? "day" : "days"}`;
+  return settlementWindowText(route.settlementDays);
+}
+
+/** The same spelling from a bare window, for a record that carries the days
+ *  and not the route object. */
+export function settlementWindowText(days: number): string {
+  if (days <= 0) return "same day";
+  return `${days} business ${days === 1 ? "day" : "days"}`;
 }
 
 /**

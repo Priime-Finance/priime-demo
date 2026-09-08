@@ -47,7 +47,8 @@ import { MINUS, pct, ppMag } from "@/lib/canvas/format";
 import { CATALOG_COMPOSITION, compoundDelta, execDragApr, fB, fbForComposition } from "@/lib/canvas/mock-quote";
 import { deriveHfBands, HF_TARGET_CAP_BPS, hfTargetBpsFor } from "@/lib/canvas/param-schema";
 import { adverseMoveLine, liquidationDistance, liquidationDistanceAtHf } from "@/lib/canvas/liquidation";
-import { MODULE_DEFS, defaultValueFor } from "@/lib/canvas/modules";
+import { EXIT_ROUTE_OPTIONS, MODULE_DEFS, defaultValueFor } from "@/lib/canvas/modules";
+import { issuerRedemptionByVenue, settlementWindowText } from "@/lib/canvas/templates";
 import { EXEC_DRAG_APR } from "@/lib/model-constants";
 import { DEMO_SCOPE } from "@/lib/demo-scope";
 /* THE ROUTER'S NUMBERS HAVE ONE OWNER EACH (plan seam 4). The bar, the
@@ -194,6 +195,12 @@ export interface VaultRecord {
   thresholdUsd?: number | null;
   /** Compound check cadence in hours. */
   compoundCadenceHours?: number | null;
+  /** The treasury lane's exit, as the canvas published it: which of the
+   *  issuer's routes, and the window that route publishes. The two-lane
+   *  publish writes it onto the lane too (`PublishedLane.exit`); it is here
+   *  so a single treasury lane, which carries no `lanes`, still states it. */
+  exitRouteId?: string | null;
+  exitSettlementDays?: number | null;
   /** Raw capacity binding key ("HL book depth", "debt borrow liquidity"). */
   capacityBinding?: string | null;
   /** Chain + block the catalog row was read at. */
@@ -291,6 +298,21 @@ export interface VaultRecord {
  * capture would disagree with the pair the depositor read before publishing.
  * Null on a lane whose composition never priced.
  */
+/**
+ * How a lane leaves its position, as the record carries it (2026-09-08).
+ * Composed by `lib/canvas/published-lanes.publishedLaneExit` off the issuer's
+ * own routes; read by the Redemption route instrument. Absent on every lane
+ * published before the field existed and on every lane without the module.
+ */
+export interface PublishedLaneExit {
+  /** The issuer's route id (`instant-usdc`, `stablecoin-swap`, `issuer-wire`). */
+  routeId: string;
+  /** The route as the issuer names it (`Withdraw to USDC`). */
+  routeLabel: string;
+  /** Business days from request to cash on THAT route. 0 is same day. */
+  settlementDays: number;
+}
+
 export interface PublishedLane {
   /** The venue slug the canvas priced (`morpho-blue-base`, `treasury-ausdc-base`). */
   venue: string;
@@ -306,6 +328,8 @@ export interface PublishedLane {
   publishedApy: number | null;
   /** The lane's share of the book at publish, in basis points. 10000 = the whole book. */
   allocationBps: number;
+  /** The lane's exit, where it seats `Redemption route`. */
+  exit?: PublishedLaneExit | null;
 }
 
 /**
@@ -365,6 +389,8 @@ export type AutomationSource = Pick<
       | "fundingFloorApr"
       | "thresholdUsd"
       | "compoundCadenceHours"
+      | "exitRouteId"
+      | "exitSettlementDays"
     >
   >;
 
@@ -470,6 +496,37 @@ export interface RouterAutomation {
   ruleSentence: string;
 }
 
+/**
+ * The Redemption route instrument's parameters (2026-09-08): the route the
+ * lane leaves by and the window it publishes, both the RECORD's, plus the
+ * issuer's own terms for that route, re-read from the issuer by venue so the
+ * card can print the minimum, the daily limit and the document without the
+ * record carrying a copy of them. A route the issuer no longer lists keeps
+ * the record's id under the module vocabulary's label and publishes no terms.
+ */
+export interface RedemptionAutomation {
+  /** The venue slug the lane runs on, or null where the record names none. */
+  venue: string | null;
+  /** The lane's own label (`USDC lending`), null on a single-lane record. */
+  laneLabel: string | null;
+  venueLabel: string;
+  market: string;
+  routeId: string;
+  routeLabel: string;
+  settlementDays: number;
+  /** `same day`, `1 business day`: the one spelling the Parameters row uses. */
+  settlementText: string;
+  minUsd: number | null;
+  limitUsd: number | null;
+  /** The business-day or business-hours constraint, or null where the route runs continuously. */
+  window: string | null;
+  reading: "measured" | "stated";
+  /** The issuer document the route is read from, or null. */
+  source: string | null;
+  /** The venue's own page for the market, where it has one. */
+  marketUrl: string | null;
+}
+
 export interface VaultAutomations {
   leverage: LeverageAutomation | null;
   hedge: HedgeAutomation | null;
@@ -480,6 +537,8 @@ export interface VaultAutomations {
    * type and `loadUserVaults` does not have to rewrite it.
    */
   router?: RouterAutomation | null;
+  /** ABSENT on every record written before the exit existed, like `router`. */
+  redemption?: RedemptionAutomation | null;
 }
 
 export interface PositionRecord {
@@ -1011,6 +1070,8 @@ export interface PublishInput
       | "exogenousParams"
       | "failedGates"
       | "gatesTotal"
+      | "exitRouteId"
+      | "exitSettlementDays"
       /* THE ROUTED RECORD (plan R5, seam 1). Declared on `VaultRecord` above
          and admitted here so the canvas writes the two fields through the
          same door as every other record field, rather than widening the
@@ -1564,7 +1625,44 @@ export function deriveAutomations(v: AutomationSource): VaultAutomations {
     };
   }
 
-  return { leverage, hedge, compound, router };
+  // ── the redemption route ───────────────────────────────────────────────
+  //
+  // Seated iff the module is on the record AND a route is stated: the routed
+  // lane's own `exit` first, the record's top-level pair on a single treasury
+  // lane. The record's route and window win; the issuer supplies the rest.
+  let redemption: RedemptionAutomation | null = null;
+  if (has("Redemption route")) {
+    const lane = lanes.find((l) => l.exit) ?? null;
+    const routeId =
+      lane?.exit?.routeId ?? (typeof v.exitRouteId === "string" && v.exitRouteId ? v.exitRouteId : null);
+    const days = lane?.exit?.settlementDays ?? finite(v.exitSettlementDays);
+    if (routeId !== null && days !== null) {
+      const issuer = issuerRedemptionByVenue(lane?.venue ?? v.venue);
+      const route = issuer?.terms.routes.find((r) => r.id === routeId) ?? null;
+      redemption = {
+        venue: lane?.venue ?? issuer?.venue ?? null,
+        laneLabel: lane?.label ?? null,
+        venueLabel: lane?.venueLabel ?? v.venue,
+        market: lane?.market ?? v.market,
+        routeId,
+        routeLabel:
+          lane?.exit?.routeLabel ??
+          route?.label ??
+          EXIT_ROUTE_OPTIONS.find((o) => o.value === routeId)?.label ??
+          routeId,
+        settlementDays: days,
+        settlementText: settlementWindowText(days),
+        minUsd: route?.minUsd ?? null,
+        limitUsd: route?.limitUsd ?? null,
+        window: route?.window ?? null,
+        reading: route?.reading ?? "stated",
+        source: route?.source ?? null,
+        marketUrl: issuer?.marketUrl ?? null,
+      };
+    }
+  }
+
+  return { leverage, hedge, compound, router, redemption };
 }
 
 /**
@@ -1795,6 +1893,9 @@ const CANVAS_VOCAB: Record<string, string> = {
   "auto-center": "Recenters the liquidity range when price walks toward an edge, so fees keep accruing.",
   "covered-call": "Writes calls above spot and rolls them on cadence. The premium is the income.",
   "protective-put": "Holds puts below spot, funded by the written calls, so the position has a floor.",
+  /* Absent until 2026-09-08, so the vault page printed the BUILDER's tagline
+     (`Turns the issuer position back into cash`) to a depositor. */
+  "redemption-route": "Leaves the position by the route its issuer publishes, on the window that route states.",
 };
 
 /** Modules that live outside MODULE_DEFS (funding canvas, orchestrator). */
