@@ -43,6 +43,42 @@ lanes become file-disjoint. This is what makes parallel work safe.
   Base mainnet rows below, labelled as history, keeping their working links.
 - **Deploy targets.** `TARGET=fork` and `TARGET=mainnet`. No Sepolia.
 
+## Outcome
+
+All four stages below landed. Four commits carry the merge: `749b593`
+(Stage 1, mechanical merge), `17c35fc` (Stage 1.5), `3a477de` (Stage 2 wave
+1, lanes B and C), `5540fbc` (Stage 2 wave 1, lane E). Lane D (this update,
+plus `docs/plans/README.md`) is Stage 2 wave 2.
+
+Lane A never ran as its own agent lane; Stage 1.5 absorbed it directly (see
+that stage below), because the wallet adapter and the live-loop identity are
+what every later lane's shared contract depends on, and a fan-out onto an
+unfrozen contract was the failure mode the plan exists to avoid.
+
+Three integration decisions were taken beyond what "Decisions taken" above
+anticipated, once B, C and E were actually building against each other:
+
+- **A live loop's address.** `apps/replay-ui/lib/vaults/live-id.ts` is the
+  seam. loop-server mints ids as `loop-<8 hex>`, already slug-shaped and
+  already distinct from every seed slug, so a live loop is reachable at
+  `/vaults/loop-xxxxxxxx` with no prefix and no translation layer. Lane B's
+  `PublishFlow` writes the destination (`liveLoopHref`); Lane C's
+  `VaultDetail` reads it (`isLiveLoopSlug`); neither spells the pattern
+  itself.
+- **Two separate registers.** A real publish through `PublishFlow` no
+  longer writes `lib/vaults/store.ts` at all: it POSTs to loop-server and
+  redirects to the live address above. The showcase (seed vaults, plus
+  whatever a composer session writes to the local store) and a real
+  on-chain deployment are two distinct records with no overlap by
+  construction; a live loop was never in the store to begin with.
+- **The nine captured Base mainnet rows stay on the showcase only.** D3
+  above planned two labelled sources on a live loop's Activity section; the
+  actual call, made while building Lane C, pulled the nine rows back out
+  entirely. They are evidence about the mechanism (a capture of another
+  handler, on another chain, at another time) rather than about a specific
+  deployment, so a freshly deployed loop with zero strikes now says so
+  honestly instead of borrowing someone else's history to look less empty.
+
 ---
 
 ## Stages
@@ -113,7 +149,7 @@ rather than repair.
 | **B. Publish** | 1 | Swap `publishVault()` for `publishLoopToServer()` in `PublishFlow`. Re-apply Jakub's `candidateId` + `targetLeverage` draft hunk onto Antoni's rewritten `RackCanvas`. Map `LoopValidationError` onto Antoni's `failed` phase. Push the identity Stage 1.5 fixed. | `components/canvas/PublishFlow.tsx`, `components/canvas/RackCanvas.tsx` | Opus |
 | **C. Vault page** | 1 | Biggest lane. Teach Antoni's `VaultDetail` to render a live loop from `/api/loops`, in Antoni's own markup. Mount live loops in `VaultsDirectory` using Antoni's card language. Two-source `ActivitySection` per D3. Delete Jakub's `LiveVaultDetail` / `LiveVaultsSection` markup, keep `live-source.ts`. Drop the dead `/vaults/live/[id]` route. | `components/vaults/**`, `app/vaults/**`, `vaults.css` | Opus |
 | **E. Deploy targets** | 1 | Introduce `deploy/targets/{fork,mainnet}.json` and `TARGET=`. Move the three anvil cheat codes behind one `fund_account()` that branches on target: `enter-loop.sh:108` (impersonates Morpho Blue to fund the depositor), `vault-service.sh:219` (`anvil_setBalance` for operator gas), `anvil_mine`. Nothing else in the scripts is anvil-specific. **Needs Jakub's review before landing.** | `deploy/**` | Opus |
-| **D. Docs** | 2 | `docs/plans/LATEST_UI_PORT_SPEC.md`, `ROUTER_QUANT.md` and `TYPE_SYSTEM_RULING.md` are cited across dozens of source comments and were never committed. Commit them or rewrite the citations. Grep sweep to prove none dangle. Runs after Wave 1 because it edits comments in B and C's files. | `docs/`, comment-only edits | Sonnet |
+| **D. Docs** | 2 | Six planning documents (`LATEST_UI_PORT_SPEC.md`, `ROUTER_LANE_PLAN.md`, `ROUTER_QUANT.md`, `ROUTER_RECETTE.md`, `MODULE_INSTRUMENTS_RESUME.md`, `strategy-factory-plan.md`, 77 citations across 59 files) are cited from `docs/plans/` and were never committed; `TYPE_SYSTEM_RULING.md`, named when this row was planned, is no longer cited anywhere (`b9a7330` finished that ruling by hand, in code, rather than leaving it behind a citation). Landed as `docs/plans/README.md`: one entry per document naming what it governs and that committing the originals is on Antoni, rather than rewriting 77 carefully written citations. Also refreshed this document and `docs/LIVE_DEMO.md` for Lane E's deploy targets. | `docs/`, no source comments touched | Sonnet |
 
 ## Gates
 
@@ -171,8 +207,11 @@ excluded from NAV, and currently the hardcoded placeholder
 cannot agree on the comparison. Solve that first or the rest is unbuildable.
 
 **5. `componentDigest` is all zeros** unless `COMPONENT_DIGEST` is set
-(`env.ts`). That field exists so anyone can re-verify the component. Set it in
-`run-live-demo.sh`.
+(`env.ts`). That field exists so anyone can re-verify the component. **Done
+for the one-shot path:** Lane E's `deploy/run-live-demo.sh` now reads the
+digest out of the deployed `service.json` and sets it. Still open for the
+manual, per-shell loop-server startup in `docs/LIVE_DEMO.md`, which does not
+set it and so still prints an all-zeros digest.
 
 **6. The router's friction bar.** Antoni derives a 1.51pp bar from a 0.19%
 one-way friction estimate. Unwinding 5x leverage is 7 turns of Aerodrome swaps
@@ -185,3 +224,26 @@ mock tokens, a mock market, a mock oracle and a mock pool. That is more fakery
 than the mainnet fork, not less. If a narrow contract-only harness for deposit
 and redemption mechanics is wanted later, that is a different thing and should
 be named separately.
+
+**8. `VAULT_SERVICE_JSON`'s default is not target-aware.**
+`apps/loop-server/src/env.ts` defaults it to
+`deploy/.fork/vault-service.json` unconditionally, regardless of `TARGET`.
+Every caller that needs it under `TARGET=mainnet`
+(`deploy/run-live-demo.sh`) works around this by passing the variable
+explicitly, so the demo runs correctly either way, but the default itself
+is a trap: invoke the loop server against `TARGET=mainnet` without
+remembering the override and it silently reads fork state instead of
+failing loudly. Either make the default target-aware or drop it and require
+the variable outright, matching the `required()` idiom the rest of `env.ts`
+already uses for mainnet secrets.
+
+**9. Antoni's "Publish without connecting" affordance is gone, and his
+documented walkthrough of the composer is now stale.** Lane B removed it:
+under a real publish the connected address becomes the deployed vault's
+strategist (its exit key), so a publish with no wallet connected has
+nothing to do but fail, and a key whose only reachable outcome is a failure
+card is worse than no key at all (`components/canvas/PublishFlow.tsx`,
+header comment). This is a deliberate product departure from Antoni's own
+walkthrough, flagged for him rather than resolved unilaterally. His
+walkthrough needs updating, or his sign-off on the change, before it's
+treated as current.
