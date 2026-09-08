@@ -12,9 +12,25 @@
  * sort=apy, both deterministic, so hydration never mismatches on structure.
  * localStorage-derived numerals carry suppressHydrationWarning and refresh on
  * the post-mount reload.
+ *
+ * DEPLOYED LOOPS (integration Lane C, docs/INTEGRATION_PLAN.md D2). A loop
+ * loop-server actually deployed is a record on this floor too, and it gets
+ * Antoni's card, not a section of its own: the register is carried by what
+ * the card SAYS, not by parking it below the grid under a different
+ * stylesheet. Its headline is the strike cadence rather than an APY, because
+ * a deployment publishes a cadence and does not publish an APY. It sorts
+ * ahead of every seeded record under every key: a thing that is running
+ * outranks a thing that was priced. The fetch is post-mount and its failure
+ * is silent by design (a 502 is the expected state with loop-server down), so
+ * the server render and the first client render are the seed catalog exactly
+ * as they were before this lane.
  */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import type { LoopRecord } from "@priime-demo/loop-deploy";
+import { truncateAddress } from "@/lib/format";
+import { fetchLoops } from "@/lib/vaults/live-source";
+import { cadenceText, marketWords, readLoopConfig } from "./live-loop";
 import { SEED_VAULTS } from "@/lib/vaults/seeds";
 import { useBuildHref } from "@/lib/host";
 import { COMING_SOON } from "@/lib/demo-scope";
@@ -41,10 +57,10 @@ import { useCountUp } from "./useCountUp";
 import { useInView } from "./useInView";
 import { MarketWord } from "./MarketWord";
 
-/** `incubating` joins the two non-strategy cohorts. Like `mine`, its chip is
- *  rendered only while at least one record is in it, so the bar never offers
- *  a filter that empties the grid. */
-type DirFilter = "all" | "mine" | "incubating" | StrategyKind;
+/** `incubating` and `deployed` join the two non-strategy cohorts. Like `mine`,
+ *  their chips are rendered only while at least one record is in them, so the
+ *  bar never offers a filter that empties the grid. */
+type DirFilter = "all" | "mine" | "incubating" | "deployed" | StrategyKind;
 type DirSort = "apy" | "tvl" | "new";
 
 /** Stable chip order for the known strategy kinds; the rendered chip list
@@ -343,9 +359,100 @@ function VaultCard({ v, i, live }: { v: VaultRecord; i: number; live: boolean })
   return <LiveCard v={v} i={i} live={live} />;
 }
 
+/**
+ * A DEPLOYED loop's card: the same anatomy, filled only with facts
+ * loop-server stored.
+ *
+ * The headline slot holds the STRIKE CADENCE. The slot is the card's biggest
+ * number and on every other card it holds a modeled APY; a deployment has no
+ * modeled APY, and the honest options were to leave the slot empty or to give
+ * it the loudest thing the server does know. The cadence is that thing, and
+ * its caption names it, so the slot never reads as a yield.
+ *
+ * NO NAV ON THE CARD, on purpose. The NAV is attested and would be the better
+ * headline, but it lives in the journal feed, one request per loop; a
+ * directory that fanned out N journal requests to fill N cards would make the
+ * floor's load time a function of how many loops exist. The NAV is one click
+ * away on the loop's own page, where a single feed answers for it.
+ *
+ * The strip slot states what it is NOT drawing. A blank there would read as a
+ * curve that has not loaded.
+ */
+function DeployedLoopCard({ loop, i }: { loop: LoopRecord; i: number }) {
+  const config = readLoopConfig(loop.configJson);
+  const candidateId = config?.candidateId ?? null;
+  const market = candidateId === null ? null : marketWords(candidateId);
+  const cronSeconds = config?.cronSeconds ?? null;
+  const cadence = cronSeconds === null ? null : cadenceText(cronSeconds);
+  return (
+    <a
+      className="vx-card vx-card--dir"
+      href={`/vaults/${loop.id}`}
+      style={{ "--i": Math.min(i, 11) } as CSSProperties}
+    >
+      <StrategyGlyph kind="loop" />
+      <div className="vx-card-top">
+        <span className="vx-card-name">{loop.name}</span>
+        <span className="vx-tag">Deployed</span>
+      </div>
+      <span className="vx-card-mkt">
+        {market === null ? (
+          "market as configured"
+        ) : (
+          <>
+            <MarketWord market={market.pair} /> · {market.venue}
+          </>
+        )}
+      </span>
+      {/* Absent, not zeroed, on the one shape that cannot happen through the
+          server's own validator: a stored config with no cadence in it. */}
+      {cadence === null ? null : (
+        <div className="vx-card-apy">
+          <b>{cadence}</b>
+          <i>strike cadence</i>
+        </div>
+      )}
+      <div className="vx-ds-slot">
+        <SparkInception note="attested on chain, no modeled curve" />
+      </div>
+      <div className="vx-card-rows">
+        <span className="vx-cell">
+          <i>Loop id</i>
+          <b>{loop.id}</b>
+        </span>
+        <span className="vx-cell">
+          <i>Handler</i>
+          <b>{loop.handlerAddress === null ? "pending" : truncateAddress(loop.handlerAddress)}</b>
+        </span>
+        <span className="vx-cell">
+          <i>Status</i>
+          <b>{loop.status}</b>
+        </span>
+      </div>
+      <div className="vx-card-cur">
+        <span>
+          Strategist <b>{truncateAddress(loop.strategist)}</b>
+        </span>
+        {/* The green heartbeat is granted to `active` only. A deploy still
+            walking its steps, or one that failed, says which in the neutral
+            stage pill rather than borrowing the live chip. */}
+        {loop.status === "active" ? (
+          <span className="vx-card-live">Live</span>
+        ) : (
+          <span className="vx-card-stage">{loop.status}</span>
+        )}
+      </div>
+    </a>
+  );
+}
+
 export default function VaultsDirectory() {
   const buildHref = useBuildHref();
   const [vaults, setVaults] = useState<VaultRecord[]>(SEED_VAULTS);
+  /* Deployed loops, newest first. Empty on the server render and until the
+     first fetch answers, which is also the resting state when loop-server is
+     down: the floor is the seed catalog, exactly as it was. */
+  const [loops, setLoops] = useState<LoopRecord[]>([]);
   const [live, setLive] = useState(false);
   const [filter, setFilter] = useState<DirFilter>("all");
   const [sort, setSort] = useState<DirSort>("apy");
@@ -369,15 +476,39 @@ export default function VaultsDirectory() {
     };
   }, []);
 
+  /* The deployed loops, once. A 502 is the EXPECTED answer with loop-server
+     paused, so the failure is silent: the floor keeps the seed catalog rather
+     than showing a reader an error about a backend they did not ask about.
+     Sorted newest first, which is the order a builder who just published
+     wants: their loop is the first card on the page. */
+  useEffect(() => {
+    let alive = true;
+    fetchLoops()
+      .then((r) => {
+        if (alive) setLoops([...r.loops].sort((a, b) => b.createdAt - a.createdAt));
+      })
+      .catch(() => {
+        if (alive) setLoops([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: vaults.length, mine: 0, incubating: 0 };
+    const c: Record<string, number> = {
+      all: vaults.length + loops.length,
+      mine: 0,
+      incubating: 0,
+      deployed: loops.length,
+    };
     for (const v of vaults) {
       c[v.strategy] = (c[v.strategy] ?? 0) + 1;
       if (v.mine) c.mine += 1;
       if (vaultStage(v) === "incubating") c.incubating += 1;
     }
     return c;
-  }, [vaults]);
+  }, [vaults, loops]);
 
   // Chips derive from the catalog: All + one chip per strategy kind that
   // actually exists, labeled by the kind's own strategyLabel. Strategy chips
@@ -399,7 +530,9 @@ export default function VaultsDirectory() {
           ? vaults.filter((v) => v.mine)
           : filter === "incubating"
             ? vaults.filter((v) => vaultStage(v) === "incubating")
-            : vaults.filter((v) => v.strategy === filter);
+            : filter === "deployed"
+              ? []
+              : vaults.filter((v) => v.strategy === filter);
     const by: Record<DirSort, (a: VaultRecord, b: VaultRecord) => number> = {
       apy: (a, b) => b.modeledApy - a.modeledApy,
       tvl: (a, b) => vaultTvlUsd(b) - vaultTvlUsd(a),
@@ -407,6 +540,14 @@ export default function VaultsDirectory() {
     };
     return partitionForDirectory(filtered, by[sort]);
   }, [vaults, filter, sort]);
+
+  /* THE DEPLOYED LOOPS ARE NOT SORTED WITH THE CATALOG, and cannot be: every
+     sort key here reads a modeled field (`modeledApy`, `vaultTvlUsd`) that a
+     deployment does not have, and a record with no APY sorted by APY lands
+     wherever `undefined` lands. They keep their own order, newest first, and
+     they lead. A `deployed` filter shows them alone; a strategy filter is a
+     question about a composition and shows none of them. */
+  const shownLoops = filter === "all" || filter === "deployed" ? loops : [];
 
   // The count line, each number from its owner: live records from the stage,
   // the NAV from the journal, coming soon from the register.
@@ -445,6 +586,18 @@ export default function VaultsDirectory() {
               </>
             )}{" "}
             · <b className="num">{soonCount}</b> {COMING_SOON.prose}
+            {/* The deployed clause joins the sentence only once a deployment
+                exists, so the line is unchanged with loop-server down. It is
+                its own clause rather than folded into the live count: those
+                are attested captures, these are running deployments, and one
+                figure cannot answer for both. */}
+            {loops.length > 0 ? (
+              <>
+                {" "}
+                · <b className="num">{loops.length}</b> deployed{" "}
+                {loops.length === 1 ? "loop" : "loops"}
+              </>
+            ) : null}
           </p>
         </div>
         <a className="vx-cta" href={buildHref}>
@@ -488,6 +641,20 @@ export default function VaultsDirectory() {
               <CountBadge n={counts.incubating} />
             </button>
           ) : null}
+          {/* Same idiom as Yours and the incubating chip: rendered only while
+              the cohort has something in it, so the bar never offers a filter
+              that empties the grid. With loop-server down it is not there. */}
+          {counts.deployed > 0 ? (
+            <button
+              type="button"
+              className={`vx-chip${filter === "deployed" ? " on" : ""}`}
+              aria-pressed={filter === "deployed"}
+              onClick={() => pickFilter("deployed")}
+            >
+              Deployed
+              <CountBadge n={counts.deployed} />
+            </button>
+          ) : null}
         </div>
         <div className="vx-dir-sort">
           <i className="vx-dir-sort-k">sort</i>
@@ -511,7 +678,12 @@ export default function VaultsDirectory() {
           cards and the cascade re-runs (faster on re-entry via
           .vx-grid--re; the mine bloom stays first-load-only). */}
       <div key={`${filter}-${sort}`} className={`vx-grid${interacted ? " vx-grid--re" : ""}`}>
-        {shown.length === 0 ? (
+        {/* Deployed loops lead the grid: the cascade index continues into the
+            catalog below so the entrance reads as one wave, not two. */}
+        {shownLoops.map((loop, i) => (
+          <DeployedLoopCard key={loop.id} loop={loop} i={i} />
+        ))}
+        {shown.length === 0 && shownLoops.length === 0 ? (
           <div className="vx-dir-empty">
             <i>Nothing here yet.</i>
             <button type="button" className="vx-chip" onClick={() => pickFilter("all")}>
@@ -519,13 +691,15 @@ export default function VaultsDirectory() {
             </button>
           </div>
         ) : (
-          shown.map((v, i) => <VaultCard key={v.slug} v={v} i={i} live={live} />)
+          shown.map((v, i) => (
+            <VaultCard key={v.slug} v={v} i={i + shownLoops.length} live={live} />
+          ))
         )}
         {/* The blank-canvas invite: always last, excluded from counts. */}
         <a
           className="vx-card vx-card--new"
           href={buildHref}
-          style={{ "--i": Math.min(shown.length, 11) } as CSSProperties}
+          style={{ "--i": Math.min(shown.length + shownLoops.length, 11) } as CSSProperties}
         >
           <i>Your strategy belongs here</i>
           <span className="vx-cta">Compose a vault</span>

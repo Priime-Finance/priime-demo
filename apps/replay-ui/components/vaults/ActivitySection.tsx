@@ -28,6 +28,21 @@
  * table never mixes a modeled `Leverage rebalanced` with a real execution.
  * Rows with no transaction (a deposit on this build is a local record until
  * the backend wires it) print an empty cell, never a dead key.
+ *
+ * TWO SOURCES, ONE RENDERER (integration D3, docs/INTEGRATION_PLAN.md). A
+ * deployed loop's page (`LiveLoopDetail`) prints its own attested strikes,
+ * mapped onto the SAME `OnchainExecution` shape the captured Base rows use,
+ * and the captured rows below them under their own caption. So the table
+ * body lives in `ActivityTable` and both callers hand it `LedgerRow`s; there
+ * is no second activity table in the product.
+ *
+ * A ROW'S VERIFY KEY IS A PROPERTY OF ITS CHAIN, not of having a hash. The
+ * captured rows settled on Base mainnet, which has Basescan; a deployed
+ * loop's strikes settle on the local fork (31337), which has no explorer at
+ * all (`lib/format.ts` leaves it out of `EXPLORER_BASE_URLS` deliberately).
+ * So the row carries the chain it landed on, `verifyHref` asks that chain,
+ * and a table whose rows can never answer prints no Verify column rather
+ * than a column of blanks.
  */
 
 import { useMemo } from "react";
@@ -42,7 +57,11 @@ import {
 } from "@/lib/vaults/store";
 import { MINUS } from "@/lib/canvas/format";
 import { explorerTxUrl } from "@/lib/format";
-import { EXECUTION_CHAIN_ID, onchainExecutionsFor } from "@/lib/vaults/onchain-executions";
+import {
+  EXECUTION_CHAIN_ID,
+  onchainExecutionsFor,
+  type OnchainExecution,
+} from "@/lib/vaults/onchain-executions";
 import { collarConfig, collarRollTimes, rangeConfig, rangeRecenterTimes } from "./AutomationsSection";
 /* The relocation rows come from the SAME fold the router instrument reads, so
    the ledger and the instrument foot can never name two different last moves. */
@@ -56,11 +75,23 @@ import type { CSSProperties } from "react";
 const MAX_ROWS = 8;
 
 /** The store's row plus the reader's withdrawals and the chain's executions. */
-type LedgerRow = Omit<ActivityRow, "kind"> & {
+export type LedgerRow = Omit<ActivityRow, "kind"> & {
   kind: ActivityRow["kind"] | "withdraw" | "onchain" | "router";
   /** The transaction that is this row's proof, where one exists. */
   txHash?: string;
+  /**
+   * The chain that transaction landed on. Absent on every row that carries no
+   * transaction; `EXECUTION_CHAIN_ID` on the captured Base rows, and the
+   * journal's own `attestation.chain_id` on a deployed loop's strikes.
+   */
+  chainId?: number;
 };
+
+/** The explorer page that proves this row, or null when its chain has none. */
+export function verifyHref(row: Pick<LedgerRow, "txHash" | "chainId">): string | null {
+  if (row.txHash === undefined || row.chainId === undefined) return null;
+  return explorerTxUrl(row.chainId, row.txHash);
+}
 
 /** True when the detail line states a negative dollar amount. */
 function statesNegativeMoney(detail: string): boolean {
@@ -87,6 +118,28 @@ export const EXECUTION_ACTION = "Execution landed";
 /** `signed packet accepted · block 50,208,131` */
 export function executionDetail(blockNumber: number): string {
   return `signed packet accepted · block ${blockNumber.toLocaleString("en-US")}`;
+}
+
+/**
+ * THE ONE MAPPING from a handler call to a ledger row, whatever its source.
+ *
+ * The captured Base rows and a deployed loop's attested strikes are the same
+ * event seen twice: an operator signed a packet, the handler checked the
+ * signature and acted. So they read identically here, and the only thing that
+ * separates them on the page is the caption over the table they sit in and
+ * whether their chain has an explorer for the Verify key.
+ */
+export function executionRows(
+  executions: readonly (OnchainExecution & { chainId: number })[],
+): LedgerRow[] {
+  return executions.map((x) => ({
+    action: EXECUTION_ACTION,
+    detail: executionDetail(x.blockNumber),
+    ms: x.timestamp * 1000,
+    kind: "onchain" as const,
+    txHash: x.txHash,
+    chainId: x.chainId,
+  }));
 }
 
 /**
@@ -174,9 +227,7 @@ export function routerActivityRows(vault: VaultRecord): LedgerRow[] {
   return out;
 }
 
-function VerifyKey({ txHash }: { txHash: string }) {
-  const href = explorerTxUrl(EXECUTION_CHAIN_ID, txHash);
-  if (href === null) return null;
+function VerifyKey({ href, txHash }: { href: string; txHash: string }) {
   return (
     <a
       className="vxa-verify"
@@ -191,6 +242,96 @@ function VerifyKey({ txHash }: { txHash: string }) {
         <path d="M2 8 8 2M3.5 2H8v4.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </a>
+  );
+}
+
+/**
+ * THE LEDGER BODY, the one renderer both sources go through.
+ *
+ * It owns the row cap, the truncation line, the tag register and the Verify
+ * column's existence; it owns no row building at all, so a caller cannot
+ * change how a row is PRINTED by changing where its rows come from. That is
+ * what keeps a deployed loop's strikes and the captured Base rows reading as
+ * the same kind of fact.
+ *
+ * `empty` is the caller's own sentence for a table with nothing in it, because
+ * only the caller knows what the absence means: a vault always has a publish
+ * row, a freshly deployed loop legitimately has no landed strike yet.
+ */
+export function ActivityTable({
+  rows,
+  nowMs,
+  empty,
+}: {
+  rows: readonly LedgerRow[];
+  nowMs: number;
+  empty?: string;
+}) {
+  const visible = rows.slice(0, MAX_ROWS);
+  const truncated = rows.length > MAX_ROWS;
+  /* The Verify column exists only where a row can fill it. A column of empty
+     cells on a record with no chain ledger is chrome, and so is one on a
+     chain with no explorer to open. */
+  const verifiable = rows.some((r) => verifyHref(r) !== null);
+
+  if (rows.length === 0 && empty !== undefined) {
+    return (
+      <div className="vx-table-wrap">
+        <div className="vxa-none">{empty}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="vx-table-wrap">
+      <table className={`vx-table vxa-table${verifiable ? " vxa-table--verify" : ""}`}>
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Detail</th>
+            <th>Time</th>
+            {verifiable ? <th className="vxa-col-verify">Verify</th> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((r, i) => {
+            const href = verifyHref(r);
+            return (
+              <tr key={`${r.kind}-${r.ms}-${i}`} style={{ "--i": Math.min(i, 11) } as CSSProperties}>
+                <td className="vxa-action">
+                  {r.action}
+                  {r.mine ? <span className="vxa-tag vxa-tag--you">you</span> : null}
+                  {r.kind === "auto" || r.kind === "router" ? (
+                    <span className="vxa-tag">modeled</span>
+                  ) : null}
+                  {r.kind === "onchain" ? <span className="vxa-tag vxa-tag--chain">on chain</span> : null}
+                </td>
+                <td className="vxa-detail">
+                  {detailFigureSpans(r.detail).map((part, j) =>
+                    part.num ? (
+                      <span key={j} className="num">
+                        {part.text}
+                      </span>
+                    ) : (
+                      <span key={j}>{part.text}</span>
+                    ),
+                  )}
+                </td>
+                <td className="vxa-time num">{relTime(r.ms, nowMs)}</td>
+                {verifiable ? (
+                  <td className="vxa-col-verify">
+                    {href !== null && r.txHash !== undefined ? (
+                      <VerifyKey href={href} txHash={r.txHash} />
+                    ) : null}
+                  </td>
+                ) : null}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {truncated ? <div className="vxa-trunc">Earlier activity truncated</div> : null}
+    </div>
   );
 }
 
@@ -230,13 +371,9 @@ export default function ActivitySection({
       mine: true,
     }));
 
-    const onchain: LedgerRow[] = onchainExecutionsFor(vault.slug).map((x) => ({
-      action: EXECUTION_ACTION,
-      detail: executionDetail(x.blockNumber),
-      ms: x.timestamp * 1000,
-      kind: "onchain",
-      txHash: x.txHash,
-    }));
+    const onchain: LedgerRow[] = executionRows(
+      onchainExecutionsFor(vault.slug).map((x) => ({ ...x, chainId: EXECUTION_CHAIN_ID })),
+    );
     const hasChain = onchain.length > 0;
 
     const earning = vault.modeledApy > 0;
@@ -287,57 +424,10 @@ export default function ActivitySection({
     return [...deposits, ...exits, ...onchain, ...modeled, ...family].sort((a, b) => b.ms - a.ms);
   }, [vault, nowMs, tvlUsd, positions, withdrawals, shareValue]);
 
-  const visible = rows.slice(0, MAX_ROWS);
-  const truncated = rows.length > MAX_ROWS;
-  /* The Verify column exists only where a row can fill it. A column of empty
-     cells on a record with no chain ledger is chrome. */
-  const verifiable = rows.some((r) => typeof r.txHash === "string");
-
   return (
     <section id="activity" className="vxd-sec">
       <h2 className="vxd-sec-h">Activity</h2>
-      <div className="vx-table-wrap">
-        <table className={`vx-table vxa-table${verifiable ? " vxa-table--verify" : ""}`}>
-          <thead>
-            <tr>
-              <th>Action</th>
-              <th>Detail</th>
-              <th>Time</th>
-              {verifiable ? <th className="vxa-col-verify">Verify</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((r, i) => (
-              <tr key={`${r.kind}-${r.ms}-${i}`} style={{ "--i": Math.min(i, 11) } as CSSProperties}>
-                <td className="vxa-action">
-                  {r.action}
-                  {r.mine ? <span className="vxa-tag vxa-tag--you">you</span> : null}
-                  {r.kind === "auto" || r.kind === "router" ? (
-                    <span className="vxa-tag">modeled</span>
-                  ) : null}
-                  {r.kind === "onchain" ? <span className="vxa-tag vxa-tag--chain">on chain</span> : null}
-                </td>
-                <td className="vxa-detail">
-                  {detailFigureSpans(r.detail).map((part, j) =>
-                    part.num ? (
-                      <span key={j} className="num">
-                        {part.text}
-                      </span>
-                    ) : (
-                      <span key={j}>{part.text}</span>
-                    ),
-                  )}
-                </td>
-                <td className="vxa-time num">{relTime(r.ms, nowMs)}</td>
-                {verifiable ? (
-                  <td className="vxa-col-verify">{r.txHash ? <VerifyKey txHash={r.txHash} /> : null}</td>
-                ) : null}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {truncated ? <div className="vxa-trunc">Earlier activity truncated</div> : null}
-      </div>
+      <ActivityTable rows={rows} nowMs={nowMs} />
     </section>
   );
 }

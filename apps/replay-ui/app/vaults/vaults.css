@@ -743,6 +743,31 @@
 [data-theme="dark"] .vxa-verify{background:var(--p-well,#02040B);border-color:var(--vx-line)}
 [data-theme="dark"] .vxa-verify:hover{color:var(--vx-blue-text,var(--vx-blue-lg));border-color:var(--vx-blue-text,var(--vx-blue-lg))}
 
+/* ── the ledger's TWO LABELLED SOURCES (integration D3, docs/INTEGRATION_PLAN.md)
+      ────────────────────────────────────────────────────────────────────────
+      A deployed loop's Activity section prints two tables under one head: the
+      loop's own attested strikes, and a capture of the reference handler's
+      Base mainnet calls. They are the same KIND of event, so they share a
+      renderer and a row register; what separates them is the caption, and the
+      caption therefore has to be unmissable rather than decorative.
+
+      So the group's key is the page's own panel-head register (`.vx-panel-h`
+      values, sans, 13/600, ink) and the line under it is the annotation
+      register (`.vxd-desc--note`'s serif italic in `--vx-faint`). No new
+      colour, no new face, no new size: both are declarations this file
+      already makes elsewhere, restated here because these two elements sit
+      outside a `.vx-panel` and inherit neither. Tokens only, so the dark
+      plate below is already correct for them. ── */
+.vxa-src{display:flex;flex-direction:column;gap:6px}
+.vxa-src + .vxa-src{margin-top:22px}
+.vxa-src-k{font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--vx-ink)}
+.vxa-src-note{font-family:var(--vx-ser);font-style:italic;font-size:12.5px;line-height:1.55;
+  color:var(--vx-faint);margin:0 0 2px;max-width:72ch}
+/* AN EMPTY LEDGER IS A SENTENCE, NOT A TABLE. A freshly deployed loop has no
+   landed strike for a beat, and a header row over nothing reads as a load
+   that failed. Same register the truncation line already uses. */
+.vxa-none{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);
+  text-align:center;padding:16px 0 14px}
 
 /* ── directory: the tiny automations fact ── */
 .vx-card-auto{font-family:var(--font-mono,ui-monospace);font-size:11px;color:var(--vx-faint)}

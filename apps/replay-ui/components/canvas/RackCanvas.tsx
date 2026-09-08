@@ -2372,6 +2372,34 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
                   ? `${lanes.length} lanes, ${familiesPhrase}, with the router moving the whole book to the better lane on the 48-hour rule.`
                   : `${lanes.length} loops with the router moving the whole book to the better lane on the 48-hour rule.`,
             };
+    /* ── WHAT THE PUBLISH ACTUALLY DEPLOYS (integration lane B, 2026-09-08) ──
+       A publish is a real deployment now, not a localStorage write, and
+       loop-server deploys ONE market per call: its catalog holds exactly one
+       entry (`packages/loop-deploy/src/catalog.ts`, the same USDe/USDC
+       Morpho Blue id `DEMO_SCOPE.liveMarketId` names) and one POST carries
+       one candidate and one leverage. So this memo, which is already the one
+       owner of what the review card states, is also the one owner of WHICH
+       lane goes over the wire and which lanes do not.
+
+       THE LOOP FAMILY FIRST, because it is the only family loop-server knows
+       how to run: the router composition is a loop lane plus the Aave v3 USDC
+       floor, and the floor is `treasury`. Absent a loop lane the first priced
+       lane still goes; loop-server is the authority on what it can deploy
+       and its 400 names the reason better than a guess made here would, and
+       stays right the day the catalog grows a second market.
+
+       `undeployedLanes` is the honesty half, and it is NOT a warning: the
+       composition is not wrong, it is simply larger than what can be stood up
+       today. `venueLabel` is the same one owner the params rows above print
+       the venue through, so the sheet names the floor lane exactly as the
+       canvas does. */
+    const deployLane =
+      lanes.find((l) => l.family === "loop" && l.p.candidateId.length > 0) ??
+      lanes.find((l) => l.p.candidateId.length > 0) ??
+      null;
+    const undeployedLanes = lanes
+      .filter((l) => l !== deployLane)
+      .map((l) => [l.loop.label, venueLabel(l.p.venue)].filter((s) => s.length > 0).join(" · "));
     return {
       ...record,
       defaultName: kind.defaultName,
@@ -2406,6 +2434,13 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
       // The pinned catalog ids, for the publish-success beacon only
       // (copilot loop B-1); PublishFlow peels them before the record is written.
       publishedMarketIds: lanes.map((l) => l.p.candidateId).filter((id) => typeof id === "string" && id.length > 0),
+      /* THE DEPLOY PAYLOAD, from the block above `return`. `PublishFlow`
+         forwards these two to loop-server verbatim and derives nothing from
+         them; `undeployedLanes` is what it must tell the reader went nowhere.
+         Deploy state, not record state: the publish writes no record. */
+      candidateId: deployLane?.p.candidateId ?? "",
+      targetLeverage: deployLane?.p.targetLeverage ?? 0,
+      undeployedLanes,
       /* ── THE TWO-LANE RECORD (router lane plan R5, seam 1) ─────────────
          The router instrument on the vault page reads the lanes and the
          dials off the RECORD, not off a canvas it cannot see, so the publish

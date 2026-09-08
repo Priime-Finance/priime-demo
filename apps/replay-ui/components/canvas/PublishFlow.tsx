@@ -5,35 +5,66 @@
  * Publish flow shared by BOTH canvases (/build loop rack and
  * /build?strategy=funding).
  *
- * Three phases, zero dead ends, no wallet gating:
- *   review     — editable vault name, one-line summary, module chips,
- *                modeled APY, one primary key: Publish vault (~40 words).
- *   publishing — three beats (Compose, Verify, Publish), ~1.8s, mock.
- *   done       — the vault EXISTS: persisted to localStorage with a slug,
- *                $25k seed TVL, share value 1.0000; links open the vault
- *                page and the directory.
+ * Four phases, zero dead ends:
+ *   review:      editable vault name, one-line summary, module chips,
+ *                modeled APY, one primary key (~40 words).
+ *   publishing:  three beats (Compose, Verify, Publish). The first two are
+ *                paced; the third stands under the real POST for as long as
+ *                loop-server takes to deploy.
+ *   done:        the loop EXISTS on chain: loop-server returned an id and a
+ *                handler address. One beat, then the router opens it.
+ *   failed:      nothing was deployed, and the card says so in loop-server's
+ *                own words.
+ *
+ * ── THE PUBLISH IS REAL (integration lane B, 2026-09-08) ───────────────────
+ * This flow used to end at `publishVault()`, a localStorage write onto the ONE
+ * hero record at `DEMO_SCOPE.liveSlug`. That was right while there was no
+ * backend: every publish described the same attested vault because only one
+ * vault existed. There is a backend now, so a publish is a DEPLOYMENT.
+ * `publishLoopToServer` POSTs the composed candidate to loop-server, which
+ * stands up a fresh PriimeVault and its workflow and hands back a loop id;
+ * `liveLoopHref` is the one owner of where that id is read. Nothing local is
+ * written at all. `lib/vaults/store.ts` still owns the draft's field
+ * vocabulary (`PublishInput` below) and still owns the seeds and the hero
+ * record; this sheet no longer publishes onto any of them.
+ *
+ * ONE LANE PER DEPLOY, AND THE CARD SAYS SO. loop-server's market catalog
+ * (`packages/loop-deploy/src/catalog.ts`) holds exactly one market
+ * (the USDe/USDC loop on Morpho Blue), and one POST carries one candidate. The
+ * router composition is TWO lanes, so a two-lane publish deploys the loop and
+ * leaves the Aave v3 USDC floor standing. `draft.undeployedLanes` names what
+ * did not go, on the review card BEFORE the user commits and again on the
+ * done card after. A green checkmark over a half-deployed composition is the
+ * one lie this product cannot afford.
  *
  * Connect moment (founder addendum 2026-08-21): the nav no longer carries
  * Connect wallet — the workflow does. Disconnected, the Review card's
  * primary key reads "Connect wallet" and opens the connect sheet; when
  * isConnected flips the SAME key morphs in place to "Publish vault" (no
- * state loss, small crossfade, reduced-motion instant). Beneath it a quiet
- * ghost link "Publish without connecting" runs the existing publish path
- * unchanged, so the mockup's no-blocking rule stays intact.
+ * state loss, small crossfade, reduced-motion instant).
+ *
+ * ⚠ THE "Publish without connecting" GHOST LINK IS GONE, and its absence is
+ * the point. It ran the localStorage path with no wallet, which was harmless
+ * while nothing real happened. The connected address is now the STRATEGIST:
+ * it holds the deployed vault's exit key, so there is no publish without one.
+ * A key whose only possible outcome is a failure card is worse than no key,
+ * so the sheet states the fact under the primary key instead.
  */
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useAccount, useConnectModal } from "@/lib/wallet";
-import {
-  deriveAutomations,
-  publishVault,
-  vaultStage,
-  VAULT_STAGE_NOUN,
-  type PublishInput,
-  type VaultRecord,
-} from "@/lib/vaults/store";
+import { shortAddress, useAccount, useConnectModal } from "@/lib/wallet";
+/* THE DRAFT'S FIELD VOCABULARY, STILL THE STORE'S. Nothing is written to the
+   store any more (see the header), but `PublishDraft` is still spelled as the
+   record's own input shape so the review card and any future record write
+   cannot drift into two descriptions of one composition. */
+import type { PublishInput } from "@/lib/vaults/store";
+/* THE DEPLOY. `publish-loop` owns the POST body (cadence included) and
+   re-exports loop-server's own validation error; `live-id` owns where a
+   deployed loop is read. This file spells neither the route nor the path. */
+import { LoopValidationError, publishLoopToServer } from "@/lib/vaults/publish-loop";
+import { liveLoopHref } from "@/lib/vaults/live-id";
 import { fmtCapacityUsd } from "@/lib/canvas/capacity";
 // R5 grep: the published APY is the single most consequential number this
 // product prints, and it was rendered here by a private
@@ -42,15 +73,34 @@ import { fmtCapacityUsd } from "@/lib/canvas/capacity";
 import { pct } from "@/lib/canvas/format";
 import { apyCaption, feeRows } from "@/lib/canvas/fees";
 import { withParamKinds } from "@/lib/vaults/param-kind";
-import { SEED_SLUGS } from "@/lib/vaults/seeds";
-import { heroNavUsd } from "@/lib/vaults/rows";
-import { DEMO_SCOPE } from "@/lib/demo-scope";
 
 /** How long the done card holds before the router opens the vault page. */
 const DONE_BEAT_MS = 900;
 
 export interface PublishDraft extends Omit<PublishInput, "name"> {
   defaultName: string;
+  /**
+   * ── THE DEPLOY PAYLOAD (integration lane B) ────────────────────────────
+   * The two composer values loop-server needs, read off the ONE lane this
+   * publish deploys and forwarded verbatim. `RackCanvas` picks that lane
+   * (the loop family, which is the only family loop-server knows how to
+   * run) and is the single owner of the choice; this file only sends them.
+   *
+   * An empty `candidateId` is deliberately NOT caught here. loop-server is
+   * the authority on what it can deploy and answers 400 with per-field
+   * issues; a guess made on this side would be a worse sentence than the
+   * server's own, and would be wrong the day the catalog grows.
+   */
+  candidateId: string;
+  targetLeverage: number;
+  /**
+   * The lanes this deploy does NOT carry, already named for a reader
+   * ("Lane 2 · Aave v3 · Base"). Empty on a composition loop-server can
+   * deploy whole, which is every single-lane loop. Rendered on the review
+   * card before the commit and on the done card after it, because a
+   * partially deployed composition that reports success is a lie.
+   */
+  undeployedLanes?: string[];
   /** How many lanes composed this vault. Review lists them when above one. */
   laneCount?: number;
   /**
@@ -75,18 +125,21 @@ export interface PublishDraft extends Omit<PublishInput, "name"> {
   apyCompanion?: string | null;
   /**
    * ── THE TWO-LANE RECORD (router lane plan R5, seam 1) ──────────────────
-   * The lanes and the router this publish writes ONTO the record, so the
-   * vault page's Capital router instrument reads what the canvas showed
-   * rather than re-deriving it from a canvas it cannot see. Present only on a
-   * multi-lane publish; absent, the record written is byte for byte the one
-   * this flow has always written.
+   * The lanes and the router the canvas composed, so the vault page's Capital
+   * router instrument can read what the canvas showed rather than re-deriving
+   * it from a canvas it cannot see. Present only on a multi-lane publish.
    *
    * ⚠ SEAM, NOT A LOCAL FIELD. `lib/vaults/store.ts` declares
    * `VaultRecord.lanes` and `.router` and admits both into `PublishInput`;
    * the canvas composes them through `lib/canvas/published-lanes.ts`, which
-   * re-exports the store's own two shapes. They are NOT peeled below: they
-   * belong to the record, and `PublishDraft` inherits them from
+   * re-exports the store's own two shapes. `PublishDraft` inherits them from
    * `PublishInput` rather than declaring a second spelling of either.
+   *
+   * ⚠ NOT READ BY THIS FILE ANY MORE (lane B, 2026-09-08). The publish is a
+   * deployment and writes no record, so nothing here spreads them anywhere.
+   * They stay on the draft because the canvas is still their one composer and
+   * the store is still their one shape; the surface that reads them again
+   * will read them from here rather than re-inventing them.
    */
   /**
    * The catalog ids of the lanes this vault publishes (copilot loop B-1).
@@ -98,6 +151,27 @@ export interface PublishDraft extends Omit<PublishInput, "name"> {
 }
 
 const BEATS = ["Compose", "Verify", "Publish"] as const;
+
+/** What loop-server handed back. The done card's whole subject. */
+interface Deployed {
+  /** The name the deploy actually carried, not the input's current value. */
+  name: string;
+  /** loop-server's id, `loop-<8 hex>`. `liveLoopHref` turns it into a path. */
+  loopId: string;
+  /** The deployed handler contract. */
+  handler: string;
+}
+
+/**
+ * Why nothing was deployed. `issues` are loop-server's OWN per-field strings
+ * (`LoopValidationError.issues`), never paraphrased: the server knows which
+ * market it rejected and why, and this card is the only place the builder can
+ * read it.
+ */
+interface Failure {
+  message: string;
+  issues: string[];
+}
 
 export default function PublishFlow({
   draft,
@@ -113,8 +187,16 @@ export default function PublishFlow({
   const [name, setName] = useState(draft.defaultName);
   const [phase, setPhase] = useState<"review" | "publishing" | "done" | "failed">("review");
   const [beat, setBeat] = useState(0);
-  const [vault, setVault] = useState<VaultRecord | null>(null);
+  const [deployed, setDeployed] = useState<Deployed | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /* THE DEPLOY OUTLIVES THE CARD. A publish is now a real chain deployment
+     that can take tens of seconds, and the reader can leave (the nav, the
+     back key) while it is in flight. The awaited continuation must not
+     setState onto an unmounted card, and the card must not be the thing that
+     decides whether the deploy happened: the loop is deployed either way,
+     and the directory will show it. */
+  const alive = useRef(true);
   const nameRef = useRef<HTMLInputElement>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
@@ -175,21 +257,41 @@ export default function PublishFlow({
   /* The connect moment. The modal only ever mounts client-side (opened by a
      user gesture on the canvas), so isConnected is safe to branch on
      directly. connectModalOpen is mirrored into a ref so the Escape handler
-     never closes the review card underneath an open connect sheet. */
-  const { isConnected } = useAccount();
+     never closes the review card underneath an open connect sheet.
+
+     `address` IS THE STRATEGIST (lane B): loop-server writes it onto the
+     deployed vault as the role that holds the exit key. That is what turned
+     connecting from a courtesy into a precondition. */
+  const { address, isConnected } = useAccount();
   /* THE VAULT PAGE IS WHERE A PUBLISH ENDS (founder, 2026-09-07: "publish it
      and arrive on the vault page automatically"). The done beat used to sit
      on the canvas behind a card with an "Open your vault" key, and closing
      that card left the builder on the canvas they had just published from,
      which read as being sent back there. Now the card shows its done state
-     for one beat and the router carries the reader to the record it wrote.
+     for one beat and the router carries the reader to the loop it deployed.
      The two links stay for a reader who moves before the beat lands. */
   const router = useRouter();
   const { openConnectModal, connectModalOpen } = useConnectModal();
   const connectOpenRef = useRef(connectModalOpen);
   connectOpenRef.current = connectModalOpen;
 
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  useEffect(() => {
+    /* SET ON THE WAY IN, NOT ONLY ON THE WAY OUT. StrictMode runs mount →
+       cleanup → mount in development, so a flag that is only ever cleared
+       would leave the second mount permanently marked dead and every deploy
+       would land on a card that refuses to render its own result. */
+    alive.current = true;
+    /* The ARRAY is captured here, not read from the ref at cleanup time. The
+       ref's identity is stable for this mount, so the two are the same list
+       today, but reading `timers.current` inside the cleanup asks for
+       whatever the ref points at when the card unmounts, which is the wrong
+       question and the one react-hooks warns about. */
+    const pending = timers.current;
+    return () => {
+      alive.current = false;
+      pending.forEach(clearTimeout);
+    };
+  }, []);
 
   /* §4.3 — Review is already gated on every lane being priced, so a null
      capacity on the loop rack is unreachable; it is a computation bug, not a
@@ -229,62 +331,99 @@ export default function PublishFlow({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  /**
+   * THE DEPLOY.
+   *
+   * The three beats are no longer a 1.86s animation with a localStorage
+   * write at the end of it. `Compose` and `Verify` are still paced, because
+   * they are the two things the canvas already did; `Publish` is the last
+   * beat and it stands, pulsing, for exactly as long as loop-server takes to
+   * put a vault and a workflow on chain. The card leaves the publishing
+   * phase when the network answers and not one moment earlier, in either
+   * direction. No fake success on a failed deploy, and no fake wait on a
+   * fast one.
+   */
   const publish = () => {
     if (phase !== "review" && phase !== "failed") return;
+    /* NO STRATEGIST, NO DEPLOY. This is unreachable from the primary key,
+       which reads `Connect wallet` and opens the sheet while disconnected,
+       but Enter in the name field runs the same action, and a wallet can
+       disconnect between the key's render and the press. Stated as a
+       failure rather than a silent return so the card always says why. */
+    if (!isConnected || !address) {
+      setFailure({
+        message:
+          "Connect a wallet before publishing. The connected address becomes the strategist and holds this vault's exit key, so a deploy without one has no way out.",
+        issues: [],
+      });
+      setPhase("failed");
+      return;
+    }
+    const finalName = name.trim() || draft.defaultName;
+    setFailure(null);
     setPhase("publishing");
     setBeat(0);
     timers.current.push(setTimeout(() => setBeat(1), 620));
     timers.current.push(setTimeout(() => setBeat(2), 1240));
-    timers.current.push(
-      setTimeout(() => {
-        // Automation instrument parameters are fixed here, at publish time,
-        // from the composed graph: the hedge instrument exists iff a hedge
-        // module was installed on the canvas. The vault page renders these
-        // stored parameters, never re-derives them.
-        //
-        // `defaultName` and `laneCount` are review-card state, not vault
-        // state, so they are peeled off rather than spread into the record.
-        const {
-          defaultName: _defaultName,
-          laneCount: _laneCount,
-          railVerdict: _railVerdict, // persisted by the caller as a param row
-          reviewParams: _reviewParams,
-          apyCompanion: _apyCompanion, // persisted as the Upside forfeited row
-          publishedMarketIds: _publishedMarketIds, // beacon payload, never a record field
-          ...record
-        } = draft;
-        /* THE RECORD. `lanes` and `router` ride inside `...record` under the
-           names `PublishInput` itself declares (store.ts), so this site
-           states no shape of its own: a field added to the record's router
-           block is written here the moment the store admits it, and a field
-           the store drops stops compiling here rather than being written
-           into a record nothing reads. */
-        const input: PublishInput = {
-          ...record,
-          name: name.trim() || draft.defaultName,
-          automations: deriveAutomations(draft),
-        };
-        const rec = publishVault(input, SEED_SLUGS);
-        // G2: `write()` returns false when the record did not land (private
-        // mode, quota, a disabled store). Reporting success there is how the
-        // flow came to offer "Open your vault" for a vault that does not
-        // exist. A publish that did not happen says so.
-        if (!rec) {
-          setPhase("failed");
-          return;
-        }
-        setVault(rec);
+    void (async () => {
+      try {
+        /* `publish-loop.ts` owns the body: it adds the strike cadence and
+           states which composer field each value came from. This site adds
+           the name and the strategist and nothing else. */
+        const { loopId, handler } = await publishLoopToServer({
+          name: finalName,
+          strategist: address,
+          candidateId: draft.candidateId,
+          targetLeverage: draft.targetLeverage,
+        });
+        if (!alive.current) return;
+        setDeployed({ name: finalName, loopId, handler });
         setPhase("done");
-        timers.current.push(
-          setTimeout(() => router.push(`/vaults/${rec.slug}`), DONE_BEAT_MS),
-        );
-      }, 1860),
-    );
+        /* THE VAULT PAGE IS WHERE A PUBLISH ENDS, and `liveLoopHref` is the
+           one owner of that path; `VaultDetail` reads the same module to
+           tell a live loop from a seed, so the two cannot drift. */
+        timers.current.push(setTimeout(() => router.push(liveLoopHref(loopId)), DONE_BEAT_MS));
+      } catch (err) {
+        if (!alive.current) return;
+        /* LOOP-SERVER'S OWN WORDS. A 400 carries per-field issues (an
+           unknown candidate id, a leverage outside the market's band); they
+           are rendered verbatim because the server is the only party that
+           knows which market it holds. Everything else is a plain Error
+           (the proxy down, the deployer reverting), and carries its message. */
+        if (err instanceof LoopValidationError) {
+          setFailure({ message: "loop-server rejected this composition.", issues: err.issues });
+        } else {
+          setFailure({
+            message: err instanceof Error ? err.message : String(err),
+            issues: [],
+          });
+        }
+        setPhase("failed");
+      }
+    })();
   };
 
+  /* THE MODELED FIGURE MEASURES THE COMPOSITION, NOT THE DEPLOY (lane B).
+     On a composition loop-server cannot deploy whole, the blended APY is what
+     the canvas priced ACROSS EVERY LANE and only some of those lanes are
+     going to exist. The figure still belongs on both cards (it is the number the
+     builder reviewed, and hiding it would be its own dishonesty), but the
+     caption has to name which thing it measures. One expression, read by the
+     review card and the done card, so the two cannot caption one number two
+     ways. `undeployedLanes` is `RackCanvas`'s single owner of the fact. */
+  const undeployedText = (draft.undeployedLanes ?? []).join("; ");
+  const partialDeploy = undeployedText.length > 0;
+  const apyNoun = partialDeploy ? "modeled net APY, whole composition" : "modeled net APY";
+
+  /** loop-server's own reasons, or none. Read twice below; derived once. */
+  const failIssues = failure?.issues ?? [];
+
   /* The primary key's action follows its label: connect first when
-     disconnected, publish once connected. The ghost link beneath always
-     runs publish() directly. */
+     disconnected, publish once connected. It is the ONLY way into `publish()`
+     from a pointer now; the skip link that used to sit beneath it published
+     without a wallet, which a real deploy cannot do (see the header). Enter in
+     the name field is the other way in, and `publish()` re-checks the wallet
+     for exactly that reason. */
   const primaryAction = () => {
     if (!isConnected) openConnectModal?.();
     else publish();
@@ -385,11 +524,17 @@ export default function PublishFlow({
                     which is what makes "byte-identical" checkable.
                     UNCONDITIONAL: the schedule does not depend on lane count,
                     strategy or whether the params table above rendered. */}
-                {/* THE RECORD THIS SHEET PUBLISHES ONTO is the one live record
-                    (`DEMO_SCOPE.liveSlug`), so the schedule is read for it:
-                    the withdrawal row prices the exit that record has. */}
+                {/* WHICH RECORD'S SCHEDULE (lane B, 2026-09-08). This read
+                    `{ slug: DEMO_SCOPE.liveSlug }` back when the sheet
+                    published onto that one hero record. It does not any more:
+                    it deploys a fresh vault. The stage is what the withdrawal
+                    row actually turns on (`fees.isAttestedRecord`), and a
+                    deployed vault redeems at the attested share value with the
+                    strategist holding the exit key, so the schedule is read
+                    for what this sheet stands up rather than for a slug it no
+                    longer writes. Same four strings; a true citation. */}
                 <div className="pf-fees" style={{ display: "grid", gap: 6, marginBottom: 16 }}>
-                  {withParamKinds(feeRows({ slug: DEMO_SCOPE.liveSlug })).map((f) => (
+                  {withParamKinds(feeRows({ stage: "attested" })).map((f) => (
                     <div
                       key={f.label}
                       style={{
@@ -415,7 +560,7 @@ export default function PublishFlow({
                 </div>
                 <div className="pf-apy">
                   <b>{pct(draft.modeledApy)}</b>
-                  <i>modeled net APY</i>
+                  <i>{apyNoun}</i>
                 </div>
                 {/* THE CAPTION THE RECORD CARRIES, FROM THE SAME CALL (S1,
                     2026-08-24, walk W1.1). The sheet stated `modeled net APY` and
@@ -462,8 +607,27 @@ export default function PublishFlow({
                 {draft.railVerdict ? <div className="pf-cap-bind">{draft.railVerdict}</div> : null}
               </div>
             </div>
-            {/* PINNED: every key the review offers, always on screen. */}
+            {/* PINNED: every key the review offers, always on screen, and
+                with it the two facts that decide what pressing it does. They
+                are pinned for the same reason the key is (DS-3): a sheet that
+                overflows must not put the sentence "one of your two lanes is
+                not deployed" below the cut, under the key that deploys it. */}
             <div className="pf-acts">
+              {/* WHAT THIS DEPLOY LEAVES BEHIND, BEFORE THE COMMIT. One POST
+                  carries one market, and the router composition is two lanes,
+                  so a two-lane publish stands up the loop and leaves the floor
+                  where it is. `.pf-cap-bind`'s register: a fact under the
+                  numbers, never a warning; the composition is not wrong, it
+                  is simply larger than what can be deployed today. */}
+              {partialDeploy ? (
+                <div
+                  className="pf-cap-bind"
+                  style={{ maxWidth: "none", marginBottom: 12, textAlign: "center" }}
+                >
+                  Deploys one lane. Not deployed: {undeployedText}. It stays on the canvas and holds
+                  no capital.
+                </div>
+              ) : null}
               <button type="button" className="pf-publish" onClick={primaryAction}>
                 {/* Keyed span: remounts when isConnected flips, so the label
                     crossfades in place exactly once per morph. */}
@@ -471,11 +635,20 @@ export default function PublishFlow({
                   {isConnected ? "Publish vault" : "Connect wallet"}
                 </span>
               </button>
-              {!isConnected && (
-                <button type="button" className="pf-ghostlink pf-ghost-skip" onClick={publish}>
-                  Publish without connecting
-                </button>
-              )}
+              {/* WHERE "Publish without connecting" USED TO BE. The ghost link
+                  ran the localStorage path with no wallet; the publish is a
+                  real deployment now and the connected address is its exit
+                  key, so the skip cannot exist. The line says which address is
+                  about to be handed that key, and morphs with the key above
+                  it rather than appearing and disappearing beneath it. */}
+              <div
+                className="pf-cap-bind"
+                style={{ maxWidth: "none", marginTop: 12, marginBottom: 0, textAlign: "center" }}
+              >
+                {isConnected && address
+                  ? `Strategist ${shortAddress(address)}, which holds this vault's exit key.`
+                  : "The connected address becomes the strategist and holds this vault's exit key."}
+              </div>
             </div>
           </>
         ) : phase === "publishing" ? (
@@ -488,24 +661,51 @@ export default function PublishFlow({
             ))}
           </div>
         ) : phase === "failed" ? (
-          /* G2 — THE HONEST FAILURE. There is no vault, so there is no link
-             to one, no slug, no seed TVL and no celebration. The card says
-             what did not happen, why it can happen, and offers the one
-             action that can still work. The composition is untouched on the
-             canvas behind this card. */
+          /* G2, THE HONEST FAILURE. Nothing was deployed, so there is no
+             vault, no link to one, no id and no celebration. The card says
+             what did not happen and, where loop-server said why, prints the
+             server's own reasons rather than a paraphrase of them. The
+             composition is untouched on the canvas behind this card.
+
+             REASONS, NOT A REASON (lane B). The message used to name the one
+             way the flow could fail: a browser that would not write to
+             localStorage. A deploy fails for reasons this client cannot
+             enumerate (a market the catalog does not hold, a leverage outside its
+             band, a deployer that reverted, a server that is not up), and
+             `LoopValidationError.issues` is loop-server telling the
+             builder which. */
           <>
             <div className="pf-head">
-              <span className="pf-kicker">Not published</span>
+              <span className="pf-kicker">Not deployed</span>
               <button type="button" className="pf-close" onClick={close}>
                 Close
               </button>
             </div>
             <div className="pf-done-name">{name.trim() || draft.defaultName}</div>
             <div className="pf-summary">
-              This browser would not store the vault, so nothing was published. Site storage is
-              unavailable in private windows and when the browser is out of space. Your composition
-              is still on the canvas.
+              {failure?.message ?? "The deploy did not complete."} Nothing was deployed and your
+              composition is still on the canvas.
             </div>
+            {failIssues.length > 0 ? (
+              <ul
+                className="pf-fail-issues"
+                style={{
+                  display: "grid",
+                  gap: 6,
+                  margin: "0 0 16px",
+                  padding: 0,
+                  listStyle: "none",
+                  fontSize: 11,
+                  color: "#B8D9FF",
+                }}
+              >
+                {failIssues.map((issue) => (
+                  <li key={issue} style={{ fontFamily: "var(--fm)", lineHeight: 1.5 }}>
+                    {issue}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <div className="pf-done-acts">
               <button type="button" className="pf-publish" onClick={publish}>
                 Try again
@@ -515,45 +715,52 @@ export default function PublishFlow({
               </button>
             </div>
           </>
-        ) : vault ? (
+        ) : deployed ? (
           <>
-            <div className="pf-done-k">Published</div>
-            <div className="pf-done-name">{vault.name}</div>
-            {/* The record's own seed, not a hardcoded $25K: `publishVault`
-                clamps the seed inside the record's stated capacity (gate
-                catch 2026-08-24), so the toast reads the number it wrote.
+            <div className="pf-done-k">Deployed</div>
+            <div className="pf-done-name">{deployed.name}</div>
+            {/* ⚠ THE STAGE WORD IS READ, NOT ASSERTED (S2 Wave 2 seam,
+                2026-08-24). This sentence once opened by calling the record
+                LIVE while the very next screen chipped `Incubating · modeled`:
+                one lifecycle, two claims, one click apart. The rule survives
+                the rewrite, and this card now has the strongest possible way
+                of honouring it: it states only what loop-server actually
+                returned. A deployed handler address is a fact; a NAV, a TVL
+                and a stage on a vault that is seconds old are not this card's
+                to claim, and the page the router is about to open reads all
+                three off the chain.
 
-                ⚠ THE STAGE WORD IS READ, NOT ASSERTED (S2 Wave 2 seam,
-                2026-08-24). This sentence opened by calling the record LIVE while
-                the very next screen — the record this button opens — chips
-                `Incubating · modeled` and states `No capital, no armed
-                automation.` One lifecycle, two claims, one click apart, and
-                the toast was the one that was wrong: `publishVault` writes
-                `stage: "incubating"` unconditionally. It now reads
-                `vaultStage(vault)` through `VAULT_STAGE_NOUN`, the noun
-                declared beside the chip, so the two surfaces move together.
-
-                And the TVL is labelled `modeled`, which is what it is: a
-                seeded mock number on a record that holds no capital. Unlabelled
-                it read as money in the vault, three words after a stage that
-                says there is none. */}
-            {/* THE NAV IS ATTESTED, NOT MODELED (docs/plans/LATEST_UI_PORT_SPEC.md
-                A.3 #29): the composition landed on the one record whose NAV is
-                read off the captured journal, so the sentence reads that number
-                from its owner (`heroNavUsd`) and the stage noun from its own. */}
+                No seed TVL either. `publishVault`'s $25K seed belonged to a
+                record with no backend behind it. This vault holds exactly the
+                capital that has been deposited into it, which is none. */}
             <div className="pf-summary">
-              In the directory, {VAULT_STAGE_NOUN[vaultStage(vault)]}
-              {heroNavUsd() !== null ? <>, with {fmtCapacityUsd(heroNavUsd())} attested NAV</> : null}.
+              Handler{" "}
+              <b style={{ fontFamily: "var(--fm)", fontWeight: 600 }}>
+                {shortAddress(deployed.handler)}
+              </b>
+              . First strike lands within a cadence.
             </div>
+            {/* WHAT DID NOT GO, RESTATED AFTER THE FACT. The review card said
+                it before the commit; a reader who pressed through deserves to
+                be told again on the card that says the deploy worked, not to
+                discover it on the vault page. */}
+            {partialDeploy ? (
+              <div className="pf-cap-bind" style={{ maxWidth: "none" }}>
+                One lane deployed. Not deployed: {undeployedText}.
+              </div>
+            ) : null}
             <div className="pf-apy">
               <b>{pct(draft.modeledApy)}</b>
-              <i>modeled net APY</i>
+              <i>{apyNoun}</i>
             </div>
             {/* QNT-3 — the done card prints the figure again, so the
                 companion prints again. One fact, both phases. */}
             {draft.apyCompanion ? <div className="pf-apy-companion">{draft.apyCompanion}</div> : null}
             <div className="pf-done-acts">
-              <Link className="pf-publish" href={`/vaults/${vault.slug}`}>
+              {/* The same destination the router is already on its way to
+                  (`liveLoopHref`), for a reader who moves before the beat
+                  lands. Spelled once, in `live-id.ts`. */}
+              <Link className="pf-publish" href={liveLoopHref(deployed.loopId)}>
                 Open your vault
               </Link>
               <Link className="pf-ghostlink" href="/vaults">
