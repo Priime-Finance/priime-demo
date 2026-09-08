@@ -86,11 +86,17 @@ export function fixtureServiceDoc(): unknown {
   return parseLossless(fixtureServiceText());
 }
 
+/**
+ * Full LoopConfig shape (post-resolve). Used by tests that exercise the
+ * stored path (validateLoopConfig, componentConfigFor, resume).
+ */
 export function validLoopInput(): Record<string, unknown> {
   return {
     name: "my recursive loop",
     strategist: "0xAbCd00000000000000000000000000000000AbCd",
     cronSeconds: 30,
+    candidateId: "morpho-blue-base:8453:USDe-USDC:0x54cf9be5",
+    targetLeverage: 5,
     marketId: "0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354",
     lltv: "915000000000000000",
     usdeAddress: "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34",
@@ -100,5 +106,19 @@ export function validLoopInput(): Record<string, unknown> {
     poolAddress: "0x15BC08D2E2B405afeD3fB872DCd2d962BcCfB7e0",
     twapWindowSecs: 1800,
     inputsBlockLag: 2,
+  };
+}
+
+/**
+ * User-input shape (pre-resolve). Used by tests that exercise
+ * resolveLoopConfig and the deployer.createLoop path.
+ */
+export function validLoopResolveInput(): Record<string, unknown> {
+  return {
+    name: "my recursive loop",
+    strategist: "0xAbCd00000000000000000000000000000000AbCd",
+    cronSeconds: 30,
+    candidateId: "morpho-blue-base:8453:USDe-USDC:0x54cf9be5",
+    targetLeverage: 5,
   };
 }

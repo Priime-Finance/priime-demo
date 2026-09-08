@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { componentConfigFor, cronFromSeconds, validateLoopConfig, ValidationError } from "../src/config.ts";
-import { validLoopInput } from "./fixtures.ts";
+import {
+  componentConfigFor,
+  cronFromSeconds,
+  resolveLoopConfig,
+  validateLoopConfig,
+  ValidationError,
+} from "../src/config.ts";
+import { validLoopInput, validLoopResolveInput } from "./fixtures.ts";
 
 describe("validateLoopConfig", () => {
   it("accepts a valid config and normalizes addresses to lowercase", () => {
@@ -9,6 +15,8 @@ describe("validateLoopConfig", () => {
     expect(cfg.strategist).toBe("0xabcd00000000000000000000000000000000abcd");
     expect(cfg.marketId).toBe("0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354");
     expect(cfg.name).toBe("my recursive loop");
+    expect(cfg.candidateId).toBe("morpho-blue-base:8453:USDe-USDC:0x54cf9be5");
+    expect(cfg.targetLeverage).toBe(5);
   });
 
   it("defaults the name when omitted", () => {
@@ -55,6 +63,63 @@ describe("validateLoopConfig", () => {
     expect(() => validateLoopConfig("hi")).toThrow(ValidationError);
     expect(() => validateLoopConfig(null)).toThrow(ValidationError);
     expect(() => validateLoopConfig([1])).toThrow(ValidationError);
+  });
+});
+
+describe("resolveLoopConfig", () => {
+  const CANDIDATE = "morpho-blue-base:8453:USDe-USDC:0x54cf9be5";
+
+  it("resolves the candidate id to the catalog's addresses", () => {
+    const cfg = resolveLoopConfig(validLoopResolveInput());
+    expect(cfg.candidateId).toBe(CANDIDATE);
+    expect(cfg.marketId).toBe("0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354");
+    expect(cfg.usdeAddress).toBe("0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34");
+    expect(cfg.targetLeverage).toBe(5);
+    expect(cfg.cronSeconds).toBe(30);
+  });
+
+  it("rejects an unknown candidate id with a catalog-shaped error", () => {
+    const input = validLoopResolveInput();
+    input.candidateId = "morpho-blue-base:8453:ZZZ-YYY:0xdead0000";
+    try {
+      resolveLoopConfig(input);
+      expect.unreachable("must throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ValidationError);
+      const issues = (err as ValidationError).issues;
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toMatch(/not in the market catalog/);
+    }
+  });
+
+  it("rejects a missing candidate id and other issues together", () => {
+    const input = validLoopResolveInput();
+    delete input.candidateId;
+    input.strategist = "nope";
+    input.targetLeverage = 42;
+    try {
+      resolveLoopConfig(input);
+      expect.unreachable("must throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ValidationError);
+      const issues = (err as ValidationError).issues;
+      expect(issues.some((i) => i.includes("strategist"))).toBe(true);
+      expect(issues.some((i) => i.includes("targetLeverage"))).toBe(true);
+      expect(issues.some((i) => i.includes("candidateId"))).toBe(true);
+    }
+  });
+
+  it("rejects an out-of-range target leverage", () => {
+    for (const bad of [0, 0.5, 11, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const input = validLoopResolveInput();
+      input.targetLeverage = bad;
+      expect(() => resolveLoopConfig(input)).toThrow(ValidationError);
+    }
+  });
+
+  it("rejects non-object input", () => {
+    expect(() => resolveLoopConfig("hi")).toThrow(ValidationError);
+    expect(() => resolveLoopConfig(null)).toThrow(ValidationError);
   });
 });
 

@@ -13,10 +13,24 @@ const nextConfig = {
   // needed so file tracing covers schema/ and sibling packages.
   outputFileTracingRoot: path.join(__dirname, '../..'),
   reactStrictMode: true,
-  // @priime-demo/journal-schema ships raw TS source (no build step, no
-  // `exports` -> compiled dist) — transpile it through Next's SWC pipeline
-  // rather than requiring consumers to prebuild it.
-  transpilePackages: ['@priime-demo/journal-schema'],
+  // @priime-demo/journal-schema and @priime-demo/loop-deploy ship raw TS
+  // source (no build step, no exports -> compiled dist); transpile them
+  // through Next's SWC pipeline.
+  transpilePackages: ['@priime-demo/journal-schema', '@priime-demo/loop-deploy'],
+  webpack(config) {
+    // @wagmi/connectors' barrel statically imports Coinbase baseAccount and
+    // x402 modules even though we only register `injected` in lib/wagmi.ts.
+    // Aliasing the unresolvable deep paths to false lets webpack finish;
+    // the code that would reach them is never invoked at runtime.
+    config.resolve = config.resolve ?? {}
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      '@x402/core/client': false,
+      '@x402/svm/exact/client': false,
+      '@x402/evm': false,
+    }
+    return config
+  },
 }
 
 export default nextConfig

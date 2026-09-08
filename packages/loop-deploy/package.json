@@ -12,10 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@priime-demo/journal-schema": "workspace:*",
     "viem": "^2.21.0"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "ajv": "^8.17.1",
     "typescript": "5.5.4",
     "vitest": "^3.2.4"
   }

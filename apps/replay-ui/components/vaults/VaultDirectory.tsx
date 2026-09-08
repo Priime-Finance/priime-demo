@@ -27,6 +27,7 @@ import {
 } from "@/lib/vaults/rows";
 import { VAULTS_EVENT, fmtPct, fmtUsd, venueParts, type VaultRecord } from "@/lib/vaults/store";
 
+import { LiveVaultsSection } from "./LiveVaultsSection";
 import { Sparkline } from "./Sparkline";
 
 export function VaultDirectory() {
@@ -135,6 +136,8 @@ export function VaultDirectory() {
         One vault today, replaying captured journals. The directory grows as the desk publishes
         more; every card&apos;s attested numbers come from its own strike journal and nowhere else.
       </p>
+
+      <LiveVaultsSection />
     </div>
   );
 }

@@ -88,3 +88,53 @@
   .dir { padding-left: 0; padding-right: 0; }
   .dir-head { flex-wrap: wrap; align-items: flex-start; gap: 16px; }
 }
+
+/* Live loops section: separate block below the hero grid, same card
+   language. Kept intentionally simple so the hero remains the eye. */
+.dir-live { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--v-line, #e6e2d9); }
+.dir-live-head { max-width: 640px; margin-bottom: 14px; }
+.dir-live-title { font-family: var(--vdis); font-size: 22px; letter-spacing: -0.01em; margin: 0 0 6px; color: var(--v-ink, #141210); }
+.dir-live-sub { font-family: var(--vser); font-style: italic; font-size: 13px; color: var(--v-mut, #6f6c66); line-height: 1.6; }
+.dir-live-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 8px; }
+.dir-live-msg { font-family: var(--vser); font-style: italic; font-size: 13px; color: var(--v-mut, #6f6c66); }
+.dir-card--live .dir-tag { background: color-mix(in srgb, var(--v-accent, #2b6cb0) 15%, transparent); }
+
+/* Minimal live-vault detail table. */
+.live-vault { display: grid; gap: 24px; padding: 24px 0; }
+.live-vault-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.live-vault-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 24px; background: var(--v-card, #fafaf7); border: 1px solid var(--v-line, #e6e2d9); border-radius: 10px; padding: 16px; }
+.live-vault-facts dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--v-mut, #6f6c66); margin-bottom: 2px; }
+.live-vault-facts dd { font-size: 13px; word-break: break-all; margin: 0; color: var(--v-ink, #141210); }
+.live-vault-strikes { display: grid; gap: 12px; }
+.live-vault-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.live-vault-table th { text-align: left; font-weight: 500; color: var(--v-mut, #6f6c66); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; padding: 8px 10px; border-bottom: 1px solid var(--v-line, #e6e2d9); }
+.live-vault-table td { padding: 8px 10px; border-bottom: 1px solid var(--v-line, #e6e2d9); color: var(--v-ink, #141210); word-break: break-all; }
+.live-vault-table tr:last-child td { border-bottom: 0; }
+
+/* Create-loop form. Sits above the live-loops grid; kept tight so the grid
+   stays the focal point once loops exist. */
+.lv-form { border: 1px solid var(--v-line, #e6e2d9); background: var(--v-card, #fafaf7); border-radius: 12px; padding: 18px; display: grid; gap: 12px; margin: 8px 0 20px; max-width: 720px; }
+.lv-form-row { display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: center; }
+.lv-form-row--tight { grid-template-columns: 200px 120px; }
+.lv-form-row label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--v-mut, #6f6c66); }
+.lv-form-row input { border: 1px solid var(--v-line, #e6e2d9); background: white; padding: 8px 10px; border-radius: 8px; font-size: 13px; color: var(--v-ink, #141210); font-family: inherit; }
+.lv-form-row input:focus-visible { outline: 2px solid var(--v-accent, #2b6cb0); outline-offset: 1px; }
+.lv-form-row input.vn { font-family: var(--vmono, ui-monospace, monospace); font-size: 12px; }
+.lv-form-fixed { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; padding: 10px 12px; background: color-mix(in srgb, var(--v-line, #e6e2d9) 30%, transparent); border-radius: 8px; font-size: 12px; }
+.lv-form-fixed span { display: block; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--v-mut, #6f6c66); margin-bottom: 2px; }
+.lv-form-fixed b { font-weight: 500; color: var(--v-ink, #141210); word-break: break-word; }
+.lv-form-foot { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.lv-form-btn { background: var(--v-ink, #141210); color: white; border: 0; padding: 9px 16px; border-radius: 999px; font-size: 12.5px; letter-spacing: 0.02em; cursor: pointer; font-family: inherit; }
+.lv-form-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.lv-form-btn:focus-visible { outline: 2px solid var(--v-accent, #2b6cb0); outline-offset: 2px; }
+.lv-form-issues { margin: 0; padding-left: 18px; font-size: 12px; color: #a00; }
+.lv-form-err { margin: 0; font-size: 12px; color: #a00; }
+.lv-form-ok { margin: 0; font-size: 12px; color: var(--v-ink, #141210); font-family: var(--vmono, ui-monospace, monospace); }
+.lv-form-ok b { font-weight: 500; }
+
+/* Publish flow: inline wallet connect + hint. */
+.pf-connect { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 14px; margin: 4px 0 8px; background: color-mix(in srgb, var(--v-line, #e6e2d9) 30%, transparent); border-radius: 8px; }
+.pf-hint { margin: 0; font-size: 12px; color: var(--v-mut, #6f6c66); flex: 1; min-width: 220px; }
+.pf-err { margin-top: 8px; padding: 10px 12px; background: color-mix(in srgb, #a00 8%, transparent); border-radius: 8px; font-size: 12px; color: #a00; }
+.pf-err p { margin: 0 0 4px; }
+.pf-err ul { margin: 0; padding-left: 18px; }
