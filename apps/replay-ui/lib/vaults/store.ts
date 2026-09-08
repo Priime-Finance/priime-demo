@@ -2916,7 +2916,13 @@ export const fmtPct = pct;
  * (H14). Two quantities, two formatters.
  */
 export function fmtHf(v: number): string {
-  return v.toFixed(2);
+  /* THROUGH `hfRound`, the bands' own rounding (2026-09-08). `toFixed(2)` on
+     the float printed the live reading at target as 1.52 (1.525 is
+     1.52499… in binary) under a Target stop that `hfRound(15250)` printed as
+     1.53: one quantity, two spellings, one card. Both go through the bps
+     rounding now, so a reading AT a band prints the band's own number. */
+  if (!Number.isFinite(v)) return v.toFixed(2);
+  return hfRound(Math.round(v * 10_000)).toFixed(2);
 }
 
 /** Leverage carries the multiplier suffix. */

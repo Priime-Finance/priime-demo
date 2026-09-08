@@ -131,16 +131,20 @@ export default function Sparkline({
         />
       ))}
       {/* A flat series has one value, and the terminal label already prints
-          it: the range labels earn ink only when they say something else. */}
-      {spanRaw > 0 ? (
-        <>
-          <text x={w - pad - 2} y={rulings[0] - 4} textAnchor="end" fontSize="9" fontFamily={mono} fill="#6f6b63">
-            {fmt(max)}
-          </text>
-          <text x={w - pad - 2} y={rulings[2] + 11} textAnchor="end" fontSize="9" fontFamily={mono} fill="#6f6b63">
-            {fmt(min)}
-          </text>
-        </>
+          it: the range labels earn ink only when they say something else.
+          The same rule one extreme at a time: a series that ENDS at its max
+          (or its min) has the terminal label sitting on that ruling, and the
+          range label under it printed the same number twice, overlapping
+          (seen on the drift strip, 2026-09-08). */}
+      {spanRaw > 0 && (max - last) / span > 0.08 ? (
+        <text x={w - pad - 2} y={rulings[0] - 4} textAnchor="end" fontSize="9" fontFamily={mono} fill="#6f6b63">
+          {fmt(max)}
+        </text>
+      ) : null}
+      {spanRaw > 0 && (last - min) / span > 0.08 ? (
+        <text x={w - pad - 2} y={rulings[2] + 11} textAnchor="end" fontSize="9" fontFamily={mono} fill="#6f6b63">
+          {fmt(min)}
+        </text>
       ) : null}
       {fill ? <path className="vx-spark-fill" d={area} fill={`url(#${gradId})`} /> : null}
       <path
