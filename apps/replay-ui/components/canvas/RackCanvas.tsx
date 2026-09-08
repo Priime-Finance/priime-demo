@@ -2073,7 +2073,8 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
        vault does not have, and the same defect B5 removed from the funding
        canvas (`Hyperliquid + Hyperliquid` → `Cross-venue`). The identity is
        the venue ID, never the lane count: distinct ids decide, exactly as
-       `funding-lane-rows.distinctVenueLabels` decides. */
+       `funding-lane-rows.distinctVenueLabels`
+       (retired, see git history) decided. */
     const laneVenueIds = Array.from(new Set(laneComputed.map((l) => l.p.venue).filter(Boolean)));
     const venue =
       laneVenueIds.length === 1

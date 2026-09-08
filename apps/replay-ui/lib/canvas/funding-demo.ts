@@ -1370,7 +1370,7 @@ export function publishFields(p: FundingPortfolio, econ: PortfolioEconomics): Fu
      row per lane labelled by the VENUE alone — `{ label: "Hyperliquid",
      value: "ETH-USD · 65%" }` — which is how a two-lane Hyperliquid vault
      published two rows under one label and lost the second to the record's
-     dedupe. `funding-lane-rows.ts` now owns a lane's identity
+     dedupe. `funding-lane-rows.ts` (retired, see git history) owned a lane's identity
      (`Hyperliquid · ETH-USD | 65% of capital`) and `fundingRecordView`
      prepends those rows. Emitting the old shape here as well left TWO
      spellings of one row alive in the tree, kept apart only by `dialRows`
@@ -1436,7 +1436,7 @@ export function reviewReason(p: FundingPortfolio, econ: PortfolioEconomics, quot
   if (withMarket.length === 0) return "pick a perp market";
   /* ══ EVERY LANE ON THE RECORD, OR NO RECORD (FUND-PLACEHOLDER-PUBLISH) ══
      A lane with no market is invisible to every published surface —
-     `seatedLanes` drops it from the record's rows, `portfolioEconomics`
+     `seatedLanes` (retired, see git history) dropped it from the record's rows, `portfolioEconomics`
      skips it (`if (!e) continue`), and the blend renormalises over the
      lanes that priced. It is NOT invisible to the ROUTER: it keeps its share
      of `allocationsBps`. So the unseeded canvas plus one `＋ Add a venue`
@@ -1515,7 +1515,7 @@ export function nextLanePick(p: FundingPortfolio): { venueId: string; marketId: 
  * them apart, and neither could the dock kicker, the vault plate or the
  * module panel.
  *
- * `funding-lane-rows.laneRowLabel` had already reached this ruling for the
+ * `funding-lane-rows.laneRowLabel` (retired, see git history) had already reached this ruling for the
  * PUBLISHED RECORD, and for the same reason — two rows under one label were
  * deduped away and the record then priced off a market the reader could not
  * see. It reads this function, so there is ONE spelling of the join.
