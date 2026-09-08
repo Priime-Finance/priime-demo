@@ -32,6 +32,28 @@ export function marketKeyOf(candidateId: string): string {
   return candidateId.split(":").pop() ?? "";
 }
 
+/**
+ * The whole v2 candidate id, split once. `${venue}:${chainId}:${pair}:${marketKey}`.
+ *
+ * `marketKeyOf` above takes the last segment and is enough for every consumer
+ * that only needs the market. A caller that needs the venue or the pair used
+ * to split the id a second time in `components/vaults/live-loop.ts`, which is
+ * the bug the comment above warns about, so the parse lives here with the
+ * rest of the format and the callers keep only their wording.
+ *
+ * Null for a v1 `${venue}:${id}` id or anything else that is not four
+ * segments; a caller that gets null prints the raw id rather than guessing.
+ */
+export function candidateSegments(
+  candidateId: string,
+): { venue: string; chainId: string; pair: string; marketKey: string } | null {
+  const parts = candidateId.split(":");
+  if (parts.length < 4) return null;
+  const [venue, chainId, pair, marketKey] = parts;
+  if (!venue || !chainId || !pair || !marketKey) return null;
+  return { venue, chainId, pair, marketKey };
+}
+
 const LOOP_ID_RE = /^loop_(\d+)$/;
 
 /** Deterministic: monotonic integer (max+1). Migration always yields loop_1. */

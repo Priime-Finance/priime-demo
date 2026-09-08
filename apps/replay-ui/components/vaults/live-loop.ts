@@ -30,6 +30,7 @@
 import type { Journal } from "@priime-demo/journal-schema";
 import type { LoopRecord } from "@priime-demo/loop-deploy";
 
+import { candidateSegments } from "@/lib/canvas/ids";
 import { chainLabel, venueNoun } from "@/lib/canvas/labels";
 import { truncateAddress, truncateHash } from "@/lib/format";
 import { attestedNavUsd, AWAITING_LABEL, formatAttestedNav } from "@/lib/vaults/attested";
@@ -121,16 +122,13 @@ export function cadenceText(cronSeconds: number): string {
  * The chain comes from the journal (`journalChainLabel`) or it is not stated.
  */
 export function marketWords(candidateId: string): { pair: string; venue: string } | null {
-  const parts = candidateId.split(":");
-  if (parts.length < 4) return null;
-  const venue = parts[0];
-  const pair = parts[2];
-  if (!venue || !pair) return null;
-  return { pair: pair.replace(/-/g, "/"), venue: venueNoun(venue) };
+  const seg = candidateSegments(candidateId);
+  if (seg === null) return null;
+  return { pair: seg.pair.replace(/-/g, "/"), venue: venueNoun(seg.venue) };
 }
 
 /** `USDe/USDC on Morpho Blue`, or the raw id when it is not a v2 candidate. */
-export function marketLine(candidateId: string): string {
+function marketLine(candidateId: string): string {
   const words = marketWords(candidateId);
   return words === null ? candidateId : `${words.pair} on ${words.venue}`;
 }
@@ -142,7 +140,7 @@ export function marketLine(candidateId: string): string {
  * honest answer: there is no public explorer for it, which is also why no row
  * on this surface carries a Verify key.
  */
-export function journalChainLabel(journal: Journal): string {
+function journalChainLabel(journal: Journal): string {
   return chainLabel(journal.vault.chain_id);
 }
 
@@ -151,7 +149,7 @@ export function journalChainLabel(journal: Journal): string {
  * has signed. Journals arrive newest-first from loop-server, but this sorts
  * on the determinism anchor rather than trusting an order.
  */
-export function settledJournal(journals: readonly Journal[]): Journal | null {
+function settledJournal(journals: readonly Journal[]): Journal | null {
   return (
     [...journals]
       .filter((j) => j.status === "settled" && j.attestation.nav_final !== null)
@@ -274,10 +272,16 @@ export function journalExecutions(journals: readonly Journal[]): LedgerExecution
  * That field exists so a third party can re-verify the component, and a page
  * that printed 64 zeros as one would be inviting a check that cannot pass.
  */
-export const DIGEST_UNSET_LABEL = "not published by this deployment";
+const DIGEST_UNSET_LABEL = "not published by this deployment";
 
 function digestText(componentDigest: string): string {
-  return /^0x0+$/.test(componentDigest) ? DIGEST_UNSET_LABEL : componentDigest;
+  /* The sentinel is `sha256:` followed by 64 zeros, which is how
+     `apps/loop-server/src/env.ts` spells "COMPONENT_DIGEST was never set".
+     Matching `0x`-prefixed zeros instead (as this did until the pre-PR sweep)
+     never fired, so an unset digest printed 64 zeros and invited a check that
+     cannot pass, which is the one thing this function exists to stop. The
+     prefix is optional and the algorithm name is not assumed. */
+  return /^(?:[a-z0-9]+:|0x)?0+$/i.test(componentDigest) ? DIGEST_UNSET_LABEL : componentDigest;
 }
 
 /**
@@ -294,7 +298,7 @@ export interface LoopFact {
 }
 
 /** Rendered in place of a server field that has not been filled in yet. */
-export const PENDING_LABEL = "pending deploy";
+const PENDING_LABEL = "pending deploy";
 
 export function loopFacts(
   loop: LoopRecord,

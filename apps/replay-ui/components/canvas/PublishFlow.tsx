@@ -620,10 +620,7 @@ export default function PublishFlow({
                   numbers, never a warning; the composition is not wrong, it
                   is simply larger than what can be deployed today. */}
               {partialDeploy ? (
-                <div
-                  className="pf-cap-bind"
-                  style={{ maxWidth: "none", marginBottom: 12, textAlign: "center" }}
-                >
+                <div className="pf-cap-bind pf-cap-bind--wide pf-cap-bind--above">
                   Deploys one lane. Not deployed: {undeployedText}. It stays on the canvas and holds
                   no capital.
                 </div>
@@ -641,10 +638,7 @@ export default function PublishFlow({
                   key, so the skip cannot exist. The line says which address is
                   about to be handed that key, and morphs with the key above
                   it rather than appearing and disappearing beneath it. */}
-              <div
-                className="pf-cap-bind"
-                style={{ maxWidth: "none", marginTop: 12, marginBottom: 0, textAlign: "center" }}
-              >
+              <div className="pf-cap-bind pf-cap-bind--wide pf-cap-bind--below">
                 {isConnected && address
                   ? `Strategist ${shortAddress(address)}, which holds this vault's exit key.`
                   : "The connected address becomes the strategist and holds this vault's exit key."}
@@ -687,22 +681,9 @@ export default function PublishFlow({
               composition is still on the canvas.
             </div>
             {failIssues.length > 0 ? (
-              <ul
-                className="pf-fail-issues"
-                style={{
-                  display: "grid",
-                  gap: 6,
-                  margin: "0 0 16px",
-                  padding: 0,
-                  listStyle: "none",
-                  fontSize: 11,
-                  color: "#B8D9FF",
-                }}
-              >
+              <ul className="pf-fail-issues">
                 {failIssues.map((issue) => (
-                  <li key={issue} style={{ fontFamily: "var(--fm)", lineHeight: 1.5 }}>
-                    {issue}
-                  </li>
+                  <li key={issue}>{issue}</li>
                 ))}
               </ul>
             ) : null}
@@ -735,9 +716,7 @@ export default function PublishFlow({
                 capital that has been deposited into it, which is none. */}
             <div className="pf-summary">
               Handler{" "}
-              <b style={{ fontFamily: "var(--fm)", fontWeight: 600 }}>
-                {shortAddress(deployed.handler)}
-              </b>
+              <b>{shortAddress(deployed.handler)}</b>
               . First strike lands within a cadence.
             </div>
             {/* WHAT DID NOT GO, RESTATED AFTER THE FACT. The review card said
@@ -745,7 +724,7 @@ export default function PublishFlow({
                 be told again on the card that says the deploy worked, not to
                 discover it on the vault page. */}
             {partialDeploy ? (
-              <div className="pf-cap-bind" style={{ maxWidth: "none" }}>
+              <div className="pf-cap-bind pf-cap-bind--wide pf-cap-bind--flush">
                 One lane deployed. Not deployed: {undeployedText}.
               </div>
             ) : null}

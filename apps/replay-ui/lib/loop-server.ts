@@ -11,7 +11,7 @@ export interface LoopServerConfig {
   token: string;
 }
 
-export function loopServerConfig(): LoopServerConfig {
+function loopServerConfig(): LoopServerConfig {
   const baseUrl = process.env.LOOP_SERVER_URL ?? "http://127.0.0.1:8090";
   const token = process.env.LOOP_SERVER_TOKEN ?? "";
   return { baseUrl: baseUrl.replace(/\/$/, ""), token };

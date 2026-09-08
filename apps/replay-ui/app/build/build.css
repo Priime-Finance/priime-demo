@@ -1712,6 +1712,25 @@ body:has(.bc-root) footer{display:none}
    "limited by WETH borrow liquid…" is worse than no line at all. */
 .pf-cap-bind{font-family:var(--fser);font-style:italic;font-size:11px;line-height:1.5;color:#8B94C4;
   margin-bottom:18px;max-width:38ch}
+/* THE PUBLISH SEAM'S THREE ANNOTATIONS, in `.pf-cap-bind`'s own register.
+   All three run the card's full width and centre, because they sit under the
+   key rather than beside a number: which address is about to hold the exit
+   key, and (on a composition larger than one lane) what will not be deployed.
+   The modifiers carry only the margin, since that is all that separates a
+   line above the key from one below it. */
+.pf-cap-bind--wide{max-width:none;text-align:center}
+.pf-cap-bind--above{margin-bottom:12px}
+.pf-cap-bind--below{margin-top:12px;margin-bottom:0}
+.pf-cap-bind--flush{margin-bottom:0}
+
+/* loop-server's own refusals, listed verbatim. Mono because each line names a
+   field the composer can go and change. */
+.pf-fail-issues{display:grid;gap:6px;margin:0 0 16px;padding:0;list-style:none;
+  font-size:11px;color:#B8D9FF}
+.pf-fail-issues li{font-family:var(--fm);line-height:1.5}
+
+/* The deployed handler, in the data face: an address is a reading. */
+.pf-summary b{font-family:var(--fm);font-weight:600}
 /* M6 — capacity gets GROUND, not a beat: it rides the card's existing pfin
    rather than taking a delayed reveal, which would stage it as a disclosure
    arriving after the APY has finished selling (a caveat wall built out of
@@ -2097,9 +2116,6 @@ body:has(.bc-root) footer{display:none}
       fully visible, so reduced-motion just lands the swap instantly. ── */
 .pf-key-label{display:inline-block;animation:pfKeyMorph .22s ease both}
 @keyframes pfKeyMorph{from{opacity:0;transform:translateY(3px)}}
-/* "Publish without connecting": the existing ghost-link voice, as a button. */
-.pf-ghost-skip{display:block;width:100%;margin-top:12px;padding:2px 0;
-  background:none;border:0;cursor:pointer}
 @media (prefers-reduced-motion:reduce){
   .pf-key-label{animation:none}
 }
