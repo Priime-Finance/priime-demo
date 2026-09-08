@@ -181,6 +181,18 @@ node src/main.ts
 ```bash
 # shell 4 (frontend)
 cd apps/replay-ui
+pnpm dev
+```
+
+Every variable the UI reads already defaults to the fork: loop-server at
+`127.0.0.1:8090`, the RPC at `127.0.0.1:8545`, chain `31337`, and the bearer
+token to the same `demo-token-...` the script above uses. The token default is
+**localhost only** (`lib/loop-server.ts`, pinned by
+`tests/loop-server-auth.test.ts`); point `LOOP_SERVER_URL` at any other host
+and `LOOP_SERVER_TOKEN` becomes required again, because loop-server deploys
+with a funded owner key. Set them explicitly when you want something else:
+
+```bash
 LOOP_SERVER_URL=http://127.0.0.1:8090 \
 LOOP_SERVER_TOKEN=demo-token-0123456789abcdef \
 NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545 \
