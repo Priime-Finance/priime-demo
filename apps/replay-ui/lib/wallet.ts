@@ -1,95 +1,61 @@
 "use client";
 
 /**
- * The mock wallet. UI only: no wallet library, no chain, no address.
+ * The wallet seam. Wagmi behind the hook shapes the UI already reads.
  *
- * Connected state is one localStorage flag and one window event, read behind
- * the same two hook shapes the live product reads from its wallet library and
- * connect kit (`useAccount`, `useConnectModal`), so `SiteNav`, `PublishFlow`
- * and `PortfolioView` keep their live call sites byte for byte. Jakub's
- * Providers + ConnectButton replace this file; nothing else moves.
+ * This file used to be a mock: one localStorage flag, no chain, no address,
+ * shaped so `SiteNav`, `PublishFlow`, `RackCanvas` and `PortfolioView` could
+ * be written against the real product's call sites before a wallet existed.
+ * It is now the adapter it was designed to become. Every consumer imports
+ * from `@/lib/wallet` exactly as before; only this file changed.
  *
- * SSR-safe: the server render and the first client render are disconnected;
- * the flag is read in an effect. Every storage access is wrapped, so a
- * private window or blocked storage reads as disconnected rather than
- * throwing.
+ * `useAccount` is wagmi's own, re-exported. Its return type is a superset of
+ * the mock's (`address` is a real `0x…` once connected instead of always
+ * `undefined`, and `status` carries wagmi's four states rather than two), so
+ * no call site needed editing. Two consequences worth knowing:
+ *
+ *   - `RackCanvas` guards its draft persistence on `address` being truthy.
+ *     Under the mock that branch was unreachable and `/api/canvas/draft` was
+ *     never called. It is live now.
+ *   - Any code that assumed `address === undefined` is wrong rather than
+ *     merely unreachable. There is none at the time of writing.
+ *
+ * `useConnectModal` has no wagmi equivalent (it is RainbowKit's shape, which
+ * is what the UI was written against). It keeps its two window events, so the
+ * sheet stays mounted once in the root layout and any component in the tree
+ * can open it without a context or a prop drill. `WalletSheet` is what
+ * listens; it renders Antoni's card and connects through wagmi for real.
  */
 
 import { useCallback, useEffect, useState } from "react";
 
-export const WALLET_KEY = "priime:demo-wallet";
-export const WALLET_EVENT = "priime:demo-wallet-changed";
-/** Dispatched by `openConnectModal`; the demo wallet sheet listens. */
-export const WALLET_OPEN_EVENT = "priime:demo-wallet-open";
-/** Dispatched by the sheet when it closes without connecting (Not now, Esc). */
-export const WALLET_CLOSE_EVENT = "priime:demo-wallet-close";
+export { useAccount, useDisconnect } from "wagmi";
 
-function readConnected(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(WALLET_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
+/** Dispatched by `openConnectModal`; the wallet sheet listens. */
+export const WALLET_OPEN_EVENT = "priime:wallet-open";
+/** Dispatched by the sheet when it closes, connected or not. */
+export const WALLET_CLOSE_EVENT = "priime:wallet-close";
 
-/** Write the flag and announce it. The sheet calls this on Connect. */
-export function connectDemoWallet(): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(WALLET_KEY, "1");
-  } catch {
-    // storage blocked: the event still flips the session, the next load forgets
-  }
-  window.dispatchEvent(new Event(WALLET_EVENT));
-}
-
-export type AccountStatus = "connected" | "disconnected";
-
-export interface DemoAccount {
-  isConnected: boolean;
-  /** Never an address in this build: nothing is signed. */
-  address: undefined;
-  status: AccountStatus;
-}
-
-export function useAccount(): DemoAccount {
-  const [connected, setConnected] = useState(false);
-  useEffect(() => {
-    const sync = () => setConnected(readConnected());
-    sync();
-    window.addEventListener(WALLET_EVENT, sync);
-    window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener(WALLET_EVENT, sync);
-      window.removeEventListener("storage", sync);
-    };
-  }, []);
-  return {
-    isConnected: connected,
-    address: undefined,
-    status: connected ? "connected" : "disconnected",
-  };
-}
-
-export interface DemoConnectModal {
+export interface ConnectModalState {
   openConnectModal: () => void;
   connectModalOpen: boolean;
 }
 
-/** Shape of RainbowKit's hook as `PublishFlow.tsx:258` reads it. */
-export function useConnectModal(): DemoConnectModal {
+/**
+ * Shape of RainbowKit's hook as `PublishFlow` and `PortfolioView` read it.
+ * `connectModalOpen` exists so the Review card's own Escape handler can tell
+ * "the sheet is over me" from "close the card".
+ */
+export function useConnectModal(): ConnectModalState {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const onOpen = () => setOpen(true);
     const onClose = () => setOpen(false);
     window.addEventListener(WALLET_OPEN_EVENT, onOpen);
     window.addEventListener(WALLET_CLOSE_EVENT, onClose);
-    window.addEventListener(WALLET_EVENT, onClose);
     return () => {
       window.removeEventListener(WALLET_OPEN_EVENT, onOpen);
       window.removeEventListener(WALLET_CLOSE_EVENT, onClose);
-      window.removeEventListener(WALLET_EVENT, onClose);
     };
   }, []);
   const openConnectModal = useCallback(() => {
@@ -97,4 +63,9 @@ export function useConnectModal(): DemoConnectModal {
     window.dispatchEvent(new Event(WALLET_OPEN_EVENT));
   }, []);
   return { openConnectModal, connectModalOpen: open };
+}
+
+/** Short `0x1234…abcd`, for the nav pill. */
+export function shortAddress(a: string): string {
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }

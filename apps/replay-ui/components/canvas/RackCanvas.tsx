@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/consistent-type-definitions, @typescript-eslint/no-floating-promises, @typescript-eslint/no-misused-promises, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/non-nullable-type-assertion-style, @typescript-eslint/prefer-optional-chain, @typescript-eslint/restrict-template-expressions, react-hooks/exhaustive-deps --
+/* eslint-disable @typescript-eslint/consistent-type-definitions, @typescript-eslint/no-floating-promises, @typescript-eslint/no-misused-promises, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/non-nullable-type-assertion-style, @typescript-eslint/prefer-optional-chain, react-hooks/exhaustive-deps --
  * Kit-verbatim file, ported from build.priime.finance eb6d33a. The rules
  * above are the kit's own idiom (untyped fetch/localStorage JSON, loose
  * equality on sentinel values, the hook dependency lists it ships with);

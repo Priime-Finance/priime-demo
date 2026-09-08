@@ -867,6 +867,23 @@ input, textarea, [contenteditable]{ caret-color: var(--p-caret); }
 .dws-ghost{display:block;width:100%;margin-top:12px;padding:2px 0;background:none;border:0;cursor:pointer;
   font-family:inherit;font-style:normal;font-size:13px;color:#7FB2FF;text-align:center}
 .dws-ghost:hover{color:#B8D9FF}
+/* Connect error, in the sheet's own register: the wallet library's first
+   line only, never its stack. */
+.dws-err{margin:12px 0 0;font-size:12.5px;line-height:1.45;color:#FF9A9A}
+
+/* THE NAV'S WALLET SLOT. Antoni reserved the right cluster for the live
+   connect key (PR #15); this is that key, in the nav's own pill language
+   rather than a second one. Quiet by default so the blue Create vault CTA
+   stays the only loud thing in the cluster; connected, it prints the address
+   in the data face because an address is a reading, not a word. */
+.nav-wallet{display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:999px;
+  border:1px solid var(--p-line);background:transparent;color:var(--p-ink);
+  font-family:var(--font-body);font-size:12.5px;letter-spacing:0;cursor:pointer;
+  transition:border-color .15s ease,background .15s ease}
+.nav-wallet:hover{border-color:var(--p-ink);background:color-mix(in srgb,var(--p-ink) 6%,transparent)}
+.nav-wallet:focus-visible{outline:2px solid #2B5CFF;outline-offset:2px}
+.nav-wallet--on{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.01em}
+
 @keyframes dwsfade{from{opacity:0}to{opacity:1}}
 @keyframes dwsin{0%{opacity:0;transform:scale(.97) translateY(6px)}100%{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){

@@ -39,11 +39,16 @@ describe("root layout (1.1)", () => {
     expect(src).not.toContain("fonts.googleapis.com/css");
     expect(src).not.toMatch(/<link\s/);
   });
-  it("mounts the live shell and nothing hidden", () => {
-    for (const s of ["<SiteNav />", "<VintageFooter />", "<DemoWalletSheet />", 'id="main-content"']) {
+  it("mounts the live shell, wallet stack included", () => {
+    /* <Providers> was forbidden here while lib/wallet.ts was a mock. The
+       wallet is real now, so the assertion inverts: wagmi + react-query wrap
+       the whole shell, and the sheet the connect hook opens is mounted once
+       inside it. AppTabs and BareRoute stay out, as before. */
+    for (const s of ["<Providers>", "<SiteNav />", "<VintageFooter />", "<WalletSheet />", 'id="main-content"']) {
       expect(src).toContain(s);
     }
-    expect(src).not.toMatch(/<Providers>|<AppTabs\s*\/>|from "@\/components\/chrome\/BareRoute"|from "@\/components\/Providers"|from "@\/components\/nav\/ProductTabs"/);
+    expect(src).toContain('from "@/components/Providers"');
+    expect(src).not.toMatch(/<AppTabs\s*\/>|from "@\/components\/chrome\/BareRoute"|from "@\/components\/nav\/ProductTabs"/);
     expect(src).toContain("suppressHydrationWarning");
   });
   it("prints the viewport the pre-paint script re-stamps", () => {
@@ -110,8 +115,12 @@ describe("globals.css (1.3)", () => {
 
 describe("SiteNav (1.4)", () => {
   const src = read("components/nav/SiteNav.tsx");
-  it("reads the mock wallet, not wagmi", () => {
-    expect(src).toContain('import { useAccount } from "@/lib/wallet"');
+  it("reads the wallet through the seam, never wagmi directly", () => {
+    /* lib/wallet.ts is the adapter over wagmi now rather than a mock, but the
+       invariant it was written to protect is the same and still worth a gate:
+       every consumer goes through the one seam, so swapping the wallet
+       library again touches exactly one file. */
+    expect(src).toContain('from "@/lib/wallet"');
     expect(src).not.toMatch(/from "wagmi"/);
     expect(src).toContain("const showPortfolio = mounted && isConnected");
   });
@@ -123,7 +132,19 @@ describe("SiteNav (1.4)", () => {
     expect(src).toContain('className="btn btn--orange" href={buildHref}');
     expect(src).toContain("Create vault");
   });
-  it("never prints a connect pill in the nav", () => {
+  it("carries the wallet slot, and never the Review card's words", () => {
+    /* The mock build had no connect pill, because a key that connects
+       nothing is a lie. The wallet is real now and Antoni reserved this slot
+       for it (PR #15: "the nav slot is SiteNav's right cluster"), so the pill
+       is here: Connect when disconnected, the address when connected, which
+       is also the only way to see which key is about to become the vault's
+       exit key, and the only way to drop it.
+
+       "Connect wallet" stays out. That phrasing belongs to the Review card's
+       key morph, which is the commitment moment; the nav's is a utility. One
+       wording per moment. */
+    expect(src).toContain("nav-wallet");
+    expect(src).toContain("shortAddress(address)");
     expect(src).not.toContain("Connect wallet");
   });
   it("uses the demo's logo path and writes the host cookie", () => {
@@ -141,17 +162,24 @@ describe("VintageFooter (1.5)", () => {
   });
 });
 
-describe("DemoWalletSheet (1.6)", () => {
-  const src = read("components/wallet/DemoWalletSheet.tsx");
-  it("listens for the open event and connects through the one owner", () => {
+describe("WalletSheet (1.6)", () => {
+  const src = read("components/wallet/WalletSheet.tsx");
+  it("listens on the seam's events and connects through wagmi", () => {
     expect(src).toContain("WALLET_OPEN_EVENT");
     expect(src).toContain("WALLET_CLOSE_EVENT");
-    expect(src).toContain("connectDemoWallet()");
+    expect(src).toContain("useConnect");
+    expect(src).toContain("connect({ connector: c }");
   });
-  it("prints the two sanctioned strings and the two keys only", () => {
-    expect(src).toContain("Demo wallet");
-    expect(src).toContain("Client state only. Nothing is signed.");
-    expect(src).toContain(">\n            Connect\n");
+  it("keeps no wallet state of its own", () => {
+    /* The mock this replaced wrote a localStorage flag and announced it.
+       Connected state is wagmi's now, read through useAccount, so a second
+       source of truth here would be a session the rest of the app cannot
+       see. */
+    expect(src).not.toMatch(/localStorage|connectDemoWallet|WALLET_KEY/);
+  });
+  it("stays a picker: no address, no fields", () => {
+    expect(src).toContain("Connect a wallet");
+    expect(src).toContain("Nothing else is signed.");
     expect(src).toContain(">\n            Not now\n");
     expect(src).not.toMatch(/<input|<select|0x[0-9a-f]{4}/i);
   });

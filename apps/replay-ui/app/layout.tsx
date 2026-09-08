@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 import { SiteNav } from "@/components/nav/SiteNav";
 import { VintageFooter } from "@/components/footer/VintageFooter";
-import { DemoWalletSheet } from "@/components/wallet/DemoWalletSheet";
+import { Providers } from "@/components/Providers";
+import { WalletSheet } from "@/components/wallet/WalletSheet";
 import "./globals.css";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -121,27 +122,31 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: PRETHEME }} />
       </head>
       <body>
-        {/* Skip-link for keyboard and screen-reader users to bypass the
-            global nav and land directly on page content. WCAG 2.4.1. */}
-        <a
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-[var(--radius)] focus:bg-stone-925 focus:border focus:border-[var(--color-honey-400)] focus:px-3 focus:py-2 focus:text-sm focus:text-stone-100"
-        >
-          Skip to content
-        </a>
-        {/* The live shell minus what this build does not carry: no wallet
-            Providers (lib/wallet.ts is the mock behind the same hook shapes),
-            no AppTabs strip (hidden by ruling), no BareRoute (there is no
-            bare route here, so the content column is unconditional). The main
-            class string is the live one. */}
-        <SiteNav />
-        <main id="main-content" className="mx-auto max-w-7xl px-6 sm:px-10 lg:px-16 xl:px-20 pt-8 pb-24 space-y-8">
-          {children}
-        </main>
-        <VintageFooter />
-        {/* Mounted once, for every route: the Review card and the portfolio's
-            Connect key both open it through useConnectModal(). */}
-        <DemoWalletSheet />
+        {/* Wagmi + react-query, wrapping the whole shell so `useAccount` is
+            readable from the nav, the canvas and the vault page alike. The
+            mock this build shipped with is gone; `lib/wallet.ts` is now the
+            adapter over the real thing. Still no AppTabs strip (hidden by
+            ruling) and no BareRoute (there is no bare route here, so the
+            content column is unconditional). The main class string is the
+            live one. */}
+        <Providers>
+          {/* Skip-link for keyboard and screen-reader users to bypass the
+              global nav and land directly on page content. WCAG 2.4.1. */}
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-[var(--radius)] focus:bg-stone-925 focus:border focus:border-[var(--color-honey-400)] focus:px-3 focus:py-2 focus:text-sm focus:text-stone-100"
+          >
+            Skip to content
+          </a>
+          <SiteNav />
+          <main id="main-content" className="mx-auto max-w-7xl px-6 sm:px-10 lg:px-16 xl:px-20 pt-8 pb-24 space-y-8">
+            {children}
+          </main>
+          <VintageFooter />
+          {/* Mounted once, for every route: the Review card and the
+              portfolio's Connect key both open it through useConnectModal(). */}
+          <WalletSheet />
+        </Providers>
       </body>
     </html>
   );

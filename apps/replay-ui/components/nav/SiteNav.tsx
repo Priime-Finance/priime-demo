@@ -31,7 +31,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAccount } from "@/lib/wallet";
+import { useAccount, useConnectModal, useDisconnect, shortAddress } from "@/lib/wallet";
 import { useBuildHref } from "@/lib/host";
 
 const SITE = "https://priime.finance";
@@ -96,7 +96,9 @@ export function SiteNav() {
 
   /* Connected-only Portfolio: hidden during SSR + first client render, then
      revealed post-mount when wagmi says connected (hydration-safe). */
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
+  const { openConnectModal } = useConnectModal();
+  const { disconnect } = useDisconnect();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const showPortfolio = mounted && isConnected;
@@ -385,6 +387,27 @@ export function SiteNav() {
             >
               <ThemeGlyph />
             </button>
+            {/* The wallet slot Antoni reserved for the live connect key
+                (PR #15: "the nav slot is SiteNav's right cluster"). Hidden
+                until mounted for the same reason Portfolio is: the server
+                render cannot know the wallet and a pill that pops from
+                Connect to an address on hydration reads as a glitch. */}
+            {mounted ? (
+              isConnected && address !== undefined ? (
+                <button
+                  type="button"
+                  className="nav-wallet nav-wallet--on"
+                  onClick={() => disconnect()}
+                  title="Disconnect"
+                >
+                  {shortAddress(address)}
+                </button>
+              ) : (
+                <button type="button" className="nav-wallet" onClick={openConnectModal}>
+                  Connect
+                </button>
+              )
+            ) : null}
             <a className="btn btn--orange" href={buildHref}>
               Create vault
             </a>
