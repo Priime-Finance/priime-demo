@@ -60,8 +60,9 @@ export function readEnv(): ServerEnv {
     // journal endpoint still emits a valid Journal before the aggregator
     // writes real digests.
     componentDigest: process.env.COMPONENT_DIGEST ?? "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    quorumThreshold: Number(process.env.QUORUM_THRESHOLD ?? "1"),
-    quorumTotal: Number(process.env.QUORUM_TOTAL ?? "1"),
+    // Defaults track deploy/vault-service.sh's three-operator, 2-of-3 quorum.
+    quorumThreshold: Number(process.env.QUORUM_THRESHOLD ?? "2"),
+    quorumTotal: Number(process.env.QUORUM_TOTAL ?? "3"),
     journalFromBlock: process.env.JOURNAL_FROM_BLOCK === undefined ? undefined : BigInt(process.env.JOURNAL_FROM_BLOCK),
   };
 }

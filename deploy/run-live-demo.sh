@@ -13,7 +13,7 @@
 # alone if it was already up. Logs land in deploy/.<target>/live-demo/*.log.
 #
 # Cleanup: `bash deploy/run-live-demo.sh stop` shuts down the two servers,
-# the wavs-vault container and anvil (IPFS stays running).
+# the wavs-vault-N containers and anvil (IPFS stays running).
 
 set -euo pipefail
 
@@ -59,7 +59,7 @@ if [ "${1:-}" = "stop" ]; then
   say "stopping live-demo servers"
   stop_pidfile "$PIDFILE_LS" "loop-server"
   stop_pidfile "$PIDFILE_UI" "replay-ui"
-  docker rm -f wavs-vault >/dev/null 2>&1 || true
+  docker rm -f wavs-vault wavs-vault-1 wavs-vault-2 wavs-vault-3 >/dev/null 2>&1 || true
   # There is only an anvil to stop when we started one.
   if [ "$IS_FORK" = "1" ] && [ -f "$FORKDIR/anvil.pid" ]; then
     pid="$(cat "$FORKDIR/anvil.pid")"
@@ -111,7 +111,7 @@ say "loop-server"
 stop_pidfile "$PIDFILE_LS" "loop-server"
 SVC_JSON="$FORKDIR/vault-service.json"
 SM="$(jq -r .service_manager "$SVC_JSON")"
-DIG="$(jq -r '.workflows | to_entries[0].value.component.source.download.digest' "$FORKDIR/wavs-vault/service.json")"
+DIG="$(jq -r '.workflows | to_entries[0].value.component.source.download.digest' "$FORKDIR/wavs-vault-1/service.json")"
 
 # Node reaches a local anvil most reliably over the literal loopback address
 # (localhost can resolve to ::1, which anvil is not listening on), so keep the
@@ -139,7 +139,7 @@ VAULT_SERVICE_JSON="$SVC_JSON" \
 PORT="$LS_PORT" \
 DB_PATH="$DB_FILE" \
 COMPONENT_DIGEST="sha256:$DIG" \
-QUORUM_THRESHOLD="1" QUORUM_TOTAL="1" \
+QUORUM_THRESHOLD="2" QUORUM_TOTAL="3" \
   nohup node src/main.ts > "$LOGDIR/loop-server.log" 2>&1 &
 echo $! > "$PIDFILE_LS"
 popd >/dev/null
