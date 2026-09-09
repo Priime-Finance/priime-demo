@@ -61,8 +61,8 @@ export interface MarketSpec {
  */
 export const USDE_USDC_MORPHO_BASE: MarketSpec = {
   candidateId: "morpho-blue-base:8453:USDe-USDC:0x54cf9be5",
-  chainKey: "evm:31337",
-  chainId: 31337,
+  chainKey: "evm:8453",
+  chainId: 8453,
   label: "USDe/USDC on Morpho Blue  -  Base (91.5% LLTV)",
   marketId: "0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354",
   lltv: "915000000000000000",
