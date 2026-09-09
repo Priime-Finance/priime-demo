@@ -74,12 +74,19 @@ fails loudly, per-variable, the moment something required is missing
   for the four roles. They may be four distinct keys or fewer; that's an
   operational choice the scripts don't make for you.
 - `LOOP_SERVER_TOKEN` (required): `run-live-demo.sh`'s `demo-token-...`
-  default is fork-only; a live run must supply its own bearer token.
+  default is fork-only; a live run must supply its own bearer token
+  (`openssl rand -hex 24`).
+- `.env.mainnet` at the repo root holds every required variable in one
+  file, gitignored via the `.env.*` rule. Copy from the template committed
+  in the tree and fill in the blanks; then
+  `env $(grep -v '^#' .env.mainnet | xargs) TARGET=mainnet deploy/vault-service.sh`.
 - Funding is a real transfer from the treasury key, balance-checked first;
   a shortfall is fatal rather than silently short-funding an account.
   Blocks are real; the scripts poll for one rather than forcing it.
-  The strike cadence is hourly, not every 10 seconds, because a strike is a
-  real on-chain submission paying real Base gas.
+  The strike cadence is `0 * * * * *` (once per minute), a UX pick rather
+  than a cost cap; Base gas per strike is a fraction of a cent, so
+  cadence choices land in the ~$1/day range at 60s or ~$7/day at 10s. See
+  `deploy/targets/mainnet.json` for the tradeoff comment.
 - Per-run artifacts land in `deploy/.mainnet/`.
 - `deploy/deploy.sh` (the top-level M1 hello-world pipeline in the repo
   README) refuses `TARGET=mainnet` outright: its `wavs.toml` wants one

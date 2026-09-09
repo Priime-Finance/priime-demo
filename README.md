@@ -59,6 +59,29 @@ Created 2026-09-09 by `0x03F3c4B41d839846A13841506297a567a3ebBa7a` via
 To reproduce or port to another testnet, see `deploy/sepolia-setup.sh`
 (idempotent). The normal demo path does not need to run it.
 
+## Base mainnet deployment (planned)
+
+`TARGET=mainnet` points at Base itself (chain 8453). Zero deployment work
+on our side: every address the vault reads is already live and is the same
+contract that has attested the mainnet USDe/USDC market for months. The
+deploy scripts stand up the POA service manager and per-loop PriimeVault
+handlers on top; the market itself is unchanged.
+
+| What | Address |
+| --- | --- |
+| Ethena USDe (real) | `0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34` |
+| Circle USDC (real) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| Morpho Blue (real) | `0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb` |
+| AdaptiveCurveIRM (real) | `0x46415998764C29aB2a25CbeA6254146D50D22687` |
+| Morpho market id (real, USDe/USDC 91.5% LLTV) | `0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354` |
+| Market oracle (real, Chainlink-backed timelock) | `0xF4b17C79492d68775e22e8Dd0a2Bb22854A39A47` |
+| Aerodrome USDe/USDC pool (real, entry leg) | `0x15BC08D2E2B405afeD3fB872DCd2d962BcCfB7e0` |
+
+To run: fill in `.env.mainnet` (see the template at the repo root) with
+`PRIIME_RPC_URL`, the four `PRIIME_*_KEY` role keys and a `LOOP_SERVER_TOKEN`,
+then `env $(grep -v '^#' .env.mainnet | xargs) TARGET=mainnet deploy/vault-service.sh`.
+Same script the fork uses. See `docs/LIVE_DEMO.md` for the full pipeline.
+
 ## M1: hello-world through the full WAVS pipeline (on anvil)
 
 A hello-world component through the whole pipeline: scaffold, build, deploy, a

@@ -292,6 +292,13 @@ POA=(docker run --rm --network host -v "$FORKDIR/nodes-vault:/root/.nodes" --env
 SM=$(jq -r '.addresses.POAStakeRegistry' "$FORKDIR/nodes-vault/poa_deploy.json")
 # The deploy container has returned but its last transaction may not be in a
 # block the next reader sees. On the fork we mine one; on a live chain we wait.
+# Base's load-balanced RPC pool can serve a stale block.number for several
+# seconds after a deploy, and the manager's first mutating call pushes a
+# Checkpoint keyed on block.number - a stale number that is <= the deploy
+# block trips OpenZeppelin's CheckpointUnorderedInsertion revert. Wait for
+# three blocks (~6s on Base) so every RPC endpoint has caught up.
+mine_or_wait
+mine_or_wait
 mine_or_wait
 # Quorum: three operators each register with weight 1000 (total 3000); the
 # stake threshold requires 2000 (2-of-3) and the quorum fraction (2/3)
@@ -303,11 +310,25 @@ echo "service manager: $SM"
 
 # --- 4. deploy PriimeVault --------------------------------------------------
 say "deploy PriimeVault"
+# Previous step's updateStakeThreshold + updateQuorum txs and the POA
+# container's internal txs all bumped this key's nonce. Give the RPC a
+# block to settle before forge queries it, so a stale-nonce race does not
+# eat the deploy.
+mine_or_wait
 VAULT=$( cd "$ROOT/contracts" && forge create src/PriimeVault.sol:PriimeVault \
   --rpc-url "$RPC" --private-key "$K0" --broadcast \
   --constructor-args "$SM" "$USDC" "$STRATEGIST" \
   | awk '/Deployed to/{print $NF}' )
 echo "vault: $VAULT (strategist $STRATEGIST)"
+# Alchemy-style load-balanced RPCs can return the deploy address from one
+# node before the next read hits a node that has seen the tx. Poll for code
+# with a short backoff so the verify below is not a read-after-write race.
+for _ in $(seq 1 30); do
+  if [ "$(cast code "$VAULT" --rpc-url "$RPC")" != "0x" ]; then break; fi
+  sleep 2
+done
+[ "$(cast code "$VAULT" --rpc-url "$RPC")" != "0x" ] \
+  || { echo "FATAL: vault $VAULT still has no code after 60s"; exit 1; }
 GOT_SM=$(cast call "$VAULT" 'getServiceManager()(address)' --rpc-url "$RPC")
 [ "$(echo "$GOT_SM" | tr 'A-F' 'a-f')" = "$(echo "$SM" | tr 'A-F' 'a-f')" ] \
   || { echo "FATAL: vault.getServiceManager()=$GOT_SM != $SM"; exit 1; }
@@ -377,6 +398,7 @@ for i in $(seq 0 $((NODE_COUNT - 1))); do
   fund_account gas "$op"  "$OPERATOR_GAS"
   fund_account gas "$agg" "$OPERATOR_GAS"
   cast send "$SM" "registerOperator(address,uint256)" "$op" 1000 --private-key "$K0" --rpc-url "$RPC" >/dev/null
+  mine_or_wait   # let the pool see this K0 nonce before the next K0 send in this loop
   # Signing-key registration signs the raw keccak (no EIP-191 prefix) -> --no-hash.
   ENC=$(cast abi-encode "f(address)" "$op"); MSG=$(cast keccak "$ENC")
   SIG=$(cast wallet sign --no-hash --mnemonic "$m" --mnemonic-index 1 "$MSG")
@@ -384,6 +406,7 @@ for i in $(seq 0 $((NODE_COUNT - 1))); do
   echo "  operator $((i+1))/$NODE_COUNT: op=$op signing=$sign agg=$agg"
 done
 cast send "$SM" "setServiceURI(string)" "ipfs://$SVC_CID" --private-key "$K0" --rpc-url "$RPC" >/dev/null
+mine_or_wait
 
 # --- 8. start the three WAVS nodes (libp2p bootstrap topology) --------------
 # Node 1 is the libp2p bootstrap (`bootstrap_nodes = []`). We start it, wait
