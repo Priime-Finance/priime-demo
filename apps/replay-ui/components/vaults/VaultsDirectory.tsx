@@ -33,6 +33,7 @@ import { fetchLoops } from "@/lib/vaults/live-source";
 import { cadenceText, marketWords, readLoopConfig } from "./live-loop";
 import { SEED_VAULTS } from "@/lib/vaults/seeds";
 import { useBuildHref } from "@/lib/host";
+import { useAccount } from "@/lib/wallet";
 import { COMING_SOON } from "@/lib/demo-scope";
 import { automationCountFor } from "@/lib/vaults/hero";
 import { heroNavPerShare, heroNavUsd, heroStrikes } from "@/lib/vaults/rows";
@@ -495,10 +496,24 @@ export default function VaultsDirectory() {
     };
   }, []);
 
+  // Deployed loops the connected wallet published. Empty when no wallet is
+  // connected, so the `mine` chip keeps meaning the same thing it always did
+  // (local drafts + published-to-store) for the disconnected read.
+  //
+  // `loop.strategist` is stored lowercased by `packages/loop-deploy/config.ts`;
+  // wagmi hands us a checksummed address, so both go through `toLowerCase`
+  // before the string compare.
+  const { address } = useAccount();
+  const mineLoops = useMemo(() => {
+    if (address === undefined) return [] as LoopRecord[];
+    const me = address.toLowerCase();
+    return loops.filter((l) => l.strategist.toLowerCase() === me);
+  }, [loops, address]);
+
   const counts = useMemo(() => {
     const c: Record<string, number> = {
       all: vaults.length + loops.length,
-      mine: 0,
+      mine: mineLoops.length,
       incubating: 0,
       deployed: loops.length,
     };
@@ -508,7 +523,7 @@ export default function VaultsDirectory() {
       if (vaultStage(v) === "incubating") c.incubating += 1;
     }
     return c;
-  }, [vaults, loops]);
+  }, [vaults, loops, mineLoops.length]);
 
   // Chips derive from the catalog: All + one chip per strategy kind that
   // actually exists, labeled by the kind's own strategyLabel. Strategy chips
@@ -547,7 +562,12 @@ export default function VaultsDirectory() {
      wherever `undefined` lands. They keep their own order, newest first, and
      they lead. A `deployed` filter shows them alone; a strategy filter is a
      question about a composition and shows none of them. */
-  const shownLoops = filter === "all" || filter === "deployed" ? loops : [];
+  const shownLoops =
+    filter === "all" || filter === "deployed"
+      ? loops
+      : filter === "mine"
+        ? mineLoops
+        : [];
 
   // The count line, each number from its owner: live records from the stage,
   // the NAV from the journal, coming soon from the register.

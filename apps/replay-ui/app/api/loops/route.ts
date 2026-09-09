@@ -14,11 +14,15 @@ import { loopServerFetch } from "@/lib/loop-server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: Request): Promise<NextResponse> {
+  // Forward the strategist filter through untouched — the shape is checked
+  // and rejected on the loop-server side, so this proxy stays a byte pipe.
+  const strategist = new URL(req.url).searchParams.get("strategist");
+  const path = strategist === null ? "/loops" : `/loops?strategist=${encodeURIComponent(strategist)}`;
   try {
-    const res = await loopServerFetch("/loops");
+    const res = await loopServerFetch(path);
     if (!res.ok) {
-      return NextResponse.json({ error: `loop-server ${String(res.status)}` }, { status: 502 });
+      return NextResponse.json({ error: `loop-server ${String(res.status)}` }, { status: res.status === 400 ? 400 : 502 });
     }
     return NextResponse.json((await res.json()) as unknown);
   } catch (err) {

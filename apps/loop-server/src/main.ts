@@ -137,7 +137,15 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   }
 
   if (req.method === "GET" && path === "/loops") {
-    sendJson(res, 200, { loops: registry.list().map(serializeLoop) });
+    // Optional address filter — validated as 40-hex before it hits SQLite.
+    // Anything malformed is 400 so a client can't silently get every loop
+    // when its address contained a typo.
+    const strategistParam = url.searchParams.get("strategist");
+    if (strategistParam !== null && !/^0x[0-9a-fA-F]{40}$/.test(strategistParam)) {
+      throw new ValidationError(["strategist must be a 0x-prefixed 20-byte hex address"]);
+    }
+    const filter = strategistParam === null ? undefined : { strategist: strategistParam };
+    sendJson(res, 200, { loops: registry.list(filter).map(serializeLoop) });
     return;
   }
 

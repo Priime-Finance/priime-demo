@@ -21,13 +21,16 @@
  * Antoni's parts a deployment has the facts to fill. The data comes through
  * `lib/vaults/live-source.ts`, unchanged.
  *
- * WHAT IS ABSENT AND WHY. No deposit rail: loop-server has no deposit path,
- * and the rail's projection prices a modeled APY that does not exist here.
- * No Automations, Performance or Parameters section: those render a
- * `VaultRecord`'s published dials, and a deployment stores a config, not a
- * composition. No capacity instrument: nobody published a ceiling. No share
- * value: the v1 journal attests a NAV, not a share supply, and this vault
- * published no share count.
+ * WHAT IS ABSENT AND WHY. No Automations, Performance or Parameters
+ * section: those render a `VaultRecord`'s published dials, and a deployment
+ * stores a config, not a composition. No capacity instrument: nobody
+ * published a ceiling. No modeled share value: the v1 journal attests a NAV,
+ * not a share supply, and this vault published no share count on top of the
+ * ERC-4626 accounting a claim mints.
+ *
+ * DEPOSIT IS ON THIS PAGE. `DepositCard` renders the ERC-7540 request +
+ * claim flow against the vault directly; nothing about the deposit path
+ * touches loop-server. See the card's own doc for the tx sequence.
  *
  * DEGRADING. A 502 from `/api/loops/*` is the EXPECTED state during a demo
  * pause or a fresh dev boot, so it is a rendered state with its own copy and
@@ -43,7 +46,9 @@ import type { Journal } from "@priime-demo/journal-schema";
 import type { LoopRecord } from "@priime-demo/loop-deploy";
 
 import { ActivityTable, executionRows, verifyHref } from "./ActivitySection";
+import DepositCard from "./DepositCard";
 import { MarketWord } from "./MarketWord";
+import type { Address } from "viem";
 import SectionTabs, { type TabSection } from "./SectionTabs";
 import { StrikeLedger } from "./StrikeLedger";
 import {
@@ -80,9 +85,10 @@ const JOURNAL_WINDOW = 20;
  */
 const POLL_MS = 12_000;
 
-/** The section strip. Three sections, because a deployment has three. */
+/** The section strip. Overview → Deposit → Verification → Activity. */
 const SECTIONS: TabSection[] = [
   { id: "overview", label: "Overview" },
+  { id: "deposit", label: "Deposit" },
   { id: "verification", label: "Verification" },
   { id: "activity", label: "Activity" },
 ];
@@ -97,7 +103,7 @@ export const DEPLOYMENT_SUMMARY =
  * real deployment has fewer numbers on it than a composition does.
  */
 export const ABSENCE_NOTE =
-  "No modeled APY, projection, capacity bar or automation instrument appears here. Those are properties of a composition the builder priced; loop-server stores none of them, so printing one would be a number with no owner. The modeled register lives on the showcase vault.";
+  "No modeled APY, projection or capacity bar appears here — those are properties of a composition the builder priced, not of a deployment. Deposits are still real: the card below escrows USDC and mints shares once the quorum attests the next NAV.";
 
 /** What the strike ledger says before the first strike lands. */
 const NO_STRIKES =
@@ -294,6 +300,23 @@ export default function LiveLoopDetail({ id }: { id: string }) {
                 </div>
               ))}
             </div>
+          </section>
+
+          <section id="deposit" className="vxd-sec">
+            <h2 className="vxd-sec-h">Deposit</h2>
+            {loop.handlerAddress === null ? (
+              <div className="vx-panel vxd-dep">
+                <p className="vxd-desc">
+                  Deposit is unavailable — this loop has no handler address recorded on
+                  loop-server. Redeploy or wait for the deployment to complete.
+                </p>
+              </div>
+            ) : (
+              <DepositCard
+                handlerAddress={loop.handlerAddress as Address}
+                hasSettledStrike={settled > 0}
+              />
+            )}
           </section>
 
           <section id="verification" className="vxd-sec">
