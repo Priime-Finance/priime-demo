@@ -247,6 +247,11 @@ _fund_gas() {
   from=$(role_key treasury)
   cast send "$to" --value "$delta" --private-key "$from" --rpc-url "$RPC" >/dev/null
   echo "  gas: sent $delta wei to $to from the treasury"
+  # Base's load-balanced RPC pool can serve a stale nonce to the NEXT `cast
+  # send` if that call hits a different node than the one that just landed
+  # this transaction. mine_or_wait blocks for one block (~2s on Base), which
+  # is enough to propagate the incremented nonce across the pool.
+  mine_or_wait
 }
 
 _fund_token() {

@@ -18,10 +18,10 @@
   },
 
   "service": {
-    "_comment": "Hourly, not the fork's 10 seconds, and this is a deliberate choice rather than an oversight. A NAV strike is an on-chain submission: */10 * * * * * is 8,640 transactions a day, each paying Base gas, to re-mark a NAV that moves with Morpho interest accrual and a 30-minute Aerodrome TWAP. Hourly is the starting default. Change it here, per target, once someone has priced a strike and decided what NAV staleness the vault can carry; the fork cadence must never be inherited implicitly. The two timeouts follow from it: 4500s (75 minutes) is one hourly cron period plus slack, so bring-up waits for a real strike instead of declaring failure 90 seconds in. Shorten them if you shorten the cadence.",
-    "cron_schedule": "0 0 * * * *",
-    "first_strike_timeout_secs": 4500,
-    "strike_timeout_secs": 4500
+    "_comment": "Every 60 seconds. Base gas is small enough that a strike costs a fraction of a cent, so cadence is a UX choice: the demo needs an audience to see a strike within a minute of publish. 60s * 24h = 1440 strikes/day at ~0.0005 USD each = ~1 USD/day, ~20 USD/week for the full hackathon. Bump to */10 * * * * * for a live-feel demo at ~7 USD/day, or back off to hourly (0 0 * * * *) for a low-cost long-lived run. Timeouts follow the cadence: 300s covers five strikes with slack, enough for first-strike bring-up latency without a false FAILED.",
+    "cron_schedule": "0 * * * * *",
+    "first_strike_timeout_secs": 300,
+    "strike_timeout_secs": 300
   },
 
   "keys": {
