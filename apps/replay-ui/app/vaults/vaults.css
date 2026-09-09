@@ -350,6 +350,43 @@
 .vxj-row--lead b{font-size:15px}
 .vxd-rail-in .vx-dep-note{margin-top:8px}
 
+/* ── deposit card ─────────────────────────────────────────────────────
+     The deposit section reuses the standard `.vx-panel` chassis and its
+     head, so the visual chrome matches every other panel on the page.
+     Only the input row and the primary CTA get their own vocabulary:
+
+     - `.vxd-dep-row`  — the numeric input's line: label · field · unit
+     - `.vxd-dep-cta`  — the one blue accent button per state (approve /
+                         deposit / claim / connect)
+     - `.vxd-dep-err`  — the small red validation line above the CTA
+     - `.vxd-dep-banner` — the receipt-progress line shown WHILE a tx is
+                         waiting for confirmation, and after a revert.
+                         Placed under the CTA so it does not shift layout.
+   ── */
+.vxd-dep{margin-top:0}
+.vxd-dep-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;
+  margin-top:14px;padding:12px 14px;background:#fff;
+  border:1px solid var(--vx-line);border-radius:12px}
+.vxd-dep-lbl{font-size:12.5px;font-weight:600;color:var(--vx-mut);letter-spacing:-.01em}
+.vxd-dep-input{font-family:var(--font-mono,ui-monospace);font-size:20px;font-weight:600;
+  color:var(--vx-ink);border:0;outline:0;background:transparent;min-width:0;width:100%;padding:0}
+.vxd-dep-input:focus{color:var(--vx-ink)}
+.vxd-dep-input:disabled{opacity:.55}
+.vxd-dep-unit{font-family:var(--font-mono,ui-monospace);font-size:13px;font-weight:600;color:var(--vx-mut)}
+.vxd-dep-err{font-size:12.5px;color:var(--vx-red,#B0442A);margin:8px 0 0}
+.vxd-dep-cta{margin-top:14px;display:inline-flex;align-items:center;justify-content:center;
+  min-height:38px;padding:0 18px;font-family:inherit;font-size:13.5px;font-weight:600;
+  letter-spacing:-.01em;color:#fff;background:var(--vx-blue);border:0;border-radius:10px;
+  cursor:pointer;transition:filter .12s ease-out}
+.vxd-dep-cta:hover:not(:disabled){filter:brightness(1.06)}
+.vxd-dep-cta:disabled{cursor:not-allowed;opacity:.55}
+.vxd-dep-banner{margin:12px 0 0;font-family:var(--vx-ser);font-style:italic;
+  font-size:12.5px;color:var(--vx-mut)}
+.vxd-dep-banner a{color:var(--vx-blue);text-decoration:underline}
+.vxd-dep-banner code{font-family:var(--font-mono,ui-monospace);font-size:11.5px;color:var(--vx-mut)}
+.vxd-dep-banner--err{color:var(--vx-red,#B0442A)}
+@media (prefers-reduced-motion:reduce){.vxd-dep-cta{transition:none}}
+
 /* ── automation instrument cards ── */
 .vxi{background:var(--vx-card);border:1px solid var(--vx-line);border-radius:16px;margin-bottom:16px;overflow:hidden}
 .vxi-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px 14px;border-bottom:1px solid var(--vx-line)}

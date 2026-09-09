@@ -43,8 +43,10 @@ async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function fetchLoops(): Promise<LoopsListResponse> {
-  return getJson<LoopsListResponse>("/api/loops");
+export function fetchLoops(options?: { strategist?: string }): Promise<LoopsListResponse> {
+  const strategist = options?.strategist;
+  const path = strategist === undefined ? "/api/loops" : `/api/loops?strategist=${encodeURIComponent(strategist)}`;
+  return getJson<LoopsListResponse>(path);
 }
 
 export function fetchLoop(id: string): Promise<LoopDetailResponse> {

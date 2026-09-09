@@ -87,4 +87,25 @@ describe("LoopRegistry", () => {
     expect(registry.list().map((r) => r.id)).toEqual(["loop-11111111", "loop-22222222"]);
     registry.close();
   });
+
+  it("filters list() by strategist, checksum-insensitive", () => {
+    const { registry } = freshRegistry();
+    const alice = "0xaaaa000000000000000000000000000000000001";
+    const bob   = "0xbbbb000000000000000000000000000000000002";
+    registry.create({ ...INPUT, id: "loop-11111111", workflowId: "loop-aaaaaaaaaaa1", strategist: alice });
+    registry.create({ ...INPUT, id: "loop-22222222", workflowId: "loop-aaaaaaaaaaa2", strategist: bob });
+    registry.create({ ...INPUT, id: "loop-33333333", workflowId: "loop-aaaaaaaaaaa3", strategist: alice });
+
+    // Two loops for Alice; passing her address checksummed still matches.
+    const aliceLoops = registry.list({ strategist: "0xAAAA000000000000000000000000000000000001" });
+    expect(aliceLoops.map((r) => r.id)).toEqual(["loop-11111111", "loop-33333333"]);
+
+    // Nobody matches an unknown address.
+    expect(registry.list({ strategist: "0x0000000000000000000000000000000000000000" })).toHaveLength(0);
+
+    // No filter still returns everything, in creation order.
+    expect(registry.list().map((r) => r.id)).toEqual(["loop-11111111", "loop-22222222", "loop-33333333"]);
+
+    registry.close();
+  });
 });

@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS loops (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_loops_strategist ON loops(strategist);
 `;
 
 interface LoopRow {
@@ -111,8 +112,13 @@ export class LoopRegistry {
     return row === undefined ? null : recordOf(row as unknown as LoopRow);
   }
 
-  list(): LoopRecord[] {
-    const rows = this.db.prepare("SELECT * FROM loops ORDER BY created_at ASC").all();
+  list(filter?: { strategist?: string }): LoopRecord[] {
+    // Strategist is stored lowercased at create time (`config.ts` normalizes
+    // before insert); mirror that here so a checksummed query still hits.
+    const strategist = filter?.strategist?.toLowerCase();
+    const rows = strategist === undefined
+      ? this.db.prepare("SELECT * FROM loops ORDER BY created_at ASC").all()
+      : this.db.prepare("SELECT * FROM loops WHERE strategist = ? ORDER BY created_at ASC").all(strategist);
     return rows.map((row) => recordOf(row as unknown as LoopRow));
   }
 
