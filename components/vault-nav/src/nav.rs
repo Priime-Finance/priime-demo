@@ -205,6 +205,89 @@ pub fn bounded_price_1e24(twap_price_1e24: U256) -> U256 {
     twap_price_1e24.min(U256::from(PAR_PRICE_1E24))
 }
 
+/// Risk preset from the composer, chosen by the strategist at publish and
+/// pinned in the workflow's componentConfig. Controls how conservative the
+/// collateral valuation is, so two vaults on the same market with different
+/// presets attest provably different NAVs even in the same block.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RiskPreset {
+    /// Trust the peg: value collateral at par unconditionally.
+    Aggressive,
+    /// Current default: `min(par, TWAP)`.
+    Standard,
+    /// Standard plus a 100 bps haircut on the TWAP-derived price.
+    Conservative,
+}
+
+impl RiskPreset {
+    pub fn parse(s: &str) -> Result<Self, String> {
+        match s {
+            "aggressive" => Ok(Self::Aggressive),
+            "standard" => Ok(Self::Standard),
+            "conservative" => Ok(Self::Conservative),
+            other => Err(format!(
+                "risk_preset must be one of aggressive|standard|conservative, got {other:?}"
+            )),
+        }
+    }
+}
+
+/// Valuation price for the collateral leg, in the market's 1e24 oracle scale,
+/// after applying the strategist's risk preset. `preset::Aggressive` returns
+/// par verbatim (ignoring depeg downside), `Standard` returns min(par, TWAP)
+/// like the historical formula, and `Conservative` returns min(par, TWAP)
+/// with a 100 bps haircut applied to the TWAP branch.
+pub fn preset_collateral_price_1e24(twap_price_1e24: U256, preset: RiskPreset) -> U256 {
+    let par = U256::from(PAR_PRICE_1E24);
+    match preset {
+        RiskPreset::Aggressive => par,
+        RiskPreset::Standard => twap_price_1e24.min(par),
+        RiskPreset::Conservative => {
+            let bounded = twap_price_1e24.min(par);
+            // 100 bps haircut: bounded * 9900 / 10000. No overflow at U256.
+            bounded * U256::from(9900u16) / U256::from(10_000u16)
+        }
+    }
+}
+
+/// Fail the cycle if the current LTV breaches the strategist's floor. LTV is
+/// debt (USDC base units) divided by par-valued collateral (also USDC base
+/// units). The floor is expressed as `hf_floor_bps` under the market's LLTV:
+/// the acceptable LTV is `lltv * (10_000 - hf_floor_bps) / 10_000`.
+/// Zero `hf_floor_bps` disables the check.
+pub fn check_hf_floor(
+    collateral_1e18: u128,
+    debt_usdc: U256,
+    hf_floor_bps: u16,
+    lltv_wad: U256,
+) -> Result<(), String> {
+    if hf_floor_bps == 0 {
+        return Ok(());
+    }
+    if hf_floor_bps > 10_000 {
+        return Err(format!("hf_floor_bps {hf_floor_bps} exceeds 10_000"));
+    }
+    // Par-valued collateral in USDC base units: collateral_1e18 * par_1e24 / 1e36
+    // == collateral_1e18 / 1e12 (since par_1e24 == 1e24 and 1e24/1e36 == 1e-12).
+    let par_collateral_usdc = U256::from(collateral_1e18) / U256::from(1_000_000_000_000u64);
+    if par_collateral_usdc.is_zero() {
+        // No collateral means no leverage - the check is vacuous.
+        return Ok(());
+    }
+    // ltv_bps = debt * 10_000 / par_collateral. Widen once to avoid overflow.
+    let ltv_bps = debt_usdc * U256::from(10_000u16) / par_collateral_usdc;
+    // allowed_ltv_bps = lltv_bps * (10_000 - hf_floor_bps) / 10_000
+    // lltv is in WAD (1e18). Convert to bps: lltv_wad / 1e14.
+    let lltv_bps = lltv_wad / U256::from(100_000_000_000_000u64);
+    let allowed_bps = lltv_bps * U256::from(10_000 - hf_floor_bps) / U256::from(10_000u16);
+    if ltv_bps > allowed_bps {
+        return Err(format!(
+            "hf_floor_breached: ltv_bps {ltv_bps} exceeds allowed {allowed_bps} (lltv_bps {lltv_bps}, hf_floor_bps {hf_floor_bps})"
+        ));
+    }
+    Ok(())
+}
+
 /// Attested NAV in USDC base units. Errors if the vault's idle balance is
 /// below the escrow floor (pending deposits + claimable redemptions); floors
 /// at zero if debt exceeds assets.
@@ -420,6 +503,86 @@ mod tests {
         assert_eq!(bounded_price_1e24(depeg), depeg);
     }
 
+
+    // --- risk preset --------------------------------------------------------
+
+    #[test]
+    fn preset_aggressive_ignores_twap_downside() {
+        let depeg = U256::from(PAR_PRICE_1E24 * 90 / 100);
+        assert_eq!(
+            preset_collateral_price_1e24(depeg, RiskPreset::Aggressive),
+            U256::from(PAR_PRICE_1E24)
+        );
+    }
+
+    #[test]
+    fn preset_standard_matches_historical_bounded_min() {
+        let depeg = U256::from(PAR_PRICE_1E24 * 95 / 100);
+        assert_eq!(
+            preset_collateral_price_1e24(depeg, RiskPreset::Standard),
+            bounded_price_1e24(depeg)
+        );
+        let above = U256::from(PAR_PRICE_1E24 + 12_345);
+        assert_eq!(
+            preset_collateral_price_1e24(above, RiskPreset::Standard),
+            U256::from(PAR_PRICE_1E24)
+        );
+    }
+
+    #[test]
+    fn preset_conservative_haircuts_bounded_by_100_bps() {
+        // At par: bounded price is par; conservative haircuts to 99% par.
+        let par = U256::from(PAR_PRICE_1E24);
+        assert_eq!(
+            preset_collateral_price_1e24(par, RiskPreset::Conservative),
+            par * U256::from(9900u16) / U256::from(10_000u16)
+        );
+    }
+
+    #[test]
+    fn preset_parse_round_trip() {
+        assert_eq!(RiskPreset::parse("aggressive"), Ok(RiskPreset::Aggressive));
+        assert_eq!(RiskPreset::parse("standard"), Ok(RiskPreset::Standard));
+        assert_eq!(RiskPreset::parse("conservative"), Ok(RiskPreset::Conservative));
+        assert!(RiskPreset::parse("yolo").is_err());
+    }
+
+    // --- hf floor -----------------------------------------------------------
+
+    #[test]
+    fn hf_floor_zero_disables_the_check() {
+        // 100% LTV is patently unsafe but zero floor bps means "no check".
+        let collateral_1e18 = 1_000_000_000_000_000_000u128; // 1 USDe
+        let debt_usdc = U256::from(1_000_000u64); // 1 USDC
+        let lltv_wad = U256::from(915_000_000_000_000_000u64); // 91.5%
+        assert!(check_hf_floor(collateral_1e18, debt_usdc, 0, lltv_wad).is_ok());
+    }
+
+    #[test]
+    fn hf_floor_allows_ltv_below_floor() {
+        // 80% LTV vs 91.5% LLTV, 500 bps floor -> allowed_bps = 9150 * 0.95 = 8692.5
+        // Actual LTV = 8000 bps; passes.
+        let collateral_1e18 = 1_000_000_000_000_000_000u128; // 1 USDe = $1 par
+        let debt_usdc = U256::from(800_000u64); // 0.8 USDC
+        let lltv_wad = U256::from(915_000_000_000_000_000u64);
+        assert!(check_hf_floor(collateral_1e18, debt_usdc, 500, lltv_wad).is_ok());
+    }
+
+    #[test]
+    fn hf_floor_rejects_floor_breach() {
+        // 90% LTV vs 91.5% LLTV, 500 bps floor -> allowed 8693 bps. 9000 > 8693.
+        let collateral_1e18 = 1_000_000_000_000_000_000u128;
+        let debt_usdc = U256::from(900_000u64);
+        let lltv_wad = U256::from(915_000_000_000_000_000u64);
+        let err = check_hf_floor(collateral_1e18, debt_usdc, 500, lltv_wad).unwrap_err();
+        assert!(err.contains("hf_floor_breached"));
+    }
+
+    #[test]
+    fn hf_floor_vacuous_on_zero_collateral() {
+        // No collateral means no leverage story; the check has nothing to say.
+        assert!(check_hf_floor(0, U256::ZERO, 500, U256::from(915_000_000_000_000_000u64)).is_ok());
+    }
     // --- NAV assembly -------------------------------------------------------
 
     #[test]

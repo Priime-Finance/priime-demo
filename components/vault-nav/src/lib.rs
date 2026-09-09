@@ -194,7 +194,28 @@ mod component {
         // what the pool's observation ring can actually answer, and the
         // divisor must match the secondsAgos that produced the cumulatives.
         let tick = nav::avg_tick(s.tick_cum_old, s.tick_cum_new, s.twap_window_effective_secs)?;
-        let price = nav::bounded_price_1e24(nav::price_1e24_at_tick(tick)?);
+        let twap_price = nav::price_1e24_at_tick(tick)?;
+
+        // Composer knobs: parsed from componentConfig, defaulted when absent.
+        // Each affects operator behaviour so that two vaults on the same
+        // market but different presets attest provably different NAVs (or
+        // one refuses to attest at all, on a floor breach). They also feed
+        // config_hash() so the choice is cryptographically bound to every
+        // signed strike.
+        let preset = match cfg_opt("risk_preset") {
+            Some(s) => nav::RiskPreset::parse(&s)?,
+            None => nav::RiskPreset::Standard,
+        };
+        let hf_floor_bps: u16 = match cfg_opt("hf_floor_bps") {
+            Some(s) => s
+                .parse()
+                .map_err(|e| format!("bad hf_floor_bps in config: {e}"))?,
+            None => 0,
+        };
+
+        nav::check_hf_floor(s.collateral_1e18, debt, hf_floor_bps, lltv)?;
+
+        let price = nav::preset_collateral_price_1e24(twap_price, preset);
 
         let value = nav::nav_usdc(
             s.collateral_1e18,
