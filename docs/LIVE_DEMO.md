@@ -20,15 +20,25 @@ that needs no environment setup.
 | Replay UI | `apps/replay-ui` (Next.js) | The `/build` canvas composes the vault; the `Review & publish` modal POSTs to the loop server through `/api/loops`. A published loop is reachable at `/vaults/loop-xxxxxxxx` (see `apps/replay-ui/lib/vaults/live-id.ts`), where `VaultDetail` shows the attested strike ledger. |
 | IPFS | `ipfs daemon` | Hosts the pinned `service.json`. |
 
-## Deploy target: `TARGET=fork` vs `TARGET=mainnet`
+## Deploy targets: `fork`, `sepolia`, `mainnet`
 
 `deploy/target.sh` (sourced by every script in `deploy/`) resolves `TARGET`
-against `deploy/targets/$TARGET.json`. There are two targets; an unknown
-`TARGET` is rejected by name. Base Sepolia is deliberately not one of them
-(no real Morpho Blue USDe/USDC market or Aerodrome pool there; see
-it would be less real than the fork). Both targets share the same market,
-tokens and strategy parameters (`deploy/fork.config.json`); only what
-genuinely differs by target lives in `deploy/targets/*.json`.
+against `deploy/targets/$TARGET.json`. Three targets exist; an unknown
+`TARGET` is rejected by name.
+
+- `TARGET=fork` (default): anvil fork of Base at a pinned block.
+  Chain 31337. Everything cheat-coded and free. The market, tokens and
+  strategy parameters come from `deploy/fork.config.json`.
+- `TARGET=sepolia`: real Ethena USDe and Circle USDC on Morpho Blue,
+  Ethereum Sepolia (chain 11155111). The Morpho market is ALREADY DEPLOYED
+  (id `0xee461cf8...9cb3`, oracle `0x1fC32D70...1bE2`, see the root README
+  or `packages/loop-deploy/src/catalog.ts::USDE_USDC_MORPHO_SEPOLIA`);
+  `deploy/sepolia-setup.sh` exists only to reproduce or port that deploy.
+  The market, tokens and strategy parameters come from
+  `deploy/sepolia.config.json`.
+- `TARGET=mainnet`: Base itself, chain 8453. Real money; nothing defaulted.
+  Shares `deploy/fork.config.json` with the fork target because the fork
+  IS Base at a pinned block.
 
 **`TARGET=fork` (the default).** An anvil fork of Base mainnet at the block
 pinned in `fork.config.json`, served on chain id `31337`, `:8545` by

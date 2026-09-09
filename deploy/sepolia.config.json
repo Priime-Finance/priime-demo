@@ -1,5 +1,5 @@
 {
-  "_comment": "Protocol base for TARGET=sepolia. Read by deploy/vault-service.sh, deploy/enter-loop.sh and deploy/sepolia-setup.sh. Almost all of it is REAL: Ethena's canonical Sepolia USDe deployment, Circle's canonical Sepolia USDC, Morpho's Ethereum Sepolia Morpho Blue + AdaptiveCurveIRM + ChainlinkOracleV2Factory. The one line NOT real at bring-up is `morpho.market` -- id + oracle -- which sepolia-setup.sh writes in once it has created the market. Downstream scripts must read from here, not hardcode.",
+  "_comment": "Protocol base for TARGET=sepolia. Read by deploy/vault-service.sh, deploy/enter-loop.sh and deploy/sepolia-setup.sh. Every field is real onchain state: Ethena's canonical Sepolia USDe, Circle's canonical Sepolia USDC, Morpho's Ethereum Sepolia Morpho Blue + AdaptiveCurveIRM + ChainlinkOracleV2Factory, plus the MorphoChainlinkOracleV2 and Morpho market our own deploy/sepolia-setup.sh created on 2026-09-09 (tx signer 0x03F3c4B41d839846A13841506297a567a3ebBa7a). Downstream scripts must read from here, not hardcode.",
   "chain": {
     "_comment": "Ethereum Sepolia. Chain id, block time and gas semantics come from the target file (targets/sepolia.json); this block only pins the source data the deploy inherits from the parent live chain.",
     "chain_id": 11155111,
@@ -30,7 +30,7 @@
     "chainlink_oracle_v2_factory": "0xa6c843fc53aAf6EF1d173C4710B26419667bF6CD",
     "chainlink_oracle_v2_factory_provenance": "docs.morpho.org addresses page (Sepolia tab). This factory is what sepolia-setup.sh calls to mint a MorphoChainlinkOracleV2 pointing at four address(0) feed slots; MorphoChainlinkOracleV2's own logic collapses that configuration to a hardcoded 1:1 rate scaled by SCALE_FACTOR (= 1e24 for 18-decimals collateral against 6-decimals loan), i.e. the exact same shape as the mainnet USDe/USDC market's own oracle.",
     "market": {
-      "_comment": "PERMISSIONLESS MARKET CREATED BY US. Marketparams = (loan=USDC, collateral=USDe, oracle=<factory output>, irm=<adaptive curve>, lltv=91.5%). Values written by sepolia-setup.sh.",
+      "_comment": "PERMISSIONLESS MARKET CREATED BY US on 2026-09-09 via deploy/sepolia-setup.sh. Marketparams = (loan=USDC, collateral=USDe, oracle=our 1:1 stub, irm=AdaptiveCurve, lltv=91.5%). Read this block, do not re-derive.",
       "id": "0xee461cf86148c9e0e17c2bca906a4e7ff62bab1ff3334d20e82dd9672a899cb3",
       "params": {
         "loan_token": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
@@ -39,25 +39,25 @@
         "irm": "0x8C5dDCD3F601c91D1BF51c8ec26066010ACAbA7c",
         "lltv": "915000000000000000"
       },
-      "provenance": "deploy/sepolia-setup.sh calls IMorpho.createMarket after the oracle exists; market id and oracle address land here after the first successful run.",
+      "provenance": "Created by deploy/sepolia-setup.sh on Ethereum Sepolia, block observed via https://sepolia.etherscan.io/address/0xd011EE229E7459ba1ddd22631eF7bF528d424A14 (idToMarketParams call returns the four addresses + 91.5% LLTV verbatim). Same market id is committed as USDE_USDC_MORPHO_SEPOLIA in packages/loop-deploy/src/catalog.ts.",
       "oracle_price_scale": "1e24 (36 + loanDecimals 6 - collateralDecimals 18)"
     }
   },
   "swap_route": {
-    "_comment": "USDC -> USDe swap venue for the loop entry leg. There is no committed liquid Sepolia USDC/USDe pool -- Sepolia testnet DEX liquidity is thin. Two paths: (a) seed a Uniswap V3 USDC/USDe pool ourselves (Uniswap V3 factory on Sepolia is 0x0227628f3F023bb0B980b67D528571c95c6DaC1c, SwapRouter02 is 0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD; cost is ~2000 USDe minted + ~2000 USDC swapped) or (b) run a no-loop demo (the vault supplies USDC to Morpho directly, no swap needed, weaker pitch but zero DEX setup). Left blank pending decision.",
+    "_comment": "USDC -> USDe swap venue for the loop entry leg. There is no committed liquid Sepolia USDC/USDe pool - Sepolia testnet DEX liquidity is thin. Two paths: (a) seed a Uniswap V3 USDC/USDe pool ourselves (Uniswap V3 factory on Sepolia is 0x0227628f3F023bb0B980b67D528571c95c6DaC1c, SwapRouter02 is 0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD; cost is ~2000 USDe minted + ~2000 USDC swapped) or (b) run a no-loop demo (the vault supplies USDC to Morpho directly, no swap needed, weaker pitch but zero DEX setup). Left blank pending decision.",
     "dex": "",
     "pool": "",
     "router": "",
     "provenance": "docs.uniswap.org/contracts/v3/reference/deployments/ethereum-deployments (Ethereum Sepolia): factory 0x0227628f3F023bb0B980b67D528571c95c6DaC1c, SwapRouter02 0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"
   },
   "service": {
-    "_comment": "Same NAV computation inputs as the fork -- the strategy is the strategy either way. twap_window_secs bounds the pool TWAP the collateral pricing floor reads; inputs_block_lag is how far behind head the component pins its reads (NAV-03). Sepolia has ~12s blocks so a 2-block lag is one 24s reorg window; keep the mainnet-shape number here.",
+    "_comment": "Same NAV computation inputs as the fork - the strategy is the strategy either way. twap_window_secs bounds the pool TWAP the collateral pricing floor reads; inputs_block_lag is how far behind head the component pins its reads (NAV-03). Sepolia has ~12s blocks so a 2-block lag is one 24s reorg window; keep the mainnet-shape number here.",
     "twap_window_secs": 1800,
     "inputs_block_lag": 2,
     "observation_cardinality": 64
   },
   "deploy_params": {
-    "_comment": "Same strategy parameters as the fork -- see fork.config.json for the derivation. Copied here rather than inherited so a testnet-only tweak (e.g. reducing initial_deposit_usdc to keep the demo wallet's faucet balance from getting drained) does not touch the fork's numbers.",
+    "_comment": "Same strategy parameters as the fork - see fork.config.json for the derivation. Copied here rather than inherited so a testnet-only tweak (e.g. reducing initial_deposit_usdc to keep the demo wallet's faucet balance from getting drained) does not touch the fork's numbers.",
     "target_leverage": 5.0,
     "target_ltv": 0.80,
     "max_loop_turns": 7,

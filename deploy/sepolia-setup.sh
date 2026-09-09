@@ -1,10 +1,24 @@
 #!/usr/bin/env bash
+#
+# ALREADY DEPLOYED. THIS SCRIPT IS HERE TO REPRODUCE, NOT TO INITIALIZE.
+# The Sepolia market this repo targets is LIVE on Ethereum Sepolia:
+#   MorphoChainlinkOracleV2  0x1fC32D70B1B6F85c4dbc2F0626C9e558BD2a1bE2
+#   Morpho market id         0xee461cf86148c9e0e17c2bca906a4e7ff62bab1ff3334d20e82dd9672a899cb3
+# Created 2026-09-09 by 0x03F3c4B41d839846A13841506297a567a3ebBa7a. Both
+# addresses are the source of truth in packages/loop-deploy/src/catalog.ts
+# (USDE_USDC_MORPHO_SEPOLIA) and deploy/sepolia.config.json (morpho.market).
+# Downstream code READS them from there; it does not re-derive.
+#
+# Run this script only to reproduce the deploy on a fresh Sepolia session,
+# recover after a mid-way failure (it is idempotent and skips whatever is
+# already onchain), or port the same market to another testnet. For the
+# normal demo path you do not need to run this at all.
+#
 # One-shot bring-up for TARGET=sepolia: deploy the pieces of the market that
 # Ethereum Sepolia does not carry (namely, an oracle contract and a market
 # entry), and write the resulting addresses back into deploy/sepolia.config.json.
-# Idempotent: reads the config first and only deploys the pieces still
-# missing, so re-running after a mid-way failure picks up where the previous
-# run left off.
+# Reads the config first and only deploys the pieces still missing, so
+# re-running after a mid-way failure picks up where the previous run left off.
 #
 # Two steps, in order:
 #
@@ -25,7 +39,7 @@
 #      return the same id.
 #
 # Zero token deploys. Both USDe (Ethena) and USDC (Circle) already exist as
-# real canonical testnet ERC-20s on Ethereum Sepolia -- the config file names
+# real canonical testnet ERC-20s on Ethereum Sepolia - the config file names
 # them explicitly.
 #
 # What it does NOT do:
@@ -108,7 +122,7 @@ if [ -z "$ORACLE" ]; then
     --from "$OWNER_ADDR")
   [[ "$ORACLE" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "FATAL: bad predicted oracle address '$ORACLE'" >&2; exit 1; }
   # CREATE2 with a fixed zero salt gives a deterministic address. Deploy only
-  # if code is absent -- a re-run after the send but before the config write
+  # if code is absent - a re-run after the send but before the config write
   # would otherwise revert.
   if [ "$(cast code "$ORACLE" --rpc-url "$RPC")" = "0x" ]; then
     cast send --rpc-url "$RPC" --private-key "$OWNER_KEY" \
