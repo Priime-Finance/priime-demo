@@ -1,0 +1,43 @@
+{
+  "_comment": "TARGET=sepolia: Ethereum Sepolia testnet, chain id 11155111. The track for the public URL beat of the demo: a URL, a wallet, real Chainlink math, real Morpho contracts, real Ethena USDe, real Circle USDC. Nothing that matters is a mock we control -- the tokens ARE the canonical testnet deployments, the Morpho market IS a real Morpho Blue market on Ethereum Sepolia, the oracle IS Morpho's own MorphoChainlinkOracleV2 factory. The one operational cheat: the oracle is instantiated with all-zero Chainlink feed slots, which the factory collapses to a hardcoded 1:1 rate -- the exact same shape the mainnet USDe/USDC oracle uses on the mainnet market at LLTV 91.5%. Every secret comes from the environment; nothing here is defaulted.",
+  "name": "sepolia",
+  "description": "Ethereum Sepolia with real Ethena USDe + real Circle USDC + our own permissionless 1:1 Morpho market",
+  "protocol_config": "sepolia.config.json",
+
+  "chain_id": 11155111,
+  "chain": {
+    "_comment": "kind=live means no anvil cheat codes: fund_account() does real transfers from the treasury key, mine_or_wait() waits for a Sepolia block (~12s). Same rules as TARGET=mainnet.",
+    "kind": "live"
+  },
+  "state_dir": ".sepolia",
+
+  "rpc": {
+    "_comment": "No default. Point SEPOLIA_RPC_URL at an Ethereum Sepolia endpoint. Free options: https://sepolia.gateway.tenderly.co (rate-limited, no auth), Alchemy (eth-sepolia.g.alchemy.com/v2/<key>), Infura (sepolia.infura.io/v3/<key>). Provider URLs carry API keys, so this must never be committed.",
+    "mode": "env",
+    "url_env": "SEPOLIA_RPC_URL"
+  },
+
+  "service": {
+    "_comment": "Every 60 seconds. Sepolia block time is ~12s and each strike costs Sepolia gas; hammering it every 30s across three operators is wasteful and eats the demo wallet's faucet-sized balance. 60s is enough movement to demo the attest/reject beats without burning the wallet. Timeouts scale up: 900s covers fifteen strikes.",
+    "cron_schedule": "0 * * * * *",
+    "first_strike_timeout_secs": 900,
+    "strike_timeout_secs": 900
+  },
+
+  "keys": {
+    "_comment": "Environment only. No mnemonic default: a live testnet run has real signers and a mnemonic that leaks is a real key. Each role names an env var that holds a 0x-prefixed 32-byte private key; a missing or malformed value stops the run before anything is signed. The four roles may collapse to fewer distinct keys (setting all four env vars to the same key is fine for a solo demo run), but that is an operational choice, not a config one.",
+    "source": "env",
+    "roles": {
+      "owner": "SEPOLIA_OWNER_KEY",
+      "strategist": "SEPOLIA_STRATEGIST_KEY",
+      "depositor": "SEPOLIA_DEPOSITOR_KEY",
+      "treasury": "SEPOLIA_TREASURY_KEY"
+    }
+  },
+
+  "funding": {
+    "_comment": "Real transfers from the treasury key. The treasury must hold ETH (from any Sepolia faucet: sepoliafaucet.com, infura.io/faucet/sepolia, cloud.google.com/application/web3/faucet/ethereum/sepolia) and USDC (from Circle's testnet faucet, https://faucet.circle.com/ select Ethereum Sepolia). USDe on Ethereum Sepolia is Ethena's own deployment (0x9458caaca74249abbe9e964b3ce155b98ec88ef2); the demo obtains it by swapping USDC for USDe on whichever DEX has a real Sepolia pool, or -- for the initial vault seed -- receives some in a manual transfer. operator_gas_wei is 0.05 ETH: Sepolia fees are cheap but operators pay for signing-key registration plus every strike's setPrice call over the loop's lifetime; sized for a demo run that may take an hour.",
+    "mode": "transfer",
+    "operator_gas_wei": "50000000000000000"
+  }
+}

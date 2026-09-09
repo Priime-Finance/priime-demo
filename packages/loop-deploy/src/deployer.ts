@@ -12,8 +12,9 @@
  */
 
 import { addLoopWorkflow, newWorkflowId, removeLoopWorkflow } from "./builder.ts";
+import { lookupMarket } from "./catalog.ts";
 import type { ChainPort } from "./chain.ts";
-import { componentConfigFor, cronFromSeconds, resolveLoopConfig, validateLoopConfig, type LoopConfig } from "./config.ts";
+import { componentConfigFor, cronFromSeconds, resolveLoopConfig, ValidationError, validateLoopConfig, type LoopConfig } from "./config.ts";
 import type { IpfsPort } from "./ipfs.ts";
 import { parseLossless, stringifyLossless } from "./json.ts";
 import type { LoopRecord, LoopRegistry } from "./registry.ts";
@@ -69,6 +70,16 @@ export class LoopDeployer {
   /** Validate, record, and fully deploy a new loop. */
   async createLoop(input: unknown): Promise<LoopRecord> {
     const config = resolveLoopConfig(input);
+    // The catalog carries entries for every supported chain; the server
+    // only speaks its own. Reject a candidate from a mismatched chain up
+    // front so a Sepolia loop-server cannot be tricked into deploying a
+    // mainnet-flavoured market (and vice versa).
+    const market = lookupMarket(config.candidateId);
+    if (market === null || market.chainKey !== this.chainKey) {
+      throw new ValidationError([
+        `candidateId "${config.candidateId}" is not deployable on this server's chain (${this.chainKey})`,
+      ]);
+    }
     const record = this.registry.create({
       id: `loop-${crypto.randomUUID().slice(0, 8)}`,
       name: config.name,
