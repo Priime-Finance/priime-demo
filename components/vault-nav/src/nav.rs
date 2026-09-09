@@ -15,7 +15,7 @@
 //!   (totalPendingDepositAssets + totalClaimableRedeemAssets); a balance
 //!   below the floor fails the cycle instead of attesting a wrong number.
 
-use alloy_primitives::{Address, U256, U512};
+use alloy_primitives::{Address, FixedBytes, U256, U512};
 use alloy_sol_types::{sol, SolValue};
 
 /// WAD (1e18), the fixed-point base of Morpho rate math.
@@ -29,12 +29,23 @@ const VIRTUAL_ASSETS: u128 = 1;
 
 sol! {
     /// The exact bytes every operator signs and PriimeVault decodes:
-    /// abi.encode(handler, nav, inputsBlock). The handler field binds the
-    /// envelope to its intended receiver (PriimeVault guard zero).
+    /// abi.encode(handler, nav, inputsBlock, configHash).
+    ///
+    /// - `handler` binds the envelope to its intended receiver (PriimeVault
+    ///   guard zero).
+    /// - `configHash` is keccak256(canonical config bytes) where the canonical
+    ///   form is the concatenation of every workflow config key/value pair in
+    ///   lexicographic order of key, encoded as `key=value\n`. Any operator
+    ///   running a divergent config produces a different hash, its result
+    ///   hash diverges, and the quorum outvotes it. This is the "cannot lie
+    ///   about config" cryptographic bind; the vault stores the accepted
+    ///   value in `lastConfigHash` so off-chain verifiers can prove which
+    ///   pinned service.json the quorum ran against.
     struct BoundNavResult {
         address handler;
         uint256 nav;
         uint256 inputsBlock;
+        bytes32 configHash;
     }
 }
 
@@ -214,12 +225,13 @@ pub fn nav_usdc(
     Ok((collateral_value + U256::from(folded_idle)).saturating_sub(debt_usdc))
 }
 
-/// The signed payload bytes: abi.encode(handler, nav, inputsBlock).
-pub fn encode_payload(handler: Address, nav: U256, inputs_block: u64) -> Vec<u8> {
+/// The signed payload bytes: abi.encode(handler, nav, inputsBlock, configHash).
+pub fn encode_payload(handler: Address, nav: U256, inputs_block: u64, config_hash: FixedBytes<32>) -> Vec<u8> {
     BoundNavResult {
         handler,
         nav,
         inputsBlock: U256::from(inputs_block),
+        configHash: config_hash,
     }
     .abi_encode()
 }
@@ -471,22 +483,15 @@ mod tests {
     // --- payload ------------------------------------------------------------
 
     #[test]
-    fn payload_is_three_abi_words_bound_to_handler() {
+    fn payload_is_four_abi_words_bound_to_handler() {
         let handler = address!("73BB3CE07d25057A9265B476E80c08CBbA5d80d9");
-        let bytes = encode_payload(handler, U256::from(500_000_000u64), 49_911_282);
-        assert_eq!(bytes.len(), 96);
-        // Word 0: handler left-padded to 32 bytes.
+        let config_hash = FixedBytes::<32>::from([0xAB; 32]);
+        let bytes = encode_payload(handler, U256::from(500_000_000u64), 49_911_282, config_hash);
+        assert_eq!(bytes.len(), 128);
         assert_eq!(&bytes[0..12], &[0u8; 12]);
         assert_eq!(&bytes[12..32], handler.as_slice());
-        // Word 1: nav.
-        assert_eq!(
-            U256::from_be_slice(&bytes[32..64]),
-            U256::from(500_000_000u64)
-        );
-        // Word 2: inputs block.
-        assert_eq!(
-            U256::from_be_slice(&bytes[64..96]),
-            U256::from(49_911_282u64)
-        );
+        assert_eq!(U256::from_be_slice(&bytes[32..64]), U256::from(500_000_000u64));
+        assert_eq!(U256::from_be_slice(&bytes[64..96]), U256::from(49_911_282u64));
+        assert_eq!(&bytes[96..128], config_hash.as_slice());
     }
 }

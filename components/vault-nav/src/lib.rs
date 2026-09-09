@@ -74,6 +74,70 @@ mod component {
             .map_err(|e| format!("bad u64 in config {key}: {e}"))
     }
 
+    /// Read an optional workflow config var. Absent -> None, present -> Some.
+    /// Composer knobs use this because a legacy publish predating the composer
+    /// simply omits the key; the operator must not fail the cycle for that.
+    fn cfg_opt(key: &str) -> Option<String> {
+        host::config_var(key)
+    }
+
+    /// Canonical bytes of every workflow config key/value pair we know about,
+    /// keccak256'd. Present keys are appended in lexicographic order as
+    /// `key=value\n`; absent keys contribute nothing. Every operator with the
+    /// same service.json therefore produces the same hash; anyone tampering
+    /// with any tracked field produces a different one, its result hash
+    /// diverges, and the quorum outvotes it.
+    ///
+    /// The list is closed because WAVS gives us no config-enumeration API - we
+    /// name every key the deploy pipeline can emit. New composer knobs must
+    /// land here at the same time they land in loop-server's componentConfig
+    /// output, or the hash silently drops them (and the "cannot lie" property
+    /// with it). loop-deploy owns the write side; this list owns the read.
+    fn config_hash() -> FixedBytes<32> {
+        const KEYS: &[&str] = &[
+            "applied_leverage",
+            "capacity_binding",
+            "chain_id",
+            "collateral_yield_apy",
+            "compound_cadence_hours",
+            "compound_threshold_usd",
+            "delta_band_pct",
+            "exit_route_id",
+            "exit_settlement_days",
+            "funding_floor_apr",
+            "hedge_leverage",
+            "hf_deleverage_bps",
+            "hf_floor_bps",
+            "hf_target_bps",
+            "hl_coin",
+            "inputs_block_lag",
+            "irm_address",
+            "lltv",
+            "margin_restore_pct",
+            "margin_trim_pct",
+            "market_id",
+            "morpho_address",
+            "oracle_address",
+            "pool_address",
+            "reserve_fraction",
+            "risk_preset",
+            "twap_window_secs",
+            "usdc_address",
+            "usde_address",
+            "vault_address",
+        ];
+        let mut buf: Vec<u8> = Vec::new();
+        for key in KEYS {
+            if let Some(value) = cfg_opt(key) {
+                buf.extend_from_slice(key.as_bytes());
+                buf.push(b'=');
+                buf.extend_from_slice(value.as_bytes());
+                buf.push(b'\n');
+            }
+        }
+        alloy_primitives::keccak256(&buf)
+    }
+
     fn rpc_url() -> Result<String, String> {
         let chain_id = cfg("chain_id")?;
         let chain = host::get_evm_chain_config(&chain_id)
@@ -141,7 +205,7 @@ mod component {
             s.total_claimable_redeem,
         )?;
 
-        Ok(nav::encode_payload(vault, value, s.inputs_block))
+        Ok(nav::encode_payload(vault, value, s.inputs_block, config_hash()))
     }
 
     impl Guest for Component {

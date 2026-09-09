@@ -102,6 +102,13 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     uint256 public lastInputsBlock;
     /// @notice Number of NAV updates successfully recorded.
     uint256 public updateCount;
+    /// @notice keccak256 of the workflow's canonicalized componentConfig, as
+    ///         computed by the vault-nav component on every strike. Stored so
+    ///         off-chain verifiers can prove which pinned service.json the
+    ///         operator quorum ran against - any drift from the config the
+    ///         user chose at publish would produce a different hash here.
+    ///         Zero until the first attested strike lands.
+    bytes32 public lastConfigHash;
     /// @notice Replay guard: each envelope `eventId` is processed at most once.
     mapping(bytes20 => bool) public processed;
 
@@ -135,7 +142,13 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     );
     event OperatorSet(address indexed controller, address indexed operator, bool approved);
     // Implementation events.
-    event NavUpdated(bytes20 indexed eventId, uint256 nav, uint256 inputsBlock, uint256 updateCount);
+    event NavUpdated(
+        bytes20 indexed eventId,
+        uint256 nav,
+        uint256 inputsBlock,
+        uint256 updateCount,
+        bytes32 configHash
+    );
     event DepositRequestFulfilled(address indexed controller, uint256 assets, uint256 shares);
     event RedeemRequestFulfilled(address indexed controller, uint256 shares, uint256 assets);
     /// @notice A pending deposit could not be priced at the attested NAV
@@ -533,8 +546,8 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      fulfillment with zero share supply prices 1 share per USDC base
     ///      unit.
     function handleSignedEnvelope(Envelope calldata envelope, SignatureData calldata signatureData) external override {
-        (address handler, uint256 attestedNav, uint256 inputsBlock) =
-            abi.decode(envelope.payload, (address, uint256, uint256));
+        (address handler, uint256 attestedNav, uint256 inputsBlock, bytes32 configHash) =
+            abi.decode(envelope.payload, (address, uint256, uint256, bytes32));
         if (handler != address(this)) revert HandlerMismatch(handler);
 
         // Reverts unless the operator quorum signed this exact envelope.
@@ -549,11 +562,12 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         nav = attestedNav;
         lastInputsBlock = inputsBlock;
         updateCount += 1;
+        lastConfigHash = configHash;
 
         _fulfillDeposits();
         _fulfillRedeems();
 
-        emit NavUpdated(envelope.eventId, attestedNav, inputsBlock, updateCount);
+        emit NavUpdated(envelope.eventId, attestedNav, inputsBlock, updateCount, configHash);
     }
 
     /// @inheritdoc IWavsServiceHandler
