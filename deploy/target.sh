@@ -29,16 +29,20 @@
 # keeps working with no change and no new environment.
 #
 # Targets:
-#   fork      anvil fork of Base at the pinned block, chain 31337. Funding by
-#             impersonation, keys from the well-known anvil mnemonic, blocks
-#             forced with anvil_mine.
-#   mainnet   Base, chain 8453. Funding by real transfer, keys and RPC URL
-#             from the environment (never committed, never defaulted), no
-#             cheat codes, real block waits.
-#
-# Base Sepolia is deliberately absent: it has no real Morpho Blue USDe/USDC
-# market, no Aerodrome USDe/USDC pool and no real USDe, so it would need mocks
-# and be LESS real than the fork, so it is deliberately not offered.
+#   fork         anvil fork of Base at the pinned block, chain 31337. Funding by
+#                impersonation, keys from the well-known anvil mnemonic, blocks
+#                forced with anvil_mine.
+#   sepolia      Ethereum Sepolia, chain 11155111. A testnet track for the
+#                public URL beat, backed by REAL tokens and REAL Morpho:
+#                Ethena's canonical USDe testnet deployment plus Circle's
+#                testnet USDC, both on Morpho Blue's own Sepolia deployment
+#                using Morpho's ChainlinkOracleV2 factory. The one thing WE
+#                deploy is the market itself (permissionless createMarket)
+#                and its 1:1 stub oracle (Morpho's own factory pattern for
+#                stable pairs). See deploy/sepolia-setup.sh.
+#   mainnet      Base, chain 8453. Funding by real transfer, keys and RPC URL
+#                from the environment (never committed, never defaulted), no
+#                cheat codes, real block waits.
 
 [ -n "${DEPLOY:-}" ] || { echo "FATAL: target.sh sourced without \$DEPLOY set" >&2; exit 1; }
 

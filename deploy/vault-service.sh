@@ -87,7 +87,7 @@ OPERATOR_GAS=$(tcfg_req .funding.operator_gas_wei)
 # strategist is the only account vault.execute() accepts.
 K0=$(role_key owner)
 STRATEGIST=$(role_addr strategist)
-# One ephemeral mnemonic PER NODE. HD indices:
+# One mnemonic PER NODE. HD indices:
 #   0: operator EOA (registered on the service manager, pays for its own
 #      updateOperatorSigningKey tx)
 #   1: signing key (WAVS signs envelopes with this; verified on-chain)
@@ -96,10 +96,25 @@ STRATEGIST=$(role_addr strategist)
 # Three fresh, code-free EOAs per node; on a live chain they still have to be
 # funded (see fund_account below). Arrays are 0-indexed but node ids are
 # 1-indexed in filenames and container names.
+#
+# PERSISTED PER STATE DIR: the mnemonics live in $STATE_DIR/node-mnemonics.env
+# so redeploys reuse the same EOAs and only top up what actual gas usage
+# drained. On the fork this is cosmetic (anvil_setBalance is free); on a live
+# testnet it is the difference between burning $OPERATOR_GAS x 6 per redeploy
+# and topping up cents worth of drained gas.
+MNEMONIC_FILE="$STATE_DIR/node-mnemonics.env"
 declare -a NODE_MNEMONICS OPERATORS K_OPS SIGNINGS AGG_ADDRS K_AGGS
+if [ -f "$MNEMONIC_FILE" ]; then
+  # shellcheck disable=SC1090
+  source "$MNEMONIC_FILE"
+fi
 for i in $(seq 0 $((NODE_COUNT - 1))); do
-  m=$(cast wallet new-mnemonic | sed -n '/Phrase:/{n;p;}' | xargs)
-  [ "$(echo "$m" | wc -w | xargs)" = "12" ] || { echo "FATAL: could not generate node mnemonic #$((i+1))"; exit 1; }
+  var="NODE_MNEMONIC_$((i+1))"
+  m="${!var:-}"
+  if [ -z "$m" ]; then
+    m=$(cast wallet new-mnemonic | sed -n '/Phrase:/{n;p;}' | xargs)
+    [ "$(echo "$m" | wc -w | xargs)" = "12" ] || { echo "FATAL: could not generate node mnemonic #$((i+1))"; exit 1; }
+  fi
   NODE_MNEMONICS[$i]="$m"
   OPERATORS[$i]=$(cast wallet address --mnemonic "$m" --mnemonic-index 0)
   K_OPS[$i]=$(cast wallet private-key --mnemonic "$m" --mnemonic-index 0)
@@ -107,6 +122,17 @@ for i in $(seq 0 $((NODE_COUNT - 1))); do
   AGG_ADDRS[$i]=$(cast wallet address --mnemonic "$m" --mnemonic-index 2)
   K_AGGS[$i]=$(cast wallet private-key --mnemonic "$m" --mnemonic-index 2)
 done
+# Write back so the next run picks up exactly these mnemonics.
+mkdir -p "$STATE_DIR"
+{
+  echo "# Node mnemonics for TARGET=$TARGET, one line per node. Read at the top"
+  echo "# of deploy/vault-service.sh so redeploys reuse the same operator +"
+  echo "# aggregator EOAs and the treasury only tops up drained gas."
+  for i in $(seq 0 $((NODE_COUNT - 1))); do
+    printf 'NODE_MNEMONIC_%d="%s"\n' "$((i+1))" "${NODE_MNEMONICS[$i]}"
+  done
+} > "$MNEMONIC_FILE"
+chmod 600 "$MNEMONIC_FILE"
 
 # --- 1. preconditions -------------------------------------------------------
 say "preconditions (TARGET=$TARGET, chain $CHAIN_ID)"

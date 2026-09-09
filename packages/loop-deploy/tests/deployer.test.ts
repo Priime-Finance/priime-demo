@@ -186,4 +186,15 @@ describe("LoopDeployer", () => {
     const ok = await deployer.createLoop(validLoopResolveInput());
     expect(ok.status).toBe("active");
   });
+
+  it("refuses a candidateId whose chain does not match the deployer's own", async () => {
+    const { deployer, registry, fakes } = makeDeployer();
+    // makeDeployer uses chainKey "evm:31337"; the Sepolia entry is
+    // "evm:11155111". A user picking the Sepolia candidate on a fork-flavoured
+    // server must be refused up front, before any deploy tx.
+    const input = { ...validLoopResolveInput(), candidateId: "morpho-blue-sepolia:11155111:USDe-USDC:0xee461cf8" };
+    await expect(deployer.createLoop(input)).rejects.toThrow(/is not deployable on this server's chain/);
+    expect(registry.list()).toHaveLength(0);
+    expect(fakes.counters.deploys).toBe(0);
+  });
 });

@@ -25,6 +25,8 @@ deploy/components/*.wasm
 .nodes/
 .docker/
 deploy/.fork/
+deploy/.sepolia/
+deploy/.mainnet/
 
 # Misc
 .DS_Store

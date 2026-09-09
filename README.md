@@ -36,6 +36,29 @@ through WAVS. For the fuller demo (compose a loop in the browser, publish
 it, watch real attested strikes land on a live `PriimeVault`), see
 `docs/LIVE_DEMO.md`.
 
+## Sepolia deployment (already live)
+
+A real Morpho market is deployed on Ethereum Sepolia (chain 11155111) and
+is what `TARGET=sepolia` points at. Nothing needs to be re-created; the
+addresses below are committed as the source of truth in
+`packages/loop-deploy/src/catalog.ts` (`USDE_USDC_MORPHO_SEPOLIA`) and
+`deploy/sepolia.config.json` (`morpho.market`).
+
+| What | Address |
+| --- | --- |
+| Ethena USDe (real, canonical Sepolia) | `0x9458caaca74249abbe9e964b3ce155b98ec88ef2` |
+| Circle USDC (real, canonical Sepolia) | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` |
+| Morpho Blue (real) | `0xd011EE229E7459ba1ddd22631eF7bF528d424A14` |
+| MorphoChainlinkOracleV2 (ours, 1:1 stub) | `0x1fC32D70B1B6F85c4dbc2F0626C9e558BD2a1bE2` |
+| Morpho market id (ours, 91.5% LLTV) | `0xee461cf86148c9e0e17c2bca906a4e7ff62bab1ff3334d20e82dd9672a899cb3` |
+
+Created 2026-09-09 by `0x03F3c4B41d839846A13841506297a567a3ebBa7a` via
+`deploy/sepolia-setup.sh`. `oracle.price()` returns exactly `1e24` (1:1),
+`Morpho.idToMarketParams(id)` returns the four addresses plus 91.5% LLTV.
+
+To reproduce or port to another testnet, see `deploy/sepolia-setup.sh`
+(idempotent). The normal demo path does not need to run it.
+
 ## M1: hello-world through the full WAVS pipeline (on anvil)
 
 A hello-world component through the whole pipeline: scaffold, build, deploy, a
