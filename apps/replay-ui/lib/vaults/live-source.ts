@@ -71,6 +71,11 @@ export interface CreateLoopInput {
   cronSeconds: number;
   candidateId: string;
   targetLeverage: number;
+  /**
+   * Composer knobs, string-encoded. Merged into the workflow's
+   * `componentConfig` verbatim so every user choice lands on IPFS.
+   */
+  strategyParams?: Record<string, string>;
 }
 
 export class LoopValidationError extends Error {

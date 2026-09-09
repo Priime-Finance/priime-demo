@@ -369,12 +369,45 @@ export default function PublishFlow({
       try {
         /* `publish-loop.ts` owns the body: it adds the strike cadence and
            states which composer field each value came from. This site adds
-           the name and the strategist and nothing else. */
+           the name and the strategist and nothing else.
+           strategyParams gathers every other knob the composer captured
+           (health-factor bands, auto-compound cadence + threshold, hedge
+           dials when present, exit route, ...) and forwards them as a flat
+           string map so loop-server merges them verbatim into the workflow's
+           componentConfig on IPFS. Names use snake_case to match how the
+           WASM component reads them; values are strings because the wire
+           protocol is strings all the way down.
+           `emit` is inlined rather than a helper because the closure over
+           `sp` reads better than a `(k,v)=>` mutator at every call site. */
+        const sp: Record<string, string> = {};
+        const emit = (k: string, v: unknown) => {
+          if (v === undefined || v === null) return;
+          if (typeof v === "number" && !Number.isFinite(v)) return;
+          sp[k] = String(v);
+        };
+        emit("hf_target_bps", draft.hfTargetBps);
+        emit("hf_deleverage_bps", draft.hfDeleverageBps);
+        emit("hf_floor_bps", draft.hfFloorBps);
+        emit("applied_leverage", draft.appliedLeverage);
+        emit("compound_cadence_hours", draft.compoundCadenceHours);
+        emit("compound_threshold_usd", draft.thresholdUsd);
+        emit("hedge_leverage", draft.hedgeLeverage);
+        emit("reserve_fraction", draft.reserveFraction);
+        emit("delta_band_pct", draft.deltaBandPct);
+        emit("margin_trim_pct", draft.marginTrimPct);
+        emit("margin_restore_pct", draft.marginRestorePct);
+        emit("funding_floor_apr", draft.fundingFloorApr);
+        emit("collateral_yield_apy", draft.collateralYieldApy);
+        emit("exit_route_id", draft.exitRouteId);
+        emit("exit_settlement_days", draft.exitSettlementDays);
+        emit("hl_coin", draft.hlCoin);
+        emit("capacity_binding", draft.capacityBinding);
         const { loopId, handler } = await publishLoopToServer({
           name: finalName,
           strategist: address,
           candidateId: draft.candidateId,
           targetLeverage: draft.targetLeverage,
+          strategyParams: sp,
         });
         if (!alive.current) return;
         setDeployed({ name: finalName, loopId, handler });
