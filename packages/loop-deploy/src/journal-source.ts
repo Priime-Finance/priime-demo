@@ -25,7 +25,7 @@ import { buildJournal, type JournalBuildInput } from "./journal.ts";
 
 /** Minimal handler ABI: the NavUpdated event and the handleSignedEnvelope selector. */
 const HANDLER_ABI = parseAbi([
-  "event NavUpdated(bytes20 indexed eventId, uint256 nav, uint256 inputsBlock, uint256 updateCount)",
+  "event NavUpdated(bytes20 indexed eventId, uint256 nav, uint256 inputsBlock, uint256 updateCount, bytes32 configHash)",
   "function handleSignedEnvelope((bytes20 eventId, bytes12 ordering, bytes payload) envelope, (address[] signers, bytes[] signatures, uint32 referenceBlock) signatureData) external",
   "function asset() external view returns (address)",
 ]) satisfies Abi;
