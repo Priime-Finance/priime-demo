@@ -40,4 +40,6 @@ export {
   makeJournalReader,
   type JournalReader,
   type JournalReaderOptions,
+  type Observations,
+  type StrikeRecord,
 } from "./journal-source.ts";

@@ -29,7 +29,7 @@ const VIRTUAL_ASSETS: u128 = 1;
 
 sol! {
     /// The exact bytes every operator signs and PriimeVault decodes:
-    /// abi.encode(handler, nav, inputsBlock, configHash).
+    /// abi.encode(handler, nav, inputsBlock, configHash, observations...).
     ///
     /// - `handler` binds the envelope to its intended receiver (PriimeVault
     ///   guard zero).
@@ -37,16 +37,48 @@ sol! {
     ///   form is the concatenation of every workflow config key/value pair in
     ///   lexicographic order of key, encoded as `key=value\n`. Any operator
     ///   running a divergent config produces a different hash, its result
-    ///   hash diverges, and the quorum outvotes it. This is the "cannot lie
-    ///   about config" cryptographic bind; the vault stores the accepted
-    ///   value in `lastConfigHash` so off-chain verifiers can prove which
-    ///   pinned service.json the quorum ran against.
+    ///   hash diverges, and the quorum outvotes it.
+    /// - The remaining fields are per-strike observations every operator
+    ///   independently measures at `inputs_block`. They are what the
+    ///   composer's non-cycle-affecting knobs bind against: a user picking
+    ///   `applied_leverage=2.5` gets `leverageBps` attested against the
+    ///   position's actual leverage, and a divergent operator running a
+    ///   different market snapshot produces a different value here. All
+    ///   values are deterministic from chain state at `inputs_block`.
     struct BoundNavResult {
         address handler;
         uint256 nav;
         uint256 inputsBlock;
         bytes32 configHash;
+        /// Measured leverage: debt_usdc * 10_000 / (par_collateral_usdc - debt_usdc).
+        /// Zero when there is no debt; saturates at u32::MAX above equity.
+        uint32 leverageBps;
+        /// Measured LTV: debt_usdc * 10_000 / par_collateral_usdc.
+        /// Zero when there is no collateral. The floor check uses the same
+        /// number in a wider integer; this is the u32 for downstream display.
+        uint32 ltvBps;
+        /// USDC reserve fraction: vault_usdc_balance * 10_000 / nav_usdc.
+        /// Zero when the vault is empty. Above 10_000 when nav < reserve.
+        uint32 reserveBps;
+        /// Annualized supply APY in bps: borrow_rate * seconds_per_year *
+        /// utilization, all in bps.
+        uint32 supplyApyBps;
+        /// Hours between the market's last accrual and `inputs_block`. A
+        /// stale market means the strike is measuring an old snapshot.
+        uint32 hoursSinceUpdate;
     }
+}
+
+/// The bag of per-strike observations that ride in `BoundNavResult`. Kept as
+/// a plain struct so the encode/decode boundary is one flat call and every
+/// caller reads the same names as PriimeVault decodes.
+#[derive(Clone, Copy, Debug)]
+pub struct Observations {
+    pub leverage_bps: u32,
+    pub ltv_bps: u32,
+    pub reserve_bps: u32,
+    pub supply_apy_bps: u32,
+    pub hours_since_update: u32,
 }
 
 /// Morpho `toAssetsUp`: borrow shares to assets, rounded up, with the
@@ -308,13 +340,93 @@ pub fn nav_usdc(
     Ok((collateral_value + U256::from(folded_idle)).saturating_sub(debt_usdc))
 }
 
-/// The signed payload bytes: abi.encode(handler, nav, inputsBlock, configHash).
-pub fn encode_payload(handler: Address, nav: U256, inputs_block: u64, config_hash: FixedBytes<32>) -> Vec<u8> {
+/// Measured leverage in bps: debt / (par_collateral - debt). Zero when
+/// there is no debt; saturates at u32::MAX when equity is <= 0 (a state the
+/// hf_floor check should have rejected, but the observation still lands as
+/// a signal rather than a panic).
+pub fn measured_leverage_bps(collateral_1e18: u128, debt_usdc: U256) -> u32 {
+    if debt_usdc.is_zero() {
+        return 0;
+    }
+    let par_col = U256::from(collateral_1e18) / U256::from(1_000_000_000_000u64);
+    if par_col <= debt_usdc {
+        return u32::MAX;
+    }
+    let equity = par_col - debt_usdc;
+    let ratio = debt_usdc * U256::from(10_000u16) / equity;
+    u32::try_from(ratio).unwrap_or(u32::MAX)
+}
+
+/// Measured LTV in bps: debt / par_collateral. Zero when there is no
+/// collateral (the vacuous-check case: no leverage story to tell).
+pub fn measured_ltv_bps(collateral_1e18: u128, debt_usdc: U256) -> u32 {
+    let par_col = U256::from(collateral_1e18) / U256::from(1_000_000_000_000u64);
+    if par_col.is_zero() {
+        return 0;
+    }
+    let ratio = debt_usdc * U256::from(10_000u16) / par_col;
+    u32::try_from(ratio).unwrap_or(u32::MAX)
+}
+
+/// USDC reserve fraction in bps: vault_usdc_balance / nav. Zero when the
+/// vault is empty; can exceed 10_000 when nav < usdc (collateral loss).
+pub fn measured_reserve_bps(usdc_balance: u128, nav_usdc: U256) -> u32 {
+    if nav_usdc.is_zero() {
+        return 0;
+    }
+    let ratio = U256::from(usdc_balance) * U256::from(10_000u16) / nav_usdc;
+    u32::try_from(ratio).unwrap_or(u32::MAX)
+}
+
+/// Utilization in bps: total_borrow_assets / total_supply_assets.
+/// Zero when the market has no supply.
+pub fn utilization_bps(total_borrow_assets: u128, total_supply_assets: u128) -> u32 {
+    if total_supply_assets == 0 {
+        return 0;
+    }
+    let ratio = (total_borrow_assets as u128).saturating_mul(10_000) / total_supply_assets;
+    u32::try_from(ratio).unwrap_or(u32::MAX)
+}
+
+/// Annualized supply APY in bps.
+/// APY_supply ≈ (borrow_rate_wad_per_sec * 3.1536e7 / 1e14) * utilization / 10_000.
+/// Ignores Morpho protocol fee; that shaves supply APY by ~fee_bps and can
+/// be added when the market's fee is non-zero.
+pub fn measured_supply_apy_bps(borrow_rate_wad_per_sec: u128, utilization_bps: u32) -> u32 {
+    // secs/year * borrow_rate_wad = year_wad; divide by 1e14 to get bps.
+    const SECONDS_PER_YEAR: u128 = 31_536_000;
+    let annual_wad = borrow_rate_wad_per_sec.saturating_mul(SECONDS_PER_YEAR);
+    let borrow_apy_bps = annual_wad / 100_000_000_000_000u128;
+    let supply_apy_bps = borrow_apy_bps.saturating_mul(utilization_bps as u128) / 10_000;
+    u32::try_from(supply_apy_bps).unwrap_or(u32::MAX)
+}
+
+/// Hours between two unix timestamps, saturating.
+pub fn hours_between(from_secs: u64, to_secs: u64) -> u32 {
+    let secs = to_secs.saturating_sub(from_secs);
+    u32::try_from(secs / 3_600).unwrap_or(u32::MAX)
+}
+
+/// The signed payload bytes:
+/// abi.encode(handler, nav, inputsBlock, configHash, leverageBps, ltvBps,
+///            reserveBps, supplyApyBps, hoursSinceUpdate).
+pub fn encode_payload(
+    handler: Address,
+    nav: U256,
+    inputs_block: u64,
+    config_hash: FixedBytes<32>,
+    obs: Observations,
+) -> Vec<u8> {
     BoundNavResult {
         handler,
         nav,
         inputsBlock: U256::from(inputs_block),
         configHash: config_hash,
+        leverageBps: obs.leverage_bps,
+        ltvBps: obs.ltv_bps,
+        reserveBps: obs.reserve_bps,
+        supplyApyBps: obs.supply_apy_bps,
+        hoursSinceUpdate: obs.hours_since_update,
     }
     .abi_encode()
 }
@@ -643,18 +755,118 @@ mod tests {
         assert_eq!(nav, U256::ZERO);
     }
 
+    // --- observation helpers ------------------------------------------------
+
+    #[test]
+    fn measured_leverage_is_zero_with_no_debt() {
+        assert_eq!(measured_leverage_bps(1_000_000_000_000_000_000u128, U256::ZERO), 0);
+    }
+
+    #[test]
+    fn measured_leverage_saturates_above_equity() {
+        // debt >= par_collateral means equity <= 0 - the position is
+        // insolvent. The floor check should reject it, but the observation
+        // still lands as u32::MAX so downstream verifiers see the signal.
+        let collateral_1e18 = 1_000_000_000_000_000_000u128; // 1 USDe -> $1 par
+        let debt = U256::from(1_000_000u64); // exactly 1 USDC
+        assert_eq!(measured_leverage_bps(collateral_1e18, debt), u32::MAX);
+    }
+
+    #[test]
+    fn measured_leverage_matches_expected_ratio() {
+        // par_col = $10, debt = $6 -> equity = $4, leverage = 6/4 = 1.5x.
+        let collateral_1e18 = 10_000_000_000_000_000_000u128;
+        let debt = U256::from(6_000_000u64);
+        assert_eq!(measured_leverage_bps(collateral_1e18, debt), 15_000);
+    }
+
+    #[test]
+    fn measured_ltv_matches_check_hf_floor_computation() {
+        // par_col $1, debt $0.80 -> 8000 bps LTV.
+        let collateral_1e18 = 1_000_000_000_000_000_000u128;
+        let debt = U256::from(800_000u64);
+        assert_eq!(measured_ltv_bps(collateral_1e18, debt), 8_000);
+    }
+
+    #[test]
+    fn measured_ltv_is_zero_with_no_collateral() {
+        assert_eq!(measured_ltv_bps(0, U256::from(1_000_000u64)), 0);
+    }
+
+    #[test]
+    fn reserve_is_zero_when_nav_is_zero() {
+        assert_eq!(measured_reserve_bps(5_000_000, U256::ZERO), 0);
+    }
+
+    #[test]
+    fn reserve_matches_expected_ratio() {
+        // 2 USDC reserve vs 10 USDC nav -> 20% = 2000 bps.
+        assert_eq!(
+            measured_reserve_bps(2_000_000, U256::from(10_000_000u64)),
+            2_000
+        );
+    }
+
+    #[test]
+    fn utilization_zero_supply() {
+        assert_eq!(utilization_bps(1_000, 0), 0);
+    }
+
+    #[test]
+    fn utilization_matches_expected_ratio() {
+        assert_eq!(utilization_bps(800_000, 1_000_000), 8_000);
+    }
+
+    #[test]
+    fn supply_apy_scales_borrow_by_utilization() {
+        // borrow rate_wad_per_sec = 3.17e9 per sec ~ 10% APR.
+        // At 100% utilization supply APY ~= borrow APR.
+        // year_wad = 3.17e9 * 3.1536e7 = ~1e17 wad = 10% wad = 1000 bps.
+        let rate = 3_170_000_000u128;
+        assert!(measured_supply_apy_bps(rate, 10_000) >= 990);
+        assert!(measured_supply_apy_bps(rate, 10_000) <= 1_010);
+        // At 50% utilization supply is halved.
+        assert!(measured_supply_apy_bps(rate, 5_000) >= 495);
+        assert!(measured_supply_apy_bps(rate, 5_000) <= 510);
+    }
+
+    #[test]
+    fn hours_between_saturates_backwards() {
+        assert_eq!(hours_between(100, 50), 0);
+    }
+
+    #[test]
+    fn hours_between_computes_integer_hours() {
+        assert_eq!(hours_between(0, 7_200), 2);
+        assert_eq!(hours_between(0, 3_599), 0);
+    }
+
     // --- payload ------------------------------------------------------------
 
     #[test]
-    fn payload_is_four_abi_words_bound_to_handler() {
+    fn payload_is_nine_abi_words_bound_to_handler() {
         let handler = address!("73BB3CE07d25057A9265B476E80c08CBbA5d80d9");
         let config_hash = FixedBytes::<32>::from([0xAB; 32]);
-        let bytes = encode_payload(handler, U256::from(500_000_000u64), 49_911_282, config_hash);
-        assert_eq!(bytes.len(), 128);
+        let obs = Observations {
+            leverage_bps: 25_000,
+            ltv_bps: 8_000,
+            reserve_bps: 500,
+            supply_apy_bps: 700,
+            hours_since_update: 3,
+        };
+        let bytes = encode_payload(handler, U256::from(500_000_000u64), 49_911_282, config_hash, obs);
+        // 9 fixed 32-byte words: handler, nav, inputsBlock, configHash,
+        // then five uint32 padded to 32 bytes each.
+        assert_eq!(bytes.len(), 288);
         assert_eq!(&bytes[0..12], &[0u8; 12]);
         assert_eq!(&bytes[12..32], handler.as_slice());
         assert_eq!(U256::from_be_slice(&bytes[32..64]), U256::from(500_000_000u64));
         assert_eq!(U256::from_be_slice(&bytes[64..96]), U256::from(49_911_282u64));
         assert_eq!(&bytes[96..128], config_hash.as_slice());
+        assert_eq!(U256::from_be_slice(&bytes[128..160]), U256::from(25_000u64));
+        assert_eq!(U256::from_be_slice(&bytes[160..192]), U256::from(8_000u64));
+        assert_eq!(U256::from_be_slice(&bytes[192..224]), U256::from(500u64));
+        assert_eq!(U256::from_be_slice(&bytes[224..256]), U256::from(700u64));
+        assert_eq!(U256::from_be_slice(&bytes[256..288]), U256::from(3u64));
     }
 }

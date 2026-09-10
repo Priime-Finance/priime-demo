@@ -169,9 +169,20 @@ contract PriimeVaultTest {
         return IWavsServiceHandler.Envelope({
             eventId: eventId,
             ordering: bytes12(0),
-            // Same bytes the NAV component signs:
-            // abi.encode(handler, nav, inputsBlock, configHash), bound to this vault.
-            payload: abi.encode(address(vault), nav, inputsBlock, configHash)
+            // abi.encode(handler, nav, inputsBlock, configHash, five uint32
+            // observation fields), bound to this vault. Zero observations
+            // are legal: an empty vault attests all zeros deterministically.
+            payload: abi.encode(
+                address(vault),
+                nav,
+                inputsBlock,
+                configHash,
+                uint32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0)
+            )
         });
     }
 
@@ -798,7 +809,17 @@ contract PriimeVaultTest {
         IWavsServiceHandler.Envelope memory env = IWavsServiceHandler.Envelope({
             eventId: bytes20(uint160(1)),
             ordering: bytes12(0),
-            payload: abi.encode(other, uint256(1_000 * ONE_USDC), uint256(100), bytes32(0))
+            payload: abi.encode(
+                other,
+                uint256(1_000 * ONE_USDC),
+                uint256(100),
+                bytes32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0)
+            )
         });
 
         vm.expectRevert(abi.encodeWithSelector(PriimeVault.HandlerMismatch.selector, other));
@@ -934,7 +955,18 @@ contract PriimeVaultTest {
         vm.expectEmit(true, false, false, true);
         emit PriimeVault.RedeemRequestFulfilled(ALICE, 250 * ONE_USDC, 500 * ONE_USDC);
         vm.expectEmit(true, false, false, true);
-        emit PriimeVault.NavUpdated(bytes20(uint160(0xE7E21)), 2_000 * ONE_USDC, 2, 2, bytes32(0));
+        emit PriimeVault.NavUpdated(
+            bytes20(uint160(0xE7E21)),
+            2_000 * ONE_USDC,
+            2,
+            2,
+            bytes32(0),
+            uint32(0),
+            uint32(0),
+            uint32(0),
+            uint32(0),
+            uint32(0)
+        );
         _attest(bytes20(uint160(0xE7E21)), 2_000 * ONE_USDC, 2);
     }
 
@@ -955,7 +987,17 @@ contract PriimeVaultTest {
         IWavsServiceHandler.Envelope memory env = IWavsServiceHandler.Envelope({
             eventId: bytes20(uint160(0x5E11)),
             ordering: bytes12(uint96(0xABCDEF)), // non-zero, so a dropped word would show
-            payload: abi.encode(address(vault), uint256(1_234 * ONE_USDC), uint256(7), bytes32(0))
+            payload: abi.encode(
+                address(vault),
+                uint256(1_234 * ONE_USDC),
+                uint256(7),
+                bytes32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0)
+            )
         });
 
         address[] memory signers = new address[](2);
@@ -978,7 +1020,17 @@ contract PriimeVaultTest {
         IWavsServiceHandler.Envelope memory other = IWavsServiceHandler.Envelope({
             eventId: bytes20(uint160(0x5E12)),
             ordering: bytes12(uint96(0xABCDEF)),
-            payload: abi.encode(address(vault), uint256(1_235 * ONE_USDC), uint256(8), bytes32(0))
+            payload: abi.encode(
+                address(vault),
+                uint256(1_235 * ONE_USDC),
+                uint256(8),
+                bytes32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0),
+                uint32(0)
+            )
         });
         vm.expectRevert(
             abi.encodeWithSelector(

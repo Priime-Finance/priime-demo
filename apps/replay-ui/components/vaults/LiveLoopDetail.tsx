@@ -42,8 +42,7 @@
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 
-import type { Journal } from "@priime-demo/journal-schema";
-import type { LoopRecord } from "@priime-demo/loop-deploy";
+import type { LoopRecord, StrikeRecord } from "@priime-demo/loop-deploy";
 
 import { ActivityTable, executionRows, verifyHref } from "./ActivitySection";
 import DepositCard from "./DepositCard";
@@ -57,6 +56,7 @@ import {
   journalExecutions,
   liveAttestationNote,
   liveAttestationRows,
+  observedKnobRows,
   liveQuorum,
   loopFacts,
   marketWords,
@@ -116,7 +116,7 @@ const NO_EXECUTIONS =
 type LoadState =
   | { kind: "loading" }
   | { kind: "unreachable"; message: string }
-  | { kind: "ready"; loop: LoopRecord; journals: Journal[] };
+  | { kind: "ready"; loop: LoopRecord; journals: StrikeRecord[] };
 
 export default function LiveLoopDetail({ id }: { id: string }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
@@ -196,6 +196,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
   const facts = withParamKinds(loopFacts(loop, config, journals));
   const loopLedger = executionRows(journalExecutions(journals));
   const loopVerifiable = loopLedger.some((r) => verifyHref(r) !== null);
+  const observedKnobs = observedKnobRows(config, journals);
 
   return (
     <div className="vx-root vxd">
@@ -336,6 +337,28 @@ export default function LiveLoopDetail({ id }: { id: string }) {
                 <StrikeLedger strikes={strikes} />
               )}
             </div>
+            {observedKnobs.length === 0 ? null : (
+              <div className="vx-panel vx-attest" style={{ marginTop: 16 }}>
+                <div className="vx-panel-h">Composer knobs, observed</div>
+                <p className="vxd-desc vxd-desc--note">
+                  Every strategist dial the operator quorum measures at the pinned inputs block.
+                  Configured is what the strategist published; measured is what the quorum attested
+                  in the payload. Both are cryptographically bound to the pinned service.json, so a
+                  single operator running a divergent config or reading a different block produces a
+                  divergent hash and gets outvoted.
+                </p>
+                {observedKnobs.map((r) => (
+                  <div key={r.key} className="vx-kv">
+                    <span>{r.label}</span>
+                    <b data-kind="phrase">
+                      {r.configured === null ? "not set" : r.configured}
+                      {" · "}
+                      {r.measured === null ? "awaiting strike" : r.measured}
+                    </b>
+                  </div>
+                ))}
+              </div>
+            )}
             {attestation.length === 0 ? null : (
               <div className="vx-panel vx-attest">
                 <div className="vx-panel-h">Attestation</div>

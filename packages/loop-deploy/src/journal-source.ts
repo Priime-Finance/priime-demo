@@ -25,7 +25,7 @@ import { buildJournal, type JournalBuildInput } from "./journal.ts";
 
 /** Minimal handler ABI: the NavUpdated event and the handleSignedEnvelope selector. */
 const HANDLER_ABI = parseAbi([
-  "event NavUpdated(bytes20 indexed eventId, uint256 nav, uint256 inputsBlock, uint256 updateCount, bytes32 configHash)",
+  "event NavUpdated(bytes20 indexed eventId, uint256 nav, uint256 inputsBlock, uint256 updateCount, bytes32 configHash, uint32 leverageBps, uint32 ltvBps, uint32 reserveBps, uint32 supplyApyBps, uint32 hoursSinceUpdate)",
   "function handleSignedEnvelope((bytes20 eventId, bytes12 ordering, bytes payload) envelope, (address[] signers, bytes[] signatures, uint32 referenceBlock) signatureData) external",
   "function asset() external view returns (address)",
 ]) satisfies Abi;
@@ -48,16 +48,55 @@ export interface JournalReaderOptions {
   fromBlock?: bigint;
 }
 
-export interface JournalReader {
-  /** Latest N journals for a handler, newest first. */
-  readJournals(vaultAddress: string, limit: number): Promise<Journal[]>;
+/**
+ * Per-strike observations decoded from the payload. Every operator computes
+ * these deterministically from chain state at `inputs_block`, so identical
+ * bytes across the quorum are the "cannot lie about observations" property.
+ */
+export interface Observations {
+  leverageBps: number;
+  ltvBps: number;
+  reserveBps: number;
+  supplyApyBps: number;
+  hoursSinceUpdate: number;
 }
 
-/** payload = abi.encode(address handler, uint256 nav, uint256 inputsBlock). */
+/**
+ * The Journal for a strike plus the per-strike observations. Observations
+ * live alongside the Journal rather than inside it because the v1 Journal
+ * schema is frozen; new attested fields ride as an off-schema companion
+ * that the UI consumes without waiting for a schema bump.
+ */
+export type StrikeRecord = Journal & { observations: Observations };
+
+export interface JournalReader {
+  /** Latest N strikes for a handler, newest first. */
+  readJournals(vaultAddress: string, limit: number): Promise<StrikeRecord[]>;
+}
+
+/**
+ * payload = abi.encode(
+ *   address handler, uint256 nav, uint256 inputsBlock, bytes32 configHash,
+ *   uint32 leverageBps, uint32 ltvBps, uint32 reserveBps,
+ *   uint32 supplyApyBps, uint32 hoursSinceUpdate
+ * ).
+ *
+ * Only the first three fields drive `Journal` today (the handler binding
+ * check, the attested nav, and the inputs_block cross-check); the rest ride
+ * as event fields for downstream verifiers and the UI. Declaring the full
+ * tuple here keeps the payload-decode aligned with the vault's decoder, so
+ * any mismatch fails decoding rather than silently reading stale bytes.
+ */
 const PAYLOAD_TUPLE = [
   { type: "address", name: "handler" },
   { type: "uint256", name: "nav" },
   { type: "uint256", name: "inputsBlock" },
+  { type: "bytes32", name: "configHash" },
+  { type: "uint32", name: "leverageBps" },
+  { type: "uint32", name: "ltvBps" },
+  { type: "uint32", name: "reserveBps" },
+  { type: "uint32", name: "supplyApyBps" },
+  { type: "uint32", name: "hoursSinceUpdate" },
 ] as const;
 
 /** Envelope tuple as WAVS signs it. */
@@ -103,7 +142,7 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
   };
 
   return {
-    async readJournals(vaultAddress: string, limit: number): Promise<Journal[]> {
+    async readJournals(vaultAddress: string, limit: number): Promise<StrikeRecord[]> {
       const vault = vaultAddress.toLowerCase() as Address;
       // Some RPCs (Base fork on anvil) cap eth_getLogs at 10k blocks. Default
       // to a rolling window ending at head; callers with a wider need set
@@ -120,7 +159,7 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
       const picked = logs.slice(-Math.max(1, limit)).reverse();
       const unit = await readNavUnit(vault);
 
-      const journals: Journal[] = [];
+      const strikes: StrikeRecord[] = [];
       for (const log of picked) {
         const args = log.args as { eventId?: Hex; nav?: bigint; inputsBlock?: bigint };
         if (log.transactionHash === null || args.eventId === undefined || args.nav === undefined || args.inputsBlock === undefined) {
@@ -150,11 +189,18 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           continue;
         }
 
-        const [payloadHandler, payloadNav, payloadInputsBlock] = decodeAbiParameters(
-          PAYLOAD_TUPLE,
-          envelope.payload,
-        );
-        if (payloadHandler.toLowerCase() !== vault) continue; // envelope bound to a different handler
+        const [
+          payloadHandler,
+          payloadNav,
+          payloadInputsBlock,
+          ,
+          leverageBps,
+          ltvBps,
+          reserveBps,
+          supplyApyBps,
+          hoursSinceUpdate,
+        ] = decodeAbiParameters(PAYLOAD_TUPLE, envelope.payload);
+        if (payloadHandler.toLowerCase() !== vault) continue;
         if (payloadInputsBlock !== args.inputsBlock) {
           throw new Error(
             `inputs_block mismatch: payload ${payloadInputsBlock.toString()}, event ${args.inputsBlock.toString()}`,
@@ -188,9 +234,16 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           attestationBlockNumber: receipt.blockNumber,
           attestationTimestamp: Number(block.timestamp),
         };
-        journals.push(buildJournal(input));
+        const observations: Observations = {
+          leverageBps,
+          ltvBps,
+          reserveBps,
+          supplyApyBps,
+          hoursSinceUpdate,
+        };
+        strikes.push({ ...buildJournal(input), observations });
       }
-      return journals;
+      return strikes;
     },
   };
 }

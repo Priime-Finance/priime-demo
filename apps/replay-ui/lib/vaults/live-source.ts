@@ -10,8 +10,7 @@
  * from the proxy is expected during a demo pause or a fresh dev boot.
  */
 
-import type { Journal } from "@priime-demo/journal-schema";
-import type { LoopRecord } from "@priime-demo/loop-deploy";
+import type { LoopRecord, StrikeRecord } from "@priime-demo/loop-deploy";
 
 export interface LoopsListResponse {
   loops: LoopRecord[];
@@ -22,7 +21,7 @@ export interface LoopDetailResponse {
 }
 
 export interface LoopJournalsResponse {
-  journals: Journal[];
+  journals: StrikeRecord[];
 }
 
 /** Wrap fetch so callers get a typed result or a plain Error. */

@@ -142,12 +142,35 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     );
     event OperatorSet(address indexed controller, address indexed operator, bool approved);
     // Implementation events.
+    /// @notice A NAV strike lands. `eventId` is the aggregator's dedup key.
+    ///         `nav` is the settled value in USDC base units; `inputsBlock` is
+    ///         the block whose state the operators read; `updateCount` is a
+    ///         monotonically increasing strike count; `configHash` is
+    ///         keccak256 of the canonicalized workflow componentConfig (the
+    ///         "cannot lie about config" cryptographic bind).
+    ///
+    ///         Observation fields are per-strike measurements every operator
+    ///         independently computed at `inputsBlock`:
+    ///           - leverageBps = debt * 10_000 / (par_collateral - debt)
+    ///           - ltvBps       = debt * 10_000 / par_collateral
+    ///           - reserveBps   = usdc_balance * 10_000 / nav
+    ///           - supplyApyBps = annualized supply APY (bps)
+    ///           - hoursSinceUpdate = hours between market lastUpdate and
+    ///             `inputsBlock` timestamp.
+    ///         Each maps to a composer knob (applied_leverage, hf_*_bps,
+    ///         reserve_fraction, collateral_yield_apy, compound_cadence_hours)
+    ///         so downstream verifiers gate on measured-vs-configured drift.
     event NavUpdated(
         bytes20 indexed eventId,
         uint256 nav,
         uint256 inputsBlock,
         uint256 updateCount,
-        bytes32 configHash
+        bytes32 configHash,
+        uint32 leverageBps,
+        uint32 ltvBps,
+        uint32 reserveBps,
+        uint32 supplyApyBps,
+        uint32 hoursSinceUpdate
     );
     event DepositRequestFulfilled(address indexed controller, uint256 assets, uint256 shares);
     event RedeemRequestFulfilled(address indexed controller, uint256 shares, uint256 assets);
@@ -546,8 +569,20 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      fulfillment with zero share supply prices 1 share per USDC base
     ///      unit.
     function handleSignedEnvelope(Envelope calldata envelope, SignatureData calldata signatureData) external override {
-        (address handler, uint256 attestedNav, uint256 inputsBlock, bytes32 configHash) =
-            abi.decode(envelope.payload, (address, uint256, uint256, bytes32));
+        (
+            address handler,
+            uint256 attestedNav,
+            uint256 inputsBlock,
+            bytes32 configHash,
+            uint32 leverageBps,
+            uint32 ltvBps,
+            uint32 reserveBps,
+            uint32 supplyApyBps,
+            uint32 hoursSinceUpdate
+        ) = abi.decode(
+            envelope.payload,
+            (address, uint256, uint256, bytes32, uint32, uint32, uint32, uint32, uint32)
+        );
         if (handler != address(this)) revert HandlerMismatch(handler);
 
         // Reverts unless the operator quorum signed this exact envelope.
@@ -567,7 +602,22 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         _fulfillDeposits();
         _fulfillRedeems();
 
-        emit NavUpdated(envelope.eventId, attestedNav, inputsBlock, updateCount, configHash);
+        // Observations are emit-only: the vault does not currently take
+        // policy actions on them, but downstream verifiers and the UI read
+        // the log for measured-vs-configured drift. Cost is one log field
+        // per observation; no additional storage.
+        emit NavUpdated(
+            envelope.eventId,
+            attestedNav,
+            inputsBlock,
+            updateCount,
+            configHash,
+            leverageBps,
+            ltvBps,
+            reserveBps,
+            supplyApyBps,
+            hoursSinceUpdate
+        );
     }
 
     /// @inheritdoc IWavsServiceHandler
