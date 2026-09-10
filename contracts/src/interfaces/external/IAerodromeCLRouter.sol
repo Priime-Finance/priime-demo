@@ -20,8 +20,5 @@ interface IAerodromeCLRouter {
     }
 
     /// @return amountOut The actual amount of `tokenOut` received.
-    function exactInputSingle(ExactInputSingleParams calldata params)
-        external
-        payable
-        returns (uint256 amountOut);
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
 }

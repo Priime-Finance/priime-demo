@@ -147,12 +147,8 @@ contract PriimeVaultTest {
             swapRouter: address(0x04),
             poolTickSpacing: int24(1)
         });
-        vault = new PriimeVault(
-            IWavsServiceManager(address(manager)),
-            IERC20(address(usdc)),
-            STRATEGIST,
-            strategyConfig
-        );
+        vault =
+            new PriimeVault(IWavsServiceManager(address(manager)), IERC20(address(usdc)), STRATEGIST, strategyConfig);
 
         usdc.mint(ALICE, 1_000_000 * ONE_USDC);
         usdc.mint(BOB, 1_000_000 * ONE_USDC);
@@ -191,11 +187,7 @@ contract PriimeVaultTest {
             supplyApyBps: 0,
             hoursSinceUpdate: 0,
             breachFlags: 0,
-            plan: PriimeVault.StrategyPlan({
-                targets: new address[](0),
-                calldatas: new bytes[](0),
-                timestamp: 0
-            })
+            plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
         });
         return IWavsServiceHandler.Envelope({
             eventId: eventId,
@@ -223,25 +215,16 @@ contract PriimeVaultTest {
             supplyApyBps: 0,
             hoursSinceUpdate: 0,
             breachFlags: flags,
-            plan: PriimeVault.StrategyPlan({
-                targets: new address[](0),
-                calldatas: new bytes[](0),
-                timestamp: 0
-            })
+            plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
         });
-        return IWavsServiceHandler.Envelope({
-            eventId: eventId,
-            ordering: bytes12(0),
-            payload: abi.encode(result)
-        });
+        return IWavsServiceHandler.Envelope({eventId: eventId, ordering: bytes12(0), payload: abi.encode(result)});
     }
 
     function _sigs() internal pure returns (IWavsServiceHandler.SignatureData memory) {
-        return IWavsServiceHandler.SignatureData({
-            signers: new address[](0),
-            signatures: new bytes[](0),
-            referenceBlock: 0
-        });
+        return
+            IWavsServiceHandler.SignatureData({
+                signers: new address[](0), signatures: new bytes[](0), referenceBlock: 0
+            });
     }
 
     function _attest(bytes20 eventId, uint256 nav, uint256 inputsBlock) internal {
@@ -811,8 +794,7 @@ contract PriimeVaultTest {
         // Strike lands with breachFlags != 0 (bit 0 = hf_floor). Vault
         // attests NAV and stores the flag; existing balances are unaffected.
         vault.handleSignedEnvelope(
-            _envelopeWithBreach(bytes20(uint160(0xB01)), 1_000 * ONE_USDC, 2, uint16(1)),
-            _sigs()
+            _envelopeWithBreach(bytes20(uint160(0xB01)), 1_000 * ONE_USDC, 2, uint16(1)), _sigs()
         );
         require(vault.breachFlags() == uint16(1), "flag stored");
         require(vault.totalAssets() == 1_000 * ONE_USDC, "nav still attested");
@@ -829,8 +811,7 @@ contract PriimeVaultTest {
 
         // Next strike clears the flag: requests resume normally.
         vault.handleSignedEnvelope(
-            _envelopeWithBreach(bytes20(uint160(0xB02)), 1_000 * ONE_USDC, 3, uint16(0)),
-            _sigs()
+            _envelopeWithBreach(bytes20(uint160(0xB02)), 1_000 * ONE_USDC, 3, uint16(0)), _sigs()
         );
         require(vault.breachFlags() == 0, "flag cleared by fresh strike");
 
@@ -874,9 +855,7 @@ contract PriimeVaultTest {
         // The bricking case: one corrupt quorum signing uint256.max would
         // otherwise raise the staleness floor beyond any reachable height and
         // freeze NAV forever.
-        vm.expectRevert(
-            abi.encodeWithSelector(PriimeVault.FutureInputsBlock.selector, type(uint256).max, block.number)
-        );
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.FutureInputsBlock.selector, type(uint256).max, block.number));
         vault.handleSignedEnvelope(_envelope(bytes20(uint160(3)), 9_999 * ONE_USDC, type(uint256).max), _sigs());
 
         require(vault.lastInputsBlock() == 100, "inputs block unchanged");
@@ -906,11 +885,7 @@ contract PriimeVaultTest {
                     supplyApyBps: 0,
                     hoursSinceUpdate: 0,
                     breachFlags: 0,
-                    plan: PriimeVault.StrategyPlan({
-                        targets: new address[](0),
-                        calldatas: new bytes[](0),
-                        timestamp: 0
-                    })
+                    plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
                 })
             )
         });
@@ -1093,11 +1068,7 @@ contract PriimeVaultTest {
                     supplyApyBps: 0,
                     hoursSinceUpdate: 0,
                     breachFlags: 0,
-                    plan: PriimeVault.StrategyPlan({
-                        targets: new address[](0),
-                        calldatas: new bytes[](0),
-                        timestamp: 0
-                    })
+                    plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
                 })
             )
         });
@@ -1134,11 +1105,7 @@ contract PriimeVaultTest {
                     supplyApyBps: 0,
                     hoursSinceUpdate: 0,
                     breachFlags: 0,
-                    plan: PriimeVault.StrategyPlan({
-                        targets: new address[](0),
-                        calldatas: new bytes[](0),
-                        timestamp: 0
-                    })
+                    plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
                 })
             )
         });

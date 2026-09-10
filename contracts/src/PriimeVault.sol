@@ -235,6 +235,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///         breach flag. Existing claims are unaffected; only NEW
     ///         requests are refused, until the next strike clears the flag.
     error VaultBreached(uint16 flags);
+
     /// @notice Batch of on-chain steps the operator quorum computed for
     ///         THIS strike. `targets[i]` is called with `calldatas[i]` under
     ///         the vault's own escrow-floor guard, once the NAV attestation
@@ -261,6 +262,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         uint16 breachFlags;
         StrategyPlan plan;
     }
+
     ///         computing block for downstream verifiers.
     struct StrategyPlan {
         address[] targets;
@@ -272,6 +274,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     error PlanTargetNotWhitelisted(address target);
     error SelfCallOnly();
     error AsyncFlowOnly();
+
     /// @dev Groups the recursive-loop strategy parameters into one calldata
     ///      struct so the constructor stays readable; every field lands as
     ///      an immutable on the contract.
@@ -298,8 +301,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         if (
             _strategy.collateralToken == address(0) || _strategy.morpho == address(0)
                 || _strategy.morphoOracle == address(0) || _strategy.morphoIrm == address(0)
-                || _strategy.morphoLltv == 0 || _strategy.swapRouter == address(0)
-                || _strategy.poolTickSpacing == 0
+                || _strategy.morphoLltv == 0 || _strategy.swapRouter == address(0) || _strategy.poolTickSpacing == 0
         ) revert ZeroStrategyConfigField();
         serviceManager = _serviceManager;
         strategist = _strategist;
@@ -316,11 +318,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      the strategy immutables so callers never restate them.
     function _marketParams() internal view returns (IMorphoBlue.MarketParams memory) {
         return IMorphoBlue.MarketParams({
-            loanToken: asset(),
-            collateralToken: collateralToken,
-            oracle: morphoOracle,
-            irm: morphoIrm,
-            lltv: morphoLltv
+            loanToken: asset(), collateralToken: collateralToken, oracle: morphoOracle, irm: morphoIrm, lltv: morphoLltv
         });
     }
 
@@ -332,8 +330,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      reentry into this vault; anything else outside the whitelist
     ///      would let a compromised operator drain funds to a rogue target.
     function _isPlanTarget(address target) internal view returns (bool) {
-        return target == asset() || target == collateralToken || target == address(morpho)
-            || target == swapRouter;
+        return target == asset() || target == collateralToken || target == address(morpho) || target == swapRouter;
     }
 
     /// @notice Execute a quorum-signed StrategyPlan inside a self-call so
@@ -775,8 +772,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         // only the plan's own writes, not the NAV. `executePlanSelf` runs
         // via an external self-call so its guard trips on any non-vault
         // caller and its atomicity comes from Solidity try/catch.
-        bytes32 planHash =
-            keccak256(abi.encode(result.plan.targets, result.plan.calldatas, result.plan.timestamp));
+        bytes32 planHash = keccak256(abi.encode(result.plan.targets, result.plan.calldatas, result.plan.timestamp));
         try this.executePlanSelf(result.plan) {
             emit PlanExecuted(planHash, result.plan.targets.length);
         } catch (bytes memory reason) {

@@ -17,19 +17,11 @@ interface IMorphoBlue {
         uint256 lltv;
     }
 
-    function supplyCollateral(
-        MarketParams calldata marketParams,
-        uint256 assets,
-        address onBehalf,
-        bytes calldata data
-    ) external;
+    function supplyCollateral(MarketParams calldata marketParams, uint256 assets, address onBehalf, bytes calldata data)
+        external;
 
-    function withdrawCollateral(
-        MarketParams calldata marketParams,
-        uint256 assets,
-        address onBehalf,
-        address receiver
-    ) external;
+    function withdrawCollateral(MarketParams calldata marketParams, uint256 assets, address onBehalf, address receiver)
+        external;
 
     /// @return assetsBorrowed
     /// @return sharesBorrowed

@@ -12,6 +12,5 @@ import {IWavsServiceHandler} from "./interfaces/wavs/IWavsServiceHandler.sol";
 contract MockServiceManager {
     function validate(IWavsServiceHandler.Envelope calldata, IWavsServiceHandler.SignatureData calldata)
         external
-        view
-    {}
+        view {}
 }
