@@ -249,7 +249,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
             <button
               type="button"
               className="vxd-btn vxd-btn--ghost"
-              onClick={onPause}
+              onClick={() => { void onPause(); }}
               disabled={pausing.kind === "busy"}
               title="Stop the operator quorum from scheduling this loop's strikes"
             >
