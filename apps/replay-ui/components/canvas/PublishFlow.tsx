@@ -383,6 +383,10 @@ export default function PublishFlow({
         const emit = (k: string, v: unknown) => {
           if (v === undefined || v === null) return;
           if (typeof v === "number" && !Number.isFinite(v)) return;
+          // The composer's draft values are strings or finite numbers; guard
+          // against a future object slipping through so a silent
+          // `[object Object]` never rides the wire.
+          if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") return;
           sp[k] = String(v);
         };
         emit("hf_target_bps", draft.hfTargetBps);

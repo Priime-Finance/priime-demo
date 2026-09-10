@@ -351,9 +351,9 @@ export default function LiveLoopDetail({ id }: { id: string }) {
                   <div key={r.key} className="vx-kv">
                     <span>{r.label}</span>
                     <b data-kind="phrase">
-                      {r.configured === null ? "not set" : r.configured}
+                      {r.configured ?? "not set"}
                       {" · "}
-                      {r.measured === null ? "awaiting strike" : r.measured}
+                      {r.measured ?? "awaiting strike"}
                     </b>
                   </div>
                 ))}

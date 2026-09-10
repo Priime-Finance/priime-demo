@@ -574,7 +574,7 @@ pub fn utilization_bps(total_borrow_assets: u128, total_supply_assets: u128) -> 
     if total_supply_assets == 0 {
         return 0;
     }
-    let ratio = (total_borrow_assets as u128).saturating_mul(10_000) / total_supply_assets;
+    let ratio = total_borrow_assets.saturating_mul(10_000) / total_supply_assets;
     u32::try_from(ratio).unwrap_or(u32::MAX)
 }
 
