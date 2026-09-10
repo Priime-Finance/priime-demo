@@ -281,6 +281,16 @@ mod component {
             s.total_pending_deposit,
             s.total_claimable_redeem,
         )?;
+        // Equity-level preset haircut (roadmap P00 #12). Applied to the
+        // attested NAV, sized in the same units it protects, so a 100 bps
+        // Conservative buffer is 100 bps regardless of the leverage on the
+        // collateral leg. Zero for Standard/Aggressive.
+        let haircut_bps = nav::preset_equity_haircut_bps(preset);
+        let value = if haircut_bps == 0 {
+            value
+        } else {
+            value * U256::from(10_000 - haircut_bps) / U256::from(10_000u16)
+        };
 
         // Per-strike observations. Each maps to a composer knob the strategist
         // set at publish; downstream verifiers compare configured vs measured

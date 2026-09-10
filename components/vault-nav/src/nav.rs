@@ -495,19 +495,30 @@ pub fn measured_leverage_bps(collateral_1e18: u128, price_1e24: U256, debt_usdc:
 }
 
 /// Valuation price for the collateral leg, in the market's 1e24 oracle
-/// scale, after applying the strategist's risk preset. `Aggressive` returns
-/// par unconditionally, `Standard` returns min(par, TWAP), `Conservative`
-/// haircuts the min-branch by 100 bps.
-pub fn preset_collateral_price_1e24(twap_price_1e24: U256, preset: RiskPreset) -> U256 {
-    let par = U256::from(PAR_PRICE_1E24);
+/// scale. Every preset now caps at `min(par, TWAP)`:
+///  * `Aggressive` no longer values collateral above market — publishing par
+///    during a depeg made the operator quorum attest above what liquidation
+///    keys off. The variant is kept for wire compatibility (`risk_preset`
+///    still parses) but semantically maps to `Standard`.
+///  * `Conservative` no longer haircuts the price — a 100 bps haircut on
+///    collateral was leverage-amplified (2.5% NAV cut at 2.5x leverage,
+///    5% at 5x). The haircut moved to equity-NAV level via
+///    [`preset_equity_haircut_bps`], so it is now sized in the same units it
+///    protects.
+pub fn preset_collateral_price_1e24(twap_price_1e24: U256, _preset: RiskPreset) -> U256 {
+    bounded_price_1e24(twap_price_1e24)
+}
+
+/// Equity-level NAV haircut in bps for a preset. Applied to the attested
+/// NAV after collateral has been priced and debt subtracted, so a 100 bps
+/// haircut is 100 bps of equity regardless of the leverage the collateral
+/// leg runs at. `Aggressive` and `Standard` never haircut; `Conservative`
+/// buffers depositors by 100 bps of NAV.
+#[inline]
+pub fn preset_equity_haircut_bps(preset: RiskPreset) -> u32 {
     match preset {
-        RiskPreset::Aggressive => par,
-        RiskPreset::Standard => twap_price_1e24.min(par),
-        RiskPreset::Conservative => {
-            let bounded = twap_price_1e24.min(par);
-            // 100 bps haircut: bounded * 9900 / 10000. No overflow at U256.
-            bounded * U256::from(9900u16) / U256::from(10_000u16)
-        }
+        RiskPreset::Aggressive | RiskPreset::Standard => 0,
+        RiskPreset::Conservative => 100,
     }
 }
 
@@ -1014,11 +1025,14 @@ mod tests {
     // --- risk preset --------------------------------------------------------
 
     #[test]
-    fn preset_aggressive_ignores_twap_downside() {
+    fn preset_aggressive_no_longer_values_above_market() {
+        // Roadmap #12: Aggressive used to return par unconditionally, which
+        // let the operator quorum attest above what liquidation keys off
+        // during a depeg. Every preset now caps at min(par, TWAP).
         let depeg = U256::from(PAR_PRICE_1E24 * 90 / 100);
         assert_eq!(
             preset_collateral_price_1e24(depeg, RiskPreset::Aggressive),
-            U256::from(PAR_PRICE_1E24)
+            depeg
         );
     }
 
@@ -1037,13 +1051,46 @@ mod tests {
     }
 
     #[test]
-    fn preset_conservative_haircuts_bounded_by_100_bps() {
-        // At par: bounded price is par; conservative haircuts to 99% par.
+    fn preset_conservative_no_longer_haircuts_the_collateral_price() {
+        // Roadmap #12: the 100 bps Conservative haircut moved from
+        // collateral-price to equity-NAV level (see preset_equity_haircut_bps),
+        // so it is no longer leverage-amplified. At par the collateral price
+        // now matches Standard exactly.
         let par = U256::from(PAR_PRICE_1E24);
         assert_eq!(
             preset_collateral_price_1e24(par, RiskPreset::Conservative),
-            par * U256::from(9900u16) / U256::from(10_000u16)
+            par
         );
+    }
+
+    #[test]
+    fn preset_equity_haircut_bps_only_touches_conservative() {
+        assert_eq!(preset_equity_haircut_bps(RiskPreset::Aggressive), 0);
+        assert_eq!(preset_equity_haircut_bps(RiskPreset::Standard), 0);
+        assert_eq!(preset_equity_haircut_bps(RiskPreset::Conservative), 100);
+    }
+
+    #[test]
+    fn preset_equity_haircut_sized_in_nav_not_collateral() {
+        // 100 USDe collateral at par, 60 USDC debt -> NAV 40 USDC pre-haircut.
+        // Old (collateral-price) Conservative would haircut 100 bps of the
+        // 100 USDC collateral leg (1 USDC) -> NAV 39 USDC. That is 2.5%
+        // of equity, leverage-amplified.
+        // New (equity) haircut = 100 bps of NAV = 0.40 USDC -> NAV 39.60 USDC.
+        // Independent of leverage.
+        let nav = nav_usdc(
+            100_000_000_000_000_000_000u128, // 100 USDe collateral
+            U256::from(PAR_PRICE_1E24),
+            U256::from(60_000_000u64), // 60 USDC debt
+            0,
+            0,
+            0,
+        )
+        .unwrap();
+        assert_eq!(nav, U256::from(40_000_000u64));
+        let haircut = preset_equity_haircut_bps(RiskPreset::Conservative);
+        let attested = nav * U256::from(10_000 - haircut) / U256::from(10_000u16);
+        assert_eq!(attested, U256::from(39_600_000u64));
     }
 
     #[test]
