@@ -5,6 +5,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IWavsServiceHandler} from "../src/interfaces/wavs/IWavsServiceHandler.sol";
 import {IWavsServiceManager} from "../src/interfaces/wavs/IWavsServiceManager.sol";
 import {PriimeVault} from "../src/PriimeVault.sol";
+import {IMorphoBlue, IMorphoFlashLoanCallback} from "../src/interfaces/external/IMorphoBlue.sol";
+import {IAerodromeCLRouter} from "../src/interfaces/external/IAerodromeCLRouter.sol";
 
 /// @dev Minimal surface of forge's built-in cheatcode contract; declared here
 ///      instead of vendoring forge-std (the repo vendors no forge-std).
@@ -47,6 +49,132 @@ contract TestUSDC {
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
         return true;
+    }
+}
+
+/// @dev Mintable 18-decimal stand-in for USDe / any collateral token that
+///      goes through the atomic delever swap. Same shape as TestUSDC minus
+///      the fixed decimals.
+contract TestUSDe {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    function decimals() external pure returns (uint8) {
+        return 18;
+    }
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        require(balanceOf[msg.sender] >= amount, "balance");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        require(balanceOf[from] >= amount, "balance");
+        require(allowance[from][msg.sender] >= amount, "allowance");
+        allowance[from][msg.sender] -= amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+}
+
+/// @dev Minimal Morpho Blue mock covering the surface the vault touches:
+///      supplyCollateral / borrow / repay / withdrawCollateral / flashLoan.
+///      One market only; state keyed by `onBehalf` so the vault-per-strike
+///      state stays isolated. Pre-funded with a USDC pool so `borrow` and
+///      `flashLoan` can actually transfer.
+contract MockMorpho {
+    IERC20 public immutable usdc;
+    IERC20 public immutable usde;
+
+    mapping(address => uint256) public collateral; // USDe base units
+    mapping(address => uint256) public debt; // USDC base units
+
+    constructor(IERC20 _usdc, IERC20 _usde) {
+        usdc = _usdc;
+        usde = _usde;
+    }
+
+    function supplyCollateral(IMorphoBlue.MarketParams calldata, uint256 assets, address onBehalf, bytes calldata)
+        external
+    {
+        // Pull the collateral IN from msg.sender (which is the vault, or the
+        // strategist during deploy). Real Morpho pulls with safeTransferFrom.
+        require(usde.transferFrom(msg.sender, address(this), assets), "usde in");
+        collateral[onBehalf] += assets;
+    }
+
+    function withdrawCollateral(IMorphoBlue.MarketParams calldata, uint256 assets, address onBehalf, address receiver)
+        external
+    {
+        require(collateral[onBehalf] >= assets, "collateral");
+        collateral[onBehalf] -= assets;
+        require(usde.transfer(receiver, assets), "usde out");
+    }
+
+    function borrow(IMorphoBlue.MarketParams calldata, uint256 assets, uint256, address onBehalf, address receiver)
+        external
+        returns (uint256, uint256)
+    {
+        debt[onBehalf] += assets;
+        require(usdc.transfer(receiver, assets), "usdc out");
+        return (assets, 0);
+    }
+
+    function repay(IMorphoBlue.MarketParams calldata, uint256 assets, uint256, address onBehalf, bytes calldata)
+        external
+        returns (uint256, uint256)
+    {
+        require(debt[onBehalf] >= assets, "debt");
+        debt[onBehalf] -= assets;
+        require(usdc.transferFrom(msg.sender, address(this), assets), "usdc in");
+        return (assets, 0);
+    }
+
+    function flashLoan(address token, uint256 assets, bytes calldata data) external {
+        require(IERC20(token).transfer(msg.sender, assets), "flash out");
+        IMorphoFlashLoanCallback(msg.sender).onMorphoFlashLoan(assets, data);
+        require(IERC20(token).transferFrom(msg.sender, address(this), assets), "flash back");
+    }
+}
+
+/// @dev Minimal Aerodrome Slipstream router mock: exact 1:1e12 par swap
+///      between USDC (6-dec) and USDe (18-dec). Pre-funded with both tokens.
+contract MockAerodromeRouter {
+    IERC20 public immutable usdc;
+    IERC20 public immutable usde;
+
+    constructor(IERC20 _usdc, IERC20 _usde) {
+        usdc = _usdc;
+        usde = _usde;
+    }
+
+    function exactInputSingle(IAerodromeCLRouter.ExactInputSingleParams calldata p)
+        external
+        payable
+        returns (uint256 amountOut)
+    {
+        require(IERC20(p.tokenIn).transferFrom(msg.sender, address(this), p.amountIn), "in");
+        if (p.tokenIn == address(usdc)) {
+            // USDC (6-dec) -> USDe (18-dec) at par: multiply by 1e12.
+            amountOut = p.amountIn * 1e12;
+        } else {
+            // USDe (18-dec) -> USDC (6-dec) at par: divide by 1e12.
+            amountOut = p.amountIn / 1e12;
+        }
+        require(amountOut >= p.amountOutMinimum, "slippage");
+        require(IERC20(p.tokenOut).transfer(p.recipient, amountOut), "out");
     }
 }
 
@@ -817,6 +945,273 @@ contract PriimeVaultTest {
 
         vm.prank(BOB);
         vault.requestDeposit(100 * ONE_USDC, BOB, BOB);
+    }
+
+    // ------------------------------------------------------------------------
+    // Roadmap P1 #4: plan_deleverage end-to-end. Fresh setup (dummy addresses
+    // don't hold state) with a full Morpho + Aerodrome mock stack. Proves the
+    // whole 7540 withdrawal flow:
+    //   1. deposit + strike -> position opens against Morpho
+    //   2. requestRedeem + strike -> plan_deleverage frees USDC via flashLoan
+    //   3. redeem() delivers USDC
+    // ------------------------------------------------------------------------
+
+    function test_FullWithdrawalFlow_FlashloanDeleverFreesUsdcForClaim() public {
+        // Fresh mock stack. The main vault at address `vault` uses placeholder
+        // addresses for Morpho/router that can't roundtrip a real flashloan;
+        // spin up a second vault wired to real mocks so this exercise is
+        // end-to-end.
+        TestUSDC muUsdc = new TestUSDC();
+        TestUSDe muUsde = new TestUSDe();
+        MockMorpho muMorpho = new MockMorpho(IERC20(address(muUsdc)), IERC20(address(muUsde)));
+        MockAerodromeRouter muRouter = new MockAerodromeRouter(IERC20(address(muUsdc)), IERC20(address(muUsde)));
+        ToggleableServiceManager muManager = new ToggleableServiceManager();
+
+        PriimeVault muVault = new PriimeVault(
+            IWavsServiceManager(address(muManager)),
+            IERC20(address(muUsdc)),
+            STRATEGIST,
+            PriimeVault.StrategyConfig({
+                collateralToken: address(muUsde),
+                morpho: address(muMorpho),
+                morphoOracle: address(0x02),
+                morphoIrm: address(0x03),
+                morphoLltv: 915_000_000_000_000_000,
+                swapRouter: address(muRouter),
+                poolTickSpacing: int24(1)
+            })
+        );
+
+        // Prime Morpho and the router with enough USDC / USDe to serve the
+        // flashloan + borrow + swap legs. Test-scale; real Morpho holds a
+        // supply-side pool from other users.
+        muUsdc.mint(address(muMorpho), 100_000 * ONE_USDC);
+        muUsde.mint(address(muRouter), 100_000 * 1e18);
+        muUsdc.mint(address(muRouter), 100_000 * ONE_USDC);
+
+        // Alice deposits 1000 USDC, first strike bootstraps her shares. NAV
+        // stays 0 at the bootstrap strike (position not opened yet).
+        muUsdc.mint(ALICE, 1_000 * ONE_USDC);
+        vm.prank(ALICE);
+        muUsdc.approve(address(muVault), type(uint256).max);
+        vm.prank(ALICE);
+        muVault.requestDeposit(1_000 * ONE_USDC, ALICE, ALICE);
+        _attestOn(muVault, muManager, bytes20(uint160(0xD1)), 0, 1);
+        vm.prank(ALICE);
+        muVault.deposit(1_000 * ONE_USDC, ALICE);
+        require(muVault.balanceOf(ALICE) == 1_000 * ONE_USDC, "alice holds 1000 shares");
+
+        // Strategist opens a 2x position from the deposited USDC. Simulates
+        // the strike's plan_open_position: swap USDC -> USDe, supply, borrow.
+        // At par: 1000 USDC -> 1000e18 USDe supplied -> borrow 500 USDC back.
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (address(muRouter), 1_000 * ONE_USDC)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muRouter),
+            abi.encodeCall(
+                IAerodromeCLRouter.exactInputSingle,
+                (IAerodromeCLRouter.ExactInputSingleParams({
+                        tokenIn: address(muUsdc),
+                        tokenOut: address(muUsde),
+                        tickSpacing: int24(1),
+                        recipient: address(muVault),
+                        deadline: block.timestamp + 300,
+                        amountIn: 1_000 * ONE_USDC,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    }))
+            )
+        );
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsde), abi.encodeCall(TestUSDe.approve, (address(muMorpho), 1_000 * 1e18)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muMorpho),
+            abi.encodeCall(
+                IMorphoBlue.supplyCollateral,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(muUsdc),
+                        collateralToken: address(muUsde),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    1_000 * 1e18,
+                    address(muVault),
+                    ""
+                )
+            )
+        );
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muMorpho),
+            abi.encodeCall(
+                IMorphoBlue.borrow,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(muUsdc),
+                        collateralToken: address(muUsde),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    500 * ONE_USDC,
+                    0,
+                    address(muVault),
+                    address(muVault)
+                )
+            )
+        );
+        require(muUsdc.balanceOf(address(muVault)) == 500 * ONE_USDC, "vault holds 500 USDC after 2x lever");
+        require(muMorpho.collateral(address(muVault)) == 1_000 * 1e18, "1000 USDe collateral");
+        require(muMorpho.debt(address(muVault)) == 500 * ONE_USDC, "500 USDC debt");
+
+        // Second strike attests NAV = 500 USDC (collateral 1000@par minus debt 500).
+        _attestOn(muVault, muManager, bytes20(uint160(0xD2)), 500 * ONE_USDC, 2);
+        require(muVault.totalAssets() == 500 * ONE_USDC, "NAV = 500 at 2x leverage");
+
+        // Alice requests redemption of ALL her shares. At NAV=500 / supply=1000
+        // she's owed 500 USDC, but the vault holds it too - use HALF to prove
+        // the delever proportionally reduces the position instead of just
+        // draining idle cash. Actually make it 700: 500 idle < 700 claim, so
+        // 200 USDC must come from the delever.
+        // ... but 700 shares at 500/1000 price = 350 USDC claim, still <500.
+        // For a genuine delever, drain the idle first by having the strategist
+        // supply it back into position, then the entire 500-USDC redemption
+        // must be funded via the flashloan.
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (address(muRouter), 500 * ONE_USDC)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muRouter),
+            abi.encodeCall(
+                IAerodromeCLRouter.exactInputSingle,
+                (IAerodromeCLRouter.ExactInputSingleParams({
+                        tokenIn: address(muUsdc),
+                        tokenOut: address(muUsde),
+                        tickSpacing: int24(1),
+                        recipient: address(muVault),
+                        deadline: block.timestamp + 300,
+                        amountIn: 500 * ONE_USDC,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    }))
+            )
+        );
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsde), abi.encodeCall(TestUSDe.approve, (address(muMorpho), 500 * 1e18)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muMorpho),
+            abi.encodeCall(
+                IMorphoBlue.supplyCollateral,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(muUsdc),
+                        collateralToken: address(muUsde),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    500 * 1e18,
+                    address(muVault),
+                    ""
+                )
+            )
+        );
+        require(muUsdc.balanceOf(address(muVault)) == 0, "vault is fully deployed, 0 idle USDC");
+        // Position is now 1500 USDe collateral / 500 USDC debt -> NAV 1000 at par.
+        require(muMorpho.collateral(address(muVault)) == 1_500 * 1e18, "1500 USDe collateral after fold-in");
+
+        // Alice requests full redemption at NAV=1000, supply=1000 -> 1 USDC/share.
+        vm.prank(ALICE);
+        muVault.requestRedeem(1_000 * ONE_USDC, ALICE, ALICE);
+
+        // Build the strike's plan: a single `morpho.flashLoan(usdc, 500, data)`
+        // where data = (collateralOut = 1500e18, minUsdcOut = 1500 USDC-1%, deadline).
+        // Proportion = 1000/1000 = 1: full unwind. debt 500 -> flash 500 USDC,
+        // repay 500 debt, withdraw 1500 USDe, swap to 1500 USDC, keep 1000 USDC
+        // net after paying back the 500 flashloan.
+        bytes memory flashData = abi.encode(uint256(1_500 * 1e18), uint256(1_485 * ONE_USDC), block.timestamp + 300);
+        address[] memory targets = new address[](1);
+        targets[0] = address(muMorpho);
+        bytes[] memory calldatas = new bytes[](1);
+        calldatas[0] = abi.encodeCall(IMorphoBlue.flashLoan, (address(muUsdc), 500 * ONE_USDC, flashData));
+
+        _attestOnWithPlan(
+            muVault,
+            muManager,
+            bytes20(uint160(0xD3)),
+            1_000 * ONE_USDC,
+            3,
+            PriimeVault.StrategyPlan({targets: targets, calldatas: calldatas, timestamp: block.timestamp + 300})
+        );
+
+        // Strike settled: alice's 1000 shares -> 1000 USDC claimable; the plan
+        // brought idle USDC from 0 up to 1000 by unwinding the whole position.
+        require(muVault.totalClaimableRedeemAssets() == 1_000 * ONE_USDC, "claimable = 1000");
+        require(muUsdc.balanceOf(address(muVault)) == 1_000 * ONE_USDC, "1000 USDC on hand for the claim");
+        require(muMorpho.collateral(address(muVault)) == 0, "collateral fully withdrawn");
+        require(muMorpho.debt(address(muVault)) == 0, "debt fully repaid");
+
+        // Alice claims. Real USDC lands in her wallet.
+        uint256 aliceBefore = muUsdc.balanceOf(ALICE);
+        vm.prank(ALICE);
+        uint256 assets = muVault.redeem(1_000 * ONE_USDC, ALICE, ALICE);
+        require(assets == 1_000 * ONE_USDC, "claim delivers 1000 USDC");
+        require(muUsdc.balanceOf(ALICE) - aliceBefore == 1_000 * ONE_USDC, "USDC delivered to alice");
+        require(muVault.balanceOf(ALICE) == 0, "alice's shares fully redeemed");
+    }
+
+    function test_OnMorphoFlashLoanRejectsNonMorphoCaller() public {
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.FlashLoanCallerNotMorpho.selector, address(this)));
+        vault.onMorphoFlashLoan(1_000 * ONE_USDC, abi.encode(uint256(0), uint256(0), block.timestamp));
+    }
+
+    // --- helpers scoped to the flashloan-delever exercise ---------------------
+
+    function _attestOn(
+        PriimeVault v,
+        ToggleableServiceManager,
+        /* mgr */
+        bytes20 eventId,
+        uint256 nav,
+        uint256 inputsBlock
+    )
+        internal
+    {
+        PriimeVault.StrategyPlan memory emptyPlan =
+            PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0});
+        _attestOnWithPlan(v, ToggleableServiceManager(address(0)), eventId, nav, inputsBlock, emptyPlan);
+    }
+
+    function _attestOnWithPlan(
+        PriimeVault v,
+        ToggleableServiceManager,
+        /* mgr */
+        bytes20 eventId,
+        uint256 nav,
+        uint256 inputsBlock,
+        PriimeVault.StrategyPlan memory plan
+    ) internal {
+        PriimeVault.BoundNavResult memory result = PriimeVault.BoundNavResult({
+            handler: address(v),
+            nav: nav,
+            inputsBlock: inputsBlock,
+            configHash: bytes32(0),
+            leverageBps: 0,
+            ltvBps: 0,
+            reserveBps: 0,
+            supplyApyBps: 0,
+            hoursSinceUpdate: 0,
+            breachFlags: 0,
+            plan: plan
+        });
+        IWavsServiceHandler.Envelope memory env =
+            IWavsServiceHandler.Envelope({eventId: eventId, ordering: bytes12(0), payload: abi.encode(result)});
+        v.handleSignedEnvelope(env, _sigs());
     }
 
     function test_UpdateRejectedWhenValidationFails() public {

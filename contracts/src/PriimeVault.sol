@@ -7,7 +7,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IWavsServiceHandler} from "./interfaces/wavs/IWavsServiceHandler.sol";
 import {IWavsServiceManager} from "./interfaces/wavs/IWavsServiceManager.sol";
-import {IMorphoBlue} from "./interfaces/external/IMorphoBlue.sol";
+import {IMorphoBlue, IMorphoFlashLoanCallback} from "./interfaces/external/IMorphoBlue.sol";
+import {IAerodromeCLRouter} from "./interfaces/external/IAerodromeCLRouter.sol";
 
 /// @title PriimeVault
 /// @notice ERC-7540 fully asynchronous vault (async deposits AND async
@@ -69,7 +70,7 @@ import {IMorphoBlue} from "./interfaces/external/IMorphoBlue.sol";
 ///      revert. Partial claims use floor division, and the claim that empties
 ///      either side of a bucket settles the whole bucket, so rounding dust
 ///      goes to the final claimer rather than stranding in the vault.
-contract PriimeVault is ERC4626, IWavsServiceHandler {
+contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
     using SafeERC20 for IERC20;
 
     /// @notice Fungible request model: every request is requestId 0.
@@ -274,6 +275,21 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     error PlanTargetNotWhitelisted(address target);
     error SelfCallOnly();
     error AsyncFlowOnly();
+    /// @notice `onMorphoFlashLoan` was invoked by a caller other than the
+    ///         pinned Morpho instance. Prevents any attacker from tricking
+    ///         the callback into repaying + withdrawing collateral outside a
+    ///         real flashLoan context.
+    error FlashLoanCallerNotMorpho(address caller);
+    /// @notice The USDe -> USDC swap inside `onMorphoFlashLoan` returned fewer
+    ///         USDC than the operator quorum's `minUsdcOut` floor. Bubbled up
+    ///         from the router with our own selector so `PlanRejected` decodes
+    ///         cleanly on the frontend.
+    error DeleverageSlippage(uint256 usdcOut, uint256 minUsdcOut);
+    /// @notice The strike's `plan_deleverage` step freed enough USDC to
+    ///         cover this strike's fresh redemption claims. `flashAssets`
+    ///         is the flashloan principal, `collateralOut` the USDe pulled
+    ///         from Morpho, `usdcOut` the swap output.
+    event Deleveraged(uint256 flashAssets, uint256 collateralOut, uint256 usdcOut);
 
     /// @dev Groups the recursive-loop strategy parameters into one calldata
     ///      struct so the constructor stays readable; every field lands as
@@ -360,6 +376,80 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
         uint256 balance = IERC20(asset()).balanceOf(address(this));
         if (balance < floor) revert EscrowFloorBreached(balance, floor);
+    }
+
+    // ------------------------------------------------------------------------
+    // Morpho flashLoan callback: atomic proportional delever
+    // ------------------------------------------------------------------------
+
+    /// @notice Morpho Blue's flashLoan callback: the vault's own atomic
+    ///         proportional-unwind primitive. The operator quorum's plan
+    ///         emits one step, `morpho.flashLoan(USDC, debtRepay, data)`;
+    ///         Morpho transfers `debtRepay` USDC to the vault, calls back
+    ///         here, and pulls the same `debtRepay` back at the end. Inside
+    ///         the callback we (1) repay `assets` of Morpho debt, (2) pull
+    ///         `collateralOut` USDe of freed collateral, (3) swap it back to
+    ///         USDC through the pinned Aerodrome pool, (4) re-approve the
+    ///         flashloan repayment. Net inflow to the vault is
+    ///         `usdcOut - assets` = `proportion * nav - slippage`, which is
+    ///         exactly what a proportional redemption needs to satisfy the
+    ///         escrow floor after `_fulfillRedeems`. Priime-pools's
+    ///         `RebalanceOpsLib.unwindPositions` does the same thing
+    ///         synchronously; we do it on the quorum-signed cadence.
+    /// @dev Not exposed for user calls. `msg.sender` must be the pinned
+    ///      Morpho instance (checked at entry); Morpho only invokes this
+    ///      inside its own `flashLoan`, so a caller other than Morpho
+    ///      cannot force the repay+withdraw sequence. Approvals are exact
+    ///      per step; the trailing `approve(morpho, assets)` grants Morpho
+    ///      permission to pull the flashloan back via `safeTransferFrom`.
+    /// @param assets The flashloan principal in USDC base units. Also the
+    ///        amount of Morpho debt this callback repays (they are the same
+    ///        by construction of `plan_deleverage`).
+    /// @param data ABI-encoded `(uint256 collateralOut, uint256 minUsdcOut,
+    ///        uint256 deadline)`. `collateralOut` is the USDe amount pulled
+    ///        from Morpho after the repay; `minUsdcOut` is the operator
+    ///        quorum's slippage floor on the USDe -> USDC swap; `deadline`
+    ///        gates the Aerodrome call the same way the open-position swap
+    ///        does.
+    function onMorphoFlashLoan(uint256 assets, bytes calldata data) external override {
+        if (msg.sender != address(morpho)) revert FlashLoanCallerNotMorpho(msg.sender);
+        (uint256 collateralOut, uint256 minUsdcOut, uint256 deadline) = abi.decode(data, (uint256, uint256, uint256));
+
+        // 1. Repay Morpho debt with the flashloan proceeds. Approvals are
+        //    exact-amount and consumed by the call, so no lingering allowance.
+        IERC20(asset()).forceApprove(address(morpho), assets);
+        morpho.repay(_marketParams(), assets, 0, address(this), "");
+
+        // 2. Withdraw the freed collateral (USDe). Morpho enforces the new
+        //    HF against the post-repay debt, so this can never leave the
+        //    position undercollateralised.
+        morpho.withdrawCollateral(_marketParams(), collateralOut, address(this), address(this));
+
+        // 3. Swap USDe -> USDC through the pinned Aerodrome pool. `minUsdcOut`
+        //    is the operator quorum's slippage floor, computed off the same
+        //    TWAP the strike attests; the swap reverts if the pool has moved
+        //    outside that window between the operator's read and this call.
+        IERC20(collateralToken).forceApprove(swapRouter, collateralOut);
+        uint256 usdcOut = IAerodromeCLRouter(swapRouter)
+            .exactInputSingle(
+                IAerodromeCLRouter.ExactInputSingleParams({
+                    tokenIn: collateralToken,
+                    tokenOut: asset(),
+                    tickSpacing: poolTickSpacing,
+                    recipient: address(this),
+                    deadline: deadline,
+                    amountIn: collateralOut,
+                    amountOutMinimum: minUsdcOut,
+                    sqrtPriceLimitX96: 0
+                })
+            );
+        if (usdcOut < minUsdcOut) revert DeleverageSlippage(usdcOut, minUsdcOut);
+
+        // 4. Grant Morpho the allowance it needs to pull the flashloan back.
+        //    `safeTransferFrom` inside `flashLoan` consumes it exactly.
+        IERC20(asset()).forceApprove(address(morpho), assets);
+
+        emit Deleveraged(assets, collateralOut, usdcOut);
     }
 
     // ------------------------------------------------------------------------

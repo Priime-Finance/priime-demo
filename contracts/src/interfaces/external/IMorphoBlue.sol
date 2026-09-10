@@ -42,4 +42,19 @@ interface IMorphoBlue {
         address onBehalf,
         bytes calldata data
     ) external returns (uint256, uint256);
+
+    /// @notice Free-then-pull flashloan. Morpho transfers `assets` of `token`
+    ///         to `msg.sender`, calls `onMorphoFlashLoan(assets, data)` on the
+    ///         caller, then pulls `assets` back via `safeTransferFrom` (the
+    ///         caller must have granted allowance to Morpho by then). No fee
+    ///         today; the caller keeps the delta the callback produced.
+    function flashLoan(address token, uint256 assets, bytes calldata data) external;
+}
+
+/// @title IMorphoFlashLoanCallback
+/// @notice Interface `flashLoan` callers must implement. The callback runs
+///         inside `flashLoan`, after the `assets` have been transferred to
+///         the caller and before Morpho pulls them back.
+interface IMorphoFlashLoanCallback {
+    function onMorphoFlashLoan(uint256 assets, bytes calldata data) external;
 }
