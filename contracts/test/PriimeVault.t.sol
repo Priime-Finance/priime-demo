@@ -1909,4 +1909,134 @@ contract PriimeVaultTest {
         require(vault.lastInputsBlock() == 100, "inputs block unchanged");
         require(vault.updateCount() == 1, "stale updates not counted");
     }
+
+    /* Reviewer's finding: the plan whitelist was target-only, so
+       `target.call(data)` forwarded raw calldata. A quorum-signed plan
+       could call `withdrawCollateral(..., rogueReceiver)` (USDe drain),
+       `approve(rogue, max)` on either token (persistent pull), or a
+       Morpho method with a foreign `onBehalf` — all invisible to the
+       escrow-floor check (USDC only). This walks every rejection path
+       `_validatePlanStep` now closes. `executePlanSelf` is gated by
+       `SelfCallOnly`; `vm.prank(address(vault))` satisfies it. */
+    function test_PlanValidatorRefusesEveryEscapeHatch() public {
+        IMorphoBlue.MarketParams memory params = IMorphoBlue.MarketParams({
+            loanToken: address(usdc),
+            collateralToken: address(0xC0),
+            oracle: address(0x02),
+            irm: address(0x03),
+            lltv: 915_000_000_000_000_000
+        });
+        address morpho = address(0xD1);
+        address router = address(0x04);
+        address collateral = address(0xC0);
+
+        // (1) Random target off the four-address list.
+        _expectRejectedStep(
+            address(0xDEAD),
+            abi.encodeCall(IERC20.approve, (morpho, 100)),
+            abi.encodeWithSelector(PriimeVault.PlanTargetNotWhitelisted.selector, address(0xDEAD))
+        );
+
+        // (2) `approve` on the asset with a rogue spender — persistent pull.
+        _expectRejectedStep(
+            address(usdc),
+            abi.encodeCall(IERC20.approve, (SINK, type(uint256).max)),
+            abi.encodeWithSelector(PriimeVault.PlanApproveSpenderRefused.selector, SINK)
+        );
+
+        // (3) Same drain on the collateral token.
+        _expectRejectedStep(
+            collateral,
+            abi.encodeCall(IERC20.approve, (SINK, type(uint256).max)),
+            abi.encodeWithSelector(PriimeVault.PlanApproveSpenderRefused.selector, SINK)
+        );
+
+        // (4) The reviewer's headline path: `withdrawCollateral(..., SINK)`
+        //     — USDe leaves the vault, escrow floor sees only USDC.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.withdrawCollateral, (params, 1e18, address(vault), SINK)),
+            abi.encodeWithSelector(PriimeVault.PlanReceiverNotSelf.selector, SINK)
+        );
+
+        // (5) Same shape on the USDC leg via `borrow`.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.borrow, (params, 100, 0, address(vault), SINK)),
+            abi.encodeWithSelector(PriimeVault.PlanReceiverNotSelf.selector, SINK)
+        );
+
+        // (6) `supplyCollateral(..., SINK, "")` — vault's approval moves
+        //     into SINK's position slot.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.supplyCollateral, (params, 1e18, SINK, "")),
+            abi.encodeWithSelector(PriimeVault.PlanOnBehalfNotSelf.selector, SINK)
+        );
+
+        // (7) `repay(..., SINK, "")` — vault's USDC repays someone else's debt.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.repay, (params, 100, 0, SINK, "")),
+            abi.encodeWithSelector(PriimeVault.PlanOnBehalfNotSelf.selector, SINK)
+        );
+
+        // (8) `flashLoan` with a non-asset token — the callback is written
+        //     for USDC-in / USDe-out only.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.flashLoan, (collateral, 100, "")),
+            abi.encodeWithSelector(PriimeVault.PlanFlashLoanTokenRefused.selector, collateral)
+        );
+
+        // (9) A selector outside the Morpho set (e.g. `setAuthorization`).
+        bytes4 rogueSel = bytes4(keccak256("setAuthorization(address,bool)"));
+        _expectRejectedStep(
+            morpho,
+            abi.encodeWithSelector(rogueSel, SINK, true),
+            abi.encodeWithSelector(PriimeVault.PlanSelectorRefused.selector, morpho, rogueSel)
+        );
+
+        // (10) A selector outside the router set.
+        bytes4 wrongRouterSel = bytes4(keccak256("exactOutputSingle(bytes)"));
+        _expectRejectedStep(
+            router,
+            abi.encodeWithSelector(wrongRouterSel, ""),
+            abi.encodeWithSelector(PriimeVault.PlanSelectorRefused.selector, router, wrongRouterSel)
+        );
+
+        // (11) `exactInputSingle` with a rogue recipient — USDe → USDC swap
+        //      lands somewhere else.
+        IAerodromeCLRouter.ExactInputSingleParams memory swapParams = IAerodromeCLRouter.ExactInputSingleParams({
+            tokenIn: collateral,
+            tokenOut: address(usdc),
+            tickSpacing: 1,
+            recipient: SINK,
+            deadline: block.timestamp + 300,
+            amountIn: 100,
+            amountOutMinimum: 100,
+            sqrtPriceLimitX96: 0
+        });
+        _expectRejectedStep(
+            router,
+            abi.encodeCall(IAerodromeCLRouter.exactInputSingle, (swapParams)),
+            abi.encodeWithSelector(PriimeVault.PlanReceiverNotSelf.selector, SINK)
+        );
+
+        // (12) Truncated calldata — the selector-based dispatch would read
+        //      off the end and mis-classify.
+        _expectRejectedStep(morpho, hex"01", abi.encodeWithSelector(PriimeVault.PlanCalldataTooShort.selector));
+    }
+
+    function _expectRejectedStep(address target, bytes memory data, bytes memory expectedRevert) internal {
+        address[] memory targets = new address[](1);
+        targets[0] = target;
+        bytes[] memory calldatas = new bytes[](1);
+        calldatas[0] = data;
+        PriimeVault.StrategyPlan memory plan =
+            PriimeVault.StrategyPlan({targets: targets, calldatas: calldatas, timestamp: block.timestamp});
+        vm.prank(address(vault));
+        vm.expectRevert(expectedRevert);
+        vault.executePlanSelf(plan);
+    }
 }

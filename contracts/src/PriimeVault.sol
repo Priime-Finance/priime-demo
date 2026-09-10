@@ -279,6 +279,39 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
 
     error PlanArrayMismatch();
     error PlanTargetNotWhitelisted(address target);
+    /// @notice A plan step's calldata was shorter than a 4-byte selector.
+    error PlanCalldataTooShort();
+    /// @notice A plan step targeted a whitelisted contract but called a
+    ///         function outside the tight per-target selector set. The
+    ///         plan whitelist is `(target, selector)` pairs, not targets
+    ///         alone: raw `target.call(data)` would let a quorum-signed
+    ///         plan invoke arbitrary methods on the token / Morpho /
+    ///         router (e.g. `withdrawCollateral` with a rogue receiver,
+    ///         or `approve(rogue, max)`) and drain the collateral leg
+    ///         behind the escrow-floor check, which only reads USDC.
+    error PlanSelectorRefused(address target, bytes4 selector);
+    /// @notice A Morpho step's `onBehalf` argument was not this vault.
+    ///         Every position mutation the vault plans must be against
+    ///         its own market slot; a foreign `onBehalf` would move the
+    ///         vault's approval / balance into someone else's account.
+    error PlanOnBehalfNotSelf(address onBehalf);
+    /// @notice A step that pulls value out (`withdrawCollateral`, `borrow`,
+    ///         router `exactInputSingle`) named a receiver that is not
+    ///         this vault. Freed collateral / borrowed USDC / swap output
+    ///         must land on the vault itself; a rogue receiver is the
+    ///         direct drain path the target-only whitelist left open.
+    error PlanReceiverNotSelf(address receiver);
+    /// @notice An ERC-20 `approve` step named a spender outside the
+    ///         `{morpho, swapRouter}` pair the recursive loop needs.
+    ///         Any other spender would carry a persistent pull allowance
+    ///         out of the vault via `safeTransferFrom`.
+    error PlanApproveSpenderRefused(address spender);
+    /// @notice A `flashLoan` step named a token other than the vault's
+    ///         asset (USDC). The `onMorphoFlashLoan` callback is written
+    ///         to repay Morpho debt in USDC and swap USDe back to USDC;
+    ///         any other flashloan denomination would leave the callback
+    ///         approving / swapping the wrong balances.
+    error PlanFlashLoanTokenRefused(address token);
     error SelfCallOnly();
     error AsyncFlowOnly();
     /// @notice `onMorphoFlashLoan` was invoked by a caller other than the
@@ -344,15 +377,68 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
         });
     }
 
-    /// @dev The set of contracts the operator quorum may call through a
-    ///      StrategyPlan. Kept narrow to the two protocols the recursive
-    ///      loop touches (Morpho Blue for supply/borrow/repay/withdraw, the
-    ///      swap router for USDC<->USDe) plus the two ERC-20s the vault
-    ///      needs to approve. `execute`'s `SelfCallForbidden` covers
-    ///      reentry into this vault; anything else outside the whitelist
-    ///      would let a compromised operator drain funds to a rogue target.
-    function _isPlanTarget(address target) internal view returns (bool) {
-        return target == asset() || target == collateralToken || target == address(morpho) || target == swapRouter;
+    /// @dev Validate a single quorum-signed step. The plan whitelist is
+    ///      `(target, selector)` pairs, not targets: `target.call(data)`
+    ///      forwards the calldata raw, so a target-only check would let
+    ///      the operator quorum call `withdrawCollateral` with a rogue
+    ///      `receiver`, `approve(rogue, max)` on either token, or a
+    ///      Morpho method that moves the vault's position onto someone
+    ///      else's `onBehalf` slot — all invisible to the escrow floor
+    ///      guard, which only reads USDC. Reverts with a precise error
+    ///      so `PlanRejected` decodes cleanly on the frontend.
+    ///
+    ///      The allowed set is exactly the recursive-loop surface:
+    ///        - `morpho.{supplyCollateral, borrow, repay, withdrawCollateral, flashLoan}`
+    ///          with every address argument (`onBehalf`, `receiver`,
+    ///          flashloan `token`) pinned to `address(this)` / `asset()`.
+    ///        - `swapRouter.exactInputSingle` with `recipient == address(this)`.
+    ///        - `asset() / collateralToken` `.approve` only, and only to
+    ///          `morpho` or `swapRouter` — the two spenders the loop and
+    ///          the flashLoan callback need.
+    ///
+    ///      Follow-up (not landed): a tail USDe-balance guard would add
+    ///      belt-and-suspenders against unforeseen paths that spend
+    ///      collateral inside the plan; the plan builder would need to
+    ///      declare `collateralOut` to make it enforceable.
+    function _validatePlanStep(address target, bytes calldata data) internal view {
+        if (data.length < 4) revert PlanCalldataTooShort();
+        bytes4 sel = bytes4(data[0:4]);
+
+        if (target == address(morpho)) {
+            if (sel == IMorphoBlue.supplyCollateral.selector) {
+                (,, address onBehalf) = abi.decode(data[4:], (IMorphoBlue.MarketParams, uint256, address));
+                if (onBehalf != address(this)) revert PlanOnBehalfNotSelf(onBehalf);
+            } else if (sel == IMorphoBlue.borrow.selector) {
+                (,,, address onBehalf, address receiver) =
+                    abi.decode(data[4:], (IMorphoBlue.MarketParams, uint256, uint256, address, address));
+                if (onBehalf != address(this)) revert PlanOnBehalfNotSelf(onBehalf);
+                if (receiver != address(this)) revert PlanReceiverNotSelf(receiver);
+            } else if (sel == IMorphoBlue.repay.selector) {
+                (,,, address onBehalf) = abi.decode(data[4:], (IMorphoBlue.MarketParams, uint256, uint256, address));
+                if (onBehalf != address(this)) revert PlanOnBehalfNotSelf(onBehalf);
+            } else if (sel == IMorphoBlue.withdrawCollateral.selector) {
+                (,, address onBehalf, address receiver) =
+                    abi.decode(data[4:], (IMorphoBlue.MarketParams, uint256, address, address));
+                if (onBehalf != address(this)) revert PlanOnBehalfNotSelf(onBehalf);
+                if (receiver != address(this)) revert PlanReceiverNotSelf(receiver);
+            } else if (sel == IMorphoBlue.flashLoan.selector) {
+                (address token,,) = abi.decode(data[4:], (address, uint256, bytes));
+                if (token != asset()) revert PlanFlashLoanTokenRefused(token);
+            } else {
+                revert PlanSelectorRefused(target, sel);
+            }
+        } else if (target == swapRouter) {
+            if (sel != IAerodromeCLRouter.exactInputSingle.selector) revert PlanSelectorRefused(target, sel);
+            IAerodromeCLRouter.ExactInputSingleParams memory p =
+                abi.decode(data[4:], (IAerodromeCLRouter.ExactInputSingleParams));
+            if (p.recipient != address(this)) revert PlanReceiverNotSelf(p.recipient);
+        } else if (target == asset() || target == collateralToken) {
+            if (sel != IERC20.approve.selector) revert PlanSelectorRefused(target, sel);
+            (address spender,) = abi.decode(data[4:], (address, uint256));
+            if (spender != address(morpho) && spender != swapRouter) revert PlanApproveSpenderRefused(spender);
+        } else {
+            revert PlanTargetNotWhitelisted(target);
+        }
     }
 
     /// @notice Execute a quorum-signed StrategyPlan inside a self-call so
@@ -360,8 +446,11 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
     ///         from `handleSignedEnvelope` (msg.sender == address(this)); the
     ///         try/catch wrapper there keeps NAV settlement independent of
     ///         plan success.
-    /// @dev Each step must target a whitelisted contract. Reverts bubble the
-    ///      failing step's raw revert data. At the tail:
+    /// @dev Each step must pass `_validatePlanStep`: target inside the
+    ///      recursive-loop surface, selector inside the tight per-target
+    ///      set, every address argument pinned to `address(this)` or the
+    ///      configured spender. Reverts bubble the failing step's raw
+    ///      revert data. At the tail:
     ///        1. `_fulfillRedeems()` books this strike's redemption claims —
     ///           INSIDE the self-call so a plan revert rolls back the claim
     ///           bookkeeping too, and the vault never sits with
@@ -375,9 +464,8 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
         if (plan.targets.length != plan.calldatas.length) revert PlanArrayMismatch();
         planHash = keccak256(abi.encode(plan.targets, plan.calldatas, plan.timestamp));
         for (uint256 i = 0; i < plan.targets.length; i++) {
-            address target = plan.targets[i];
-            if (!_isPlanTarget(target)) revert PlanTargetNotWhitelisted(target);
-            (bool success, bytes memory ret) = target.call(plan.calldatas[i]);
+            _validatePlanStep(plan.targets[i], plan.calldatas[i]);
+            (bool success, bytes memory ret) = plan.targets[i].call(plan.calldatas[i]);
             if (!success) {
                 assembly ("memory-safe") {
                     revert(add(ret, 0x20), mload(ret))
