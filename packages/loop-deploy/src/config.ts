@@ -101,6 +101,32 @@ export interface LoopConfig {
   strategyParams: Record<string, string>;
 }
 
+/**
+ * Strategy-param keys the on-chain vault-nav component's `refuse_unimplemented`
+ * refuses to attest against. Kept in lockstep with
+ * `components/vault-nav/src/lib.rs::UNIMPLEMENTED`. Composer publishes that
+ * carry any of these die on the first strike, so loop-server rejects them
+ * at validation time rather than deploying a workflow that will never
+ * attest. Remove a key here the same commit a component honors it.
+ */
+const REFUSED_STRATEGY_PARAMS: Record<string, true> = {
+  hedge_leverage: true,
+  delta_band_pct: true,
+  margin_trim_pct: true,
+  margin_restore_pct: true,
+  funding_floor_apr: true,
+  hl_coin: true,
+  exit_route_id: true,
+  exit_settlement_days: true,
+};
+
+/** A "meaningfully-set" value: present and not empty/zero-shaped. Mirrors
+ *  the component's `is_meaningfully_set`. */
+function isMeaningfullySet(v: unknown): boolean {
+  const s = typeof v === "string" ? v.trim() : v === null || v === undefined ? "" : String(v).trim();
+  return !(s === "" || s === "0" || s === "0.0" || s === "0.00");
+}
+
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const NAME_RE = /^[\x20-\x7E]{1,64}$/;
@@ -206,6 +232,12 @@ export function validateLoopConfig(input: unknown): LoopConfig {
           issues.push(`strategyParams key "${k}" must match /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/`);
           continue;
         }
+        if (REFUSED_STRATEGY_PARAMS[k] === true && isMeaningfullySet(v)) {
+          issues.push(
+            `strategyParams key "${k}" is refused by the vault-nav component (see refuse_unimplemented in components/vault-nav/src/lib.rs); remove the knob or publish against a component that honors it`,
+          );
+          continue;
+        }
         strategyParams[k] = typeof v === "string" ? v : String(v);
       }
     }
@@ -272,6 +304,12 @@ export function resolveLoopConfig(input: unknown): LoopConfig {
       for (const [k, v] of Object.entries(input.strategyParams)) {
         if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(k)) {
           issues.push(`strategyParams key "${k}" must match /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/`);
+          continue;
+        }
+        if (REFUSED_STRATEGY_PARAMS[k] === true && isMeaningfullySet(v)) {
+          issues.push(
+            `strategyParams key "${k}" is refused by the vault-nav component (see refuse_unimplemented in components/vault-nav/src/lib.rs); remove the knob or publish against a component that honors it`,
+          );
           continue;
         }
         strategyParams[k] = typeof v === "string" ? v : String(v);

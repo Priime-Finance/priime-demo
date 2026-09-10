@@ -126,6 +126,47 @@ describe("resolveLoopConfig", () => {
     }
   });
 
+  it("rejects strategyParams keys the vault-nav component refuses (roadmap P2 #6)", () => {
+    /* One test per refused key. Each landing in the composer's wire used
+       to deploy a workflow that died on its first cycle with
+       `redemption venue routing not implemented` (and the seven siblings);
+       loop-server now rejects at validation so no bad config ever reaches
+       the operator quorum. */
+    const refused: Record<string, string> = {
+      hedge_leverage: "2",
+      delta_band_pct: "0.5",
+      margin_trim_pct: "0.1",
+      margin_restore_pct: "0.15",
+      funding_floor_apr: "0.02",
+      hl_coin: "ETH",
+      exit_route_id: "instant-usdc",
+      exit_settlement_days: "5",
+    };
+    for (const [key, value] of Object.entries(refused)) {
+      const input = validLoopResolveInput();
+      input.strategyParams = { [key]: value };
+      try {
+        resolveLoopConfig(input);
+        expect.unreachable(`must reject ${key}`);
+      } catch (err) {
+        if (!(err instanceof ValidationError)) throw err;
+        expect(err.issues.some((i) => i.includes(key) && i.includes("refused"))).toBe(true);
+      }
+    }
+  });
+
+  it("still accepts the refused key when its value is meaningless (empty/zero)", () => {
+    /* The composer strips these but a paranoid CLI author might still send
+       `hl_coin: ""` or `exit_settlement_days: "0"`; treat these as unset
+       and pass through, matching the component's `is_meaningfully_set`
+       predicate so the two sides refuse the same input. */
+    for (const empty of ["", "0", "0.0", "0.00"]) {
+      const input = validLoopResolveInput();
+      input.strategyParams = { exit_route_id: empty, hl_coin: empty };
+      expect(() => resolveLoopConfig(input)).not.toThrow();
+    }
+  });
+
   it("rejects an out-of-range target leverage", () => {
     for (const bad of [0, 0.5, 11, Number.NaN, Number.POSITIVE_INFINITY]) {
       const input = validLoopResolveInput();

@@ -406,16 +406,23 @@ export default function PublishFlow({
         emit("applied_leverage", draft.appliedLeverage);
         emit("compound_cadence_hours", draft.compoundCadenceHours);
         emit("compound_threshold_usd", draft.thresholdUsd);
-        emit("hedge_leverage", draft.hedgeLeverage);
         emit("reserve_fraction", draft.reserveFraction);
-        emit("delta_band_pct", draft.deltaBandPct);
-        emit("margin_trim_pct", draft.marginTrimPct);
-        emit("margin_restore_pct", draft.marginRestorePct);
-        emit("funding_floor_apr", draft.fundingFloorApr);
         emit("collateral_yield_apy", draft.collateralYieldApy);
-        emit("exit_route_id", draft.exitRouteId);
-        emit("exit_settlement_days", draft.exitSettlementDays);
-        emit("hl_coin", draft.hlCoin);
+        /* REFUSE LIST — the eight knobs `components/vault-nav/src/lib.rs`'s
+           `refuse_unimplemented` errors on when present. Stripped at the wire
+           so a hero composition (loop + treasury floor lane) does not ship
+           `exit_route_id=instant-usdc` and die on its first cycle (roadmap
+           P2 #6). Loop-server also rejects them at validation for belt +
+           suspenders. Add the emit back the same commit a component honors
+           the knob. */
+        // emit("hedge_leverage", draft.hedgeLeverage);
+        // emit("delta_band_pct", draft.deltaBandPct);
+        // emit("margin_trim_pct", draft.marginTrimPct);
+        // emit("margin_restore_pct", draft.marginRestorePct);
+        // emit("funding_floor_apr", draft.fundingFloorApr);
+        // emit("hl_coin", draft.hlCoin);
+        // emit("exit_route_id", draft.exitRouteId);
+        // emit("exit_settlement_days", draft.exitSettlementDays);
         emit("capacity_binding", draft.capacityBinding);
         const { loopId, handler } = await publishLoopToServer({
           name: finalName,

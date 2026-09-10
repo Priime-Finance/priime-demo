@@ -405,7 +405,16 @@ export function publishedModelRecord(
      one holder, so a single-lane record is byte for byte what it was. */
   const hedge = seated(lanes, (l) => l.p.hedge);
   const compound = seated(lanes, (l) => l.p.compound);
-  const exit = seated(lanes, (l) => l.p.exit);
+  /* HERO-SHAPE GATE (roadmap P2 #6). `redemption-route` only seats on the
+     TREASURY family (`graph-ops.FAMILY_CHAINS.treasury`), so a hero (loop
+     lane + treasury floor lane) that lifts either lane's exit onto the
+     record used to stamp the deployed LOOP vault with the treasury lane's
+     `exit_route_id=instant-usdc`. The vault-nav component's refuse list
+     then killed every cycle. A single treasury lane still publishes its
+     own exit; a hero composition publishes null and defers the route to
+     whichever component first honors redemption-route. */
+  const hasLoop = lanes.some((l) => l.family === "loop");
+  const exit = hasLoop ? null : seated(lanes, (l) => l.p.exit);
   /* The HL margin ladder is coin-dependent (`deriveHlMarginBands` off the
      coin's own max leverage) and the canvas payload carries no HL coin
      table, so it exists only when the live reprice rail supplied it. Absent,
