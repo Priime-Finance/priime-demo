@@ -394,6 +394,11 @@ export default function PublishFlow({
         // errors on any value >10_000. Convention drift; strip the HF
         // triplet from the wire until the two sides are reconciled.
         // Position invariants stay covered by `applied_leverage` below.
+        /* The vault-nav component reads this to pick collateral valuation
+           (see `preset_collateral_price_1e24` in components/vault-nav/src/nav.rs)
+           AND to feed `config_hash`, so two loops on the same market with
+           different presets attest divergent NAVs. Machine-facing only. */
+        emit("risk_preset", draft.riskPreset);
         emit("applied_leverage", draft.appliedLeverage);
         emit("compound_cadence_hours", draft.compoundCadenceHours);
         emit("compound_threshold_usd", draft.thresholdUsd);

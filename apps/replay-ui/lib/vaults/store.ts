@@ -177,6 +177,19 @@ export interface VaultRecord {
   hfTargetBps?: number | null;
   hfDeleverageBps?: number | null;
   hfFloorBps?: number | null;
+  /**
+   * The risk preset the composer picked, forwarded to the vault-nav
+   * component so the operator quorum's `config_hash` differs between
+   * "standard" and "conservative" picks on the same market (see
+   * `preset_collateral_price_1e24` in components/vault-nav/src/nav.rs).
+   *
+   * MACHINE-FACING METADATA ONLY. Never rendered on the vault detail page —
+   * the "Risk profile" adjective row was deleted at the writer 2026-08-24
+   * (see `RackCanvas.publishDraft`'s single-lane params block), and this
+   * field respects that ban. The vault publishes the derived HF bands as
+   * the user-facing shape.
+   */
+  riskPreset?: "standard" | "conservative" | "aggressive" | null;
   /** Leverage on the perp short leg. */
   hedgeLeverage?: number | null;
   /** Idle margin held aside, as a fraction of short notional (0.1 = 10%). */
@@ -1050,6 +1063,7 @@ export interface PublishInput
       | "hfTargetBps"
       | "hfDeleverageBps"
       | "hfFloorBps"
+      | "riskPreset"
       | "hedgeLeverage"
       | "reserveFraction"
       | "hlCoin"

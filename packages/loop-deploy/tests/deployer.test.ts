@@ -13,6 +13,40 @@ import { LoopRegistry } from "../src/registry.ts";
 import { fixtureServiceText, TEMPLATE_WORKFLOW_ID, validLoopResolveInput } from "./fixtures.ts";
 
 /**
+ * Walk a service doc down to a workflow's componentConfig without inline
+ * casting. Throws if the doc doesn't match; the caller is a test, so a
+ * throw IS the assertion.
+ */
+function componentConfigOf(doc: unknown, workflowId: string): Record<string, string> {
+  if (doc === null || typeof doc !== "object" || !("workflows" in doc)) {
+    throw new Error("service doc has no workflows");
+  }
+  const workflows = doc.workflows;
+  if (workflows === null || typeof workflows !== "object" || !(workflowId in workflows)) {
+    throw new Error(`service doc missing workflow ${workflowId}`);
+  }
+  const wf = Object.entries(workflows).find(([k]) => k === workflowId)?.[1];
+  if (wf === undefined) throw new Error(`service doc missing workflow ${workflowId}`);
+  if (wf === null || typeof wf !== "object" || !("component" in wf)) {
+    throw new Error(`workflow ${workflowId} has no component`);
+  }
+  const component = wf.component;
+  if (component === null || typeof component !== "object" || !("config" in component)) {
+    throw new Error(`workflow ${workflowId} component has no config`);
+  }
+  const config = component.config;
+  if (config === null || typeof config !== "object") {
+    throw new Error(`workflow ${workflowId} component.config is not an object`);
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(config)) {
+    if (typeof v !== "string") throw new Error(`componentConfig[${k}] is not a string`);
+    out[k] = v;
+  }
+  return out;
+}
+
+/**
  * In-memory chain + IPFS doubles. The "chain" holds the current service URI,
  * the "IPFS" a CID-indexed store; together they emulate the real
  * fetch-edit-pin-set cycle including last-write-wins on the URI.
@@ -196,5 +230,52 @@ describe("LoopDeployer", () => {
     await expect(deployer.createLoop(input)).rejects.toThrow(/is not deployable on this server's chain/);
     expect(registry.list()).toHaveLength(0);
     expect(fakes.counters.deploys).toBe(0);
+  });
+
+  it("resumes a legacy configJson written before swapRouter/poolTickSpacing were first-class", async () => {
+    /* Regression pin for roadmap P00 #9: any loop record persisted before the
+       LoopConfig grew `swapRouter`/`poolTickSpacing` would otherwise fail
+       `validateLoopConfig` on resume; the deployer backfills both from the
+       market catalog before validating, and the resumed loop lands active. */
+    const { deployer, registry, fakes } = makeDeployer();
+    // Store a hand-crafted, "legacy" configJson: valid on every field except
+    // the two new ones. Values mirror the Base market catalog entry.
+    const legacyConfig = {
+      name: "legacy resume",
+      strategist: "0xabcd00000000000000000000000000000000abcd",
+      cronSeconds: 30,
+      candidateId: "morpho-blue-base:8453:USDe-USDC:0x54cf9be5",
+      targetLeverage: 5,
+      marketId: "0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354",
+      lltv: "915000000000000000",
+      usdeAddress: "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34",
+      oracleAddress: "0xf4b17c79492d68775e22e8dd0a2bb22854a39a47",
+      irmAddress: "0x46415998764c29ab2a25cbea6254146d50d22687",
+      morphoAddress: "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
+      poolAddress: "0x15bc08d2e2b405afed3fb872dcd2d962bccfb7e0",
+      twapWindowSecs: 1800,
+      inputsBlockLag: 2,
+      strategyParams: {},
+      // NB: no swapRouter, no poolTickSpacing.
+    };
+    const record = registry.create({
+      id: "loop-legacy1",
+      name: legacyConfig.name,
+      workflowId: "wf0000000000000000000042",
+      strategist: legacyConfig.strategist,
+      configJson: JSON.stringify(legacyConfig),
+    });
+    // Sanity: the record is `validated` (registry.create's default step) and
+    // has no handler, so the resume runs the full pipeline.
+    expect(record.step).toBe("validated");
+    expect(record.handlerAddress).toBeNull();
+    const resumed = await deployer.resumeLoop(record.id);
+    expect(resumed.status).toBe("active");
+    expect(fakes.counters.deploys).toBe(1);
+    // The two backfilled values must also reach the deployed workflow's
+    // componentConfig, or the operator quorum still builds an empty plan.
+    const config = componentConfigOf(fakes.currentDoc(), resumed.workflowId);
+    expect(config.swap_router).toBe("0xbe6d8f0d05cc4be24d5167a3ef062215be6d18a5");
+    expect(config.pool_tick_spacing).toBe("1");
   });
 });

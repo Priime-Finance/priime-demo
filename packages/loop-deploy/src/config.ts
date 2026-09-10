@@ -79,6 +79,20 @@ export interface LoopConfig {
   /** Blocks behind the trigger-time block to pin reads (reorg depth). */
   inputsBlockLag: number;
   /**
+   * Aerodrome Slipstream router for USDC<->USDe swaps. Set on vault
+   * construction AND read every strike by the WASM component when it
+   * composes StrategyPlan swap calldata. Absent -> the component emits an
+   * empty plan on every strike (dead loop). Sourced from the market catalog
+   * on `resolveLoopConfig`; the value the composer wrote never overrides.
+   */
+  swapRouter: string;
+  /**
+   * Slipstream tick spacing for the USDC/USDe pool (not a fee tier).
+   * Same lifecycle as `swapRouter` — set at construction, read every
+   * strike. Zero/absent -> empty plan.
+   */
+  poolTickSpacing: number;
+  /**
    * The composer's knobs, string-encoded. Copied verbatim from the publish
    * input and merged into `componentConfigFor`'s output, so every workflow
    * on IPFS carries every choice the user made. Empty object on legacy
@@ -169,6 +183,8 @@ export function validateLoopConfig(input: unknown): LoopConfig {
   // would produce a loop whose every cycle fails.
   const twapWindowSecs = intField(input, "twapWindowSecs", 300, 86400, issues);
   const inputsBlockLag = intField(input, "inputsBlockLag", 0, 100, issues);
+  const swapRouter = addressField(input, "swapRouter", issues);
+  const poolTickSpacing = intField(input, "poolTickSpacing", 1, 200_000, issues);
 
   // strategyParams is optional at the stored/internal boundary too, so old
   // configs that predate the composer still validate.
@@ -204,6 +220,8 @@ export function validateLoopConfig(input: unknown): LoopConfig {
     poolAddress,
     twapWindowSecs,
     inputsBlockLag,
+    swapRouter,
+    poolTickSpacing,
     strategyParams,
   };
 }
@@ -270,6 +288,8 @@ export function resolveLoopConfig(input: unknown): LoopConfig {
     poolAddress: market.poolAddress,
     twapWindowSecs: market.twapWindowSecs,
     inputsBlockLag: market.inputsBlockLag,
+    swapRouter: market.swapRouter,
+    poolTickSpacing: market.poolTickSpacing,
     strategyParams,
   };
 }
@@ -305,5 +325,11 @@ export function componentConfigFor(
     pool_address: cfg.poolAddress,
     twap_window_secs: String(cfg.twapWindowSecs),
     inputs_block_lag: String(cfg.inputsBlockLag),
+    // Required by vault-nav to compose Aerodrome swap calldata every strike
+    // (`build_action_plan` in `components/vault-nav/src/lib.rs`); absent -> the
+    // WASM emits an empty plan every cycle. Vault constructor also reads these
+    // via `deployHandler`, so the two sides stay pinned to the same catalog row.
+    swap_router: cfg.swapRouter,
+    pool_tick_spacing: String(cfg.poolTickSpacing),
   };
 }
