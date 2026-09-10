@@ -338,6 +338,15 @@
 .vxd-desc{font-size:14px;line-height:1.65;color:var(--vx-ink);margin:0}
 .vxd-desc--note{font-family:var(--vx-ser);font-style:italic;font-size:13.5px;color:var(--vx-faint);margin-top:10px}
 .vxd-note{font-family:var(--vx-ser);font-style:italic;font-size:13px;color:var(--vx-faint);margin:2px 2px 0}
+.vxd-note--muted{color:var(--vx-mut);font-style:normal;margin-top:8px;font-size:12.5px}
+.vxd-note--err{color:var(--vx-red,#B0442A);font-size:12.5px;margin-left:10px}
+.vxd-actions{display:flex;align-items:center;gap:10px;margin-top:10px}
+.vxd-btn{font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:-.01em;
+  border:1px solid var(--vx-line);border-radius:8px;padding:6px 14px;background:#fff;color:var(--vx-ink);
+  cursor:pointer;transition:filter .12s ease-out}
+.vxd-btn--ghost{background:transparent}
+.vxd-btn:hover:not(:disabled){filter:brightness(1.03);border-color:var(--vx-blue)}
+.vxd-btn:disabled{cursor:not-allowed;opacity:.5}
 .vx-kv--chips{align-items:center}
 .vxo-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
 .vxo-chip{font-size:11px;font-weight:500;color:var(--vx-mut);border:1px solid var(--vx-line);border-radius:999px;padding:2px 9px;background:#fff}
@@ -364,7 +373,7 @@
                          Placed under the CTA so it does not shift layout.
    ── */
 .vxd-dep{margin-top:0}
-.vxd-dep-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;
+.vxd-dep-row{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px;
   margin-top:14px;padding:12px 14px;background:#fff;
   border:1px solid var(--vx-line);border-radius:12px}
 .vxd-dep-lbl{font-size:12.5px;font-weight:600;color:var(--vx-mut);letter-spacing:-.01em}
@@ -373,6 +382,11 @@
 .vxd-dep-input:focus{color:var(--vx-ink)}
 .vxd-dep-input:disabled{opacity:.55}
 .vxd-dep-unit{font-family:var(--font-mono,ui-monospace);font-size:13px;font-weight:600;color:var(--vx-mut)}
+.vxd-dep-max{font-family:inherit;font-size:11.5px;font-weight:600;letter-spacing:.02em;
+  text-transform:uppercase;color:var(--vx-blue);background:transparent;border:1px solid var(--vx-line);
+  border-radius:8px;padding:4px 10px;cursor:pointer;transition:filter .12s ease-out}
+.vxd-dep-max:hover:not(:disabled){filter:brightness(1.06);border-color:var(--vx-blue)}
+.vxd-dep-max:disabled{cursor:not-allowed;opacity:.4}
 .vxd-dep-err{font-size:12.5px;color:var(--vx-red,#B0442A);margin:8px 0 0}
 .vxd-dep-cta{margin-top:14px;display:inline-flex;align-items:center;justify-content:center;
   min-height:38px;padding:0 18px;font-family:inherit;font-size:13.5px;font-weight:600;

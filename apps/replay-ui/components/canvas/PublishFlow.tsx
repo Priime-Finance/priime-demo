@@ -389,9 +389,11 @@ export default function PublishFlow({
           if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") return;
           sp[k] = String(v);
         };
-        emit("hf_target_bps", draft.hfTargetBps);
-        emit("hf_deleverage_bps", draft.hfDeleverageBps);
-        emit("hf_floor_bps", draft.hfFloorBps);
+        // Composer's HF fields are HF-ratio-in-bps (10_000 = 1.0x HF); the
+        // vault-nav component reads `hf_floor_bps` as "bps below LLTV" and
+        // errors on any value >10_000. Convention drift; strip the HF
+        // triplet from the wire until the two sides are reconciled.
+        // Position invariants stay covered by `applied_leverage` below.
         emit("applied_leverage", draft.appliedLeverage);
         emit("compound_cadence_hours", draft.compoundCadenceHours);
         emit("compound_threshold_usd", draft.thresholdUsd);

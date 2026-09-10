@@ -34,7 +34,7 @@
  * ratio is fixed at the attested NAV of the fulfilling strike.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Address } from "viem";
 
 import { useAccount, useConnectModal } from "@/lib/wallet";
@@ -86,7 +86,16 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
   const symbol = reading.assetSymbol ?? "USDC";
 
   const [rawAmount, setRawAmount] = useState("");
-  const parsedAmount = useMemo(() => (decimals === null ? null : parseAssetAmount(rawAmount, decimals)), [rawAmount, decimals]);
+  // Sanitise: strip whitespace, accept comma-decimal (European locales),
+  // drop leading `+`. Parser stays strict; sanitising here means one
+  // canonical string reaches every consumer of `rawAmount`.
+  const setAmountFromInput = useCallback((value: string) => {
+    setRawAmount(value.trim().replace(",", ".").replace(/^\+/, ""));
+  }, []);
+  const parsedAmount = useMemo(
+    () => (decimals === null ? null : parseAssetAmount(rawAmount, decimals)),
+    [rawAmount, decimals],
+  );
 
   // Write plumbing. One hook drives all three tx types; the tx hash + a
   // `kind` label ("approve" | "deposit" | "claim") is what the banner
@@ -105,12 +114,29 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
     if (pendingWrite?.kind === "deposit") setRawAmount("");
   }, [receipt.isSuccess, pendingWrite?.kind, reading]);
 
+  // Latch the last known non-null phase so a rate-limited RPC batch that
+  // momentarily fails does not regress the card from `claimable` back to
+  // `ready` (which would hide the Claim button for a poll cycle). The ref
+  // holds only positive-signal transitions; when a later read explicitly
+  // returns 0 for both pending and claimable, the card flips to `ready`.
+  const lastKnownPhase = useRef<Phase | null>(null);
   const phase: Phase = useMemo(() => {
     if (!isConnected || user === undefined) return { kind: "disconnected" };
-    if (reading.claimableAssets > 0n) return { kind: "claimable" };
-    if (reading.pendingAssets > 0n) return { kind: "pending" };
-    const needsApproval = parsedAmount !== null && (reading.walletAllowance ?? 0n) < parsedAmount;
-    return { kind: "ready", needsApproval };
+    const claim = reading.claimableAssets;
+    const pend = reading.pendingAssets;
+    let next: Phase;
+    if (claim !== null && claim > 0n) next = { kind: "claimable" };
+    else if (pend !== null && pend > 0n) next = { kind: "pending" };
+    else if (claim === null && pend === null && lastKnownPhase.current !== null) {
+      // Both reads failed this cycle; keep last known phase rather than
+      // false-transitioning to `ready`.
+      return lastKnownPhase.current;
+    } else {
+      const needsApproval = parsedAmount !== null && (reading.walletAllowance ?? 0n) < parsedAmount;
+      next = { kind: "ready", needsApproval };
+    }
+    lastKnownPhase.current = next;
+    return next;
   }, [isConnected, user, reading.claimableAssets, reading.pendingAssets, reading.walletAllowance, parsedAmount]);
 
   const onApprove = useCallback(() => {
@@ -136,13 +162,22 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
   }, [parsedAmount, user, handlerAddress, write]);
 
   const onClaim = useCallback(() => {
-    if (user === undefined || reading.claimableAssets === 0n) return;
+    if (
+      user === undefined
+      || reading.claimableAssets === null
+      || reading.claimableAssets === 0n
+    ) return;
     setPendingWrite({ kind: "claim" });
     write.writeContract({
       address: handlerAddress,
       abi: VAULT_ABI,
       functionName: "deposit",
       args: [reading.claimableAssets, user],
+      // Hard-code gas so MetaMask/Blockaid does not run its own simulator
+      // and flag the ERC-7540 deposit-as-claim pattern as suspicious. Real
+      // cost measured on Base mainnet: ~65k gas; 200k is a generous ceiling
+      // that leaves headroom without over-refunding.
+      gas: 200_000n,
     });
   }, [user, reading.claimableAssets, handlerAddress, write]);
 
@@ -198,7 +233,7 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
       <div className="vx-panel vxd-dep">
         <div className="vx-panel-h">Deposit pending</div>
         <p className="vxd-desc">
-          <b>{formatAssetAmount(reading.pendingAssets, decimals ?? 6)} {symbol}</b> escrowed. The
+          <b>{formatAssetAmount(reading.pendingAssets ?? 0n, decimals ?? 6)} {symbol}</b> escrowed. The
           next strike folds it into NAV and mints your shares; the ledger below shows when.
         </p>
         {banner}
@@ -212,9 +247,14 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
         <div className="vx-panel-h">Shares ready to claim</div>
         <p className="vxd-desc">
           The quorum settled your deposit at{" "}
-          <b>{formatAssetAmount(reading.claimableAssets, decimals ?? 6)} {symbol}</b>{" "}
-          → <b>{formatAssetAmount(reading.claimableShares, decimals ?? 6)} pvUSDC</b>. Claim to
+          <b>{formatAssetAmount(reading.claimableAssets ?? 0n, decimals ?? 6)} {symbol}</b>{" "}
+          → <b>{formatAssetAmount(reading.claimableShares ?? 0n, decimals ?? 6)} pvUSDC</b>. Claim to
           mint the shares to your wallet.
+        </p>
+        <p className="vxd-desc vxd-desc--note">
+          Your wallet will label this transaction as <code>deposit</code>. That is the
+          ERC-7540 claim selector — <b>no additional USDC leaves your wallet</b>; the vault
+          already holds the {formatAssetAmount(reading.claimableAssets ?? 0n, decimals ?? 6)} {symbol} you escrowed at request time, and this call just mints your shares against it.
         </p>
         <button
           type="button"
@@ -230,14 +270,15 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
   }
 
   // phase.kind === "ready"
-  const shareBalanceLine = reading.walletShares === 0n
-    ? null
-    : (
-      <p className="vxd-desc vxd-desc--note">
-        You already hold <b>{formatAssetAmount(reading.walletShares, decimals ?? 6)} pvUSDC</b> in
-        this vault.
-      </p>
-    );
+  const shareBalanceLine =
+    reading.walletShares === null || reading.walletShares === 0n
+      ? null
+      : (
+        <p className="vxd-desc vxd-desc--note">
+          You already hold <b>{formatAssetAmount(reading.walletShares, decimals ?? 6)} pvUSDC</b> in
+          this vault.
+        </p>
+      );
 
   return (
     <div className="vx-panel vxd-dep">
@@ -257,10 +298,26 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
           inputMode="decimal"
           placeholder="0.00"
           value={rawAmount}
-          onChange={(e) => setRawAmount(e.target.value)}
+          onChange={(e) => setAmountFromInput(e.target.value)}
           disabled={disableInputActions}
         />
         <span className="vxd-dep-unit">{symbol}</span>
+        <button
+          type="button"
+          className="vxd-dep-max"
+          disabled={
+            disableInputActions
+            || reading.walletAssets === null
+            || reading.walletAssets === 0n
+            || decimals === null
+          }
+          onClick={() => {
+            if (reading.walletAssets === null || decimals === null) return;
+            setRawAmount(formatAssetAmount(reading.walletAssets, decimals, decimals));
+          }}
+        >
+          Max
+        </button>
       </div>
       <p className="vxd-desc vxd-desc--note">
         Wallet balance:{" "}
@@ -270,7 +327,9 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
       </p>
       {shareBalanceLine}
       {inputInvalid ? (
-        <p className="vxd-dep-err">Enter a positive amount with at most {decimals ?? 6} decimals.</p>
+        <p className="vxd-dep-err">
+          Amount must be a decimal like 5 or 12.34 (up to {decimals ?? 6} places after the dot).
+        </p>
       ) : overWallet ? (
         <p className="vxd-dep-err">Amount exceeds your wallet balance.</p>
       ) : null}
@@ -282,7 +341,6 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
       >
         {phase.needsApproval ? `Approve ${symbol}` : "Deposit"}
       </button>
-      {banner}
     </div>
   );
 }
