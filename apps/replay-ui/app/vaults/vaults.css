@@ -388,10 +388,17 @@
 .vxd-dep-max:hover:not(:disabled){filter:brightness(1.06);border-color:var(--vx-blue)}
 .vxd-dep-max:disabled{cursor:not-allowed;opacity:.4}
 .vxd-dep-err{font-size:12.5px;color:var(--vx-red,#B0442A);margin:8px 0 0}
+/* CTA row wraps two side-by-side deposit buttons. The row owns the 14px
+   spacing above the input; buttons inside collapse their own top margin
+   to 0 and expand to fill the row equally. Solo buttons (Connect wallet,
+   Claim shares, request-redeem) keep their top margin so their layout
+   outside the row stays unchanged. */
+.vxd-dep-cta-row{display:flex;gap:10px;margin-top:14px}
 .vxd-dep-cta{margin-top:14px;display:inline-flex;align-items:center;justify-content:center;
   min-height:38px;padding:0 18px;font-family:inherit;font-size:13.5px;font-weight:600;
   letter-spacing:-.01em;color:#fff;background:var(--vx-blue);border:0;border-radius:10px;
   cursor:pointer;transition:filter .12s ease-out}
+.vxd-dep-cta-row .vxd-dep-cta{flex:1;margin-top:0}
 .vxd-dep-cta:hover:not(:disabled){filter:brightness(1.06)}
 .vxd-dep-cta:disabled{cursor:not-allowed;opacity:.55}
 .vxd-dep-banner{margin:12px 0 0;font-family:var(--vx-ser);font-style:italic;

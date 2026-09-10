@@ -341,14 +341,46 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
           deposits are blocked until the next clean strike. Existing claims are unaffected.
         </p>
       ) : null}
-      <button
-        type="button"
-        className="vxd-dep-cta"
-        onClick={phase.needsApproval ? onApprove : onDeposit}
-        disabled={disableInputActions || parsedAmount === null || parsedAmount === 0n || overWallet}
-      >
-        {phase.needsApproval ? `Approve ${symbol}` : "Deposit"}
-      </button>
+      {/*
+        Two-step flow surfaced as two buttons instead of one morphing label so
+        the user sees BOTH signatures coming (approve, then deposit) before
+        they start. Enablement follows `phase.needsApproval`: the button that
+        will actually fire lights up, the other greys. Same disable rules as
+        the single-button version so nothing lets the user tap through when
+        the input is invalid, the wallet is short, or the vault is breached.
+       */}
+      <div className="vxd-dep-cta-row">
+        <button
+          type="button"
+          className="vxd-dep-cta"
+          onClick={onApprove}
+          disabled={
+            disableInputActions
+            || !phase.needsApproval
+            || parsedAmount === null
+            || parsedAmount === 0n
+            || overWallet
+          }
+          title="Grant the vault permission to move USDC on your behalf (one-time per amount)."
+        >
+          1. Approve {symbol}
+        </button>
+        <button
+          type="button"
+          className="vxd-dep-cta"
+          onClick={onDeposit}
+          disabled={
+            disableInputActions
+            || phase.needsApproval
+            || parsedAmount === null
+            || parsedAmount === 0n
+            || overWallet
+          }
+          title="Escrow the approved USDC and queue a deposit request. Fulfilled on the next attested strike."
+        >
+          2. Deposit
+        </button>
+      </div>
     </div>
   );
 }
