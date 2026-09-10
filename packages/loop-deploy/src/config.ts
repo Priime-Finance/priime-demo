@@ -27,7 +27,7 @@ export class ValidationError extends Error {
 }
 
 export interface LoopConfigInput {
-  /** Display name, informational only. Optional; defaults to "unnamed loop". */
+  /** Optional user-visible name. Falls back to a placeholder when missing. */
   name?: string;
   /** User address; becomes the handler's strategist (WAVS-independent exit). */
   strategist: string;
@@ -37,6 +37,16 @@ export interface LoopConfigInput {
   candidateId: string;
   /** Target leverage the loop runs at, informational at deploy time. */
   targetLeverage: number;
+  /**
+   * Every other knob the composer captured, as string values. Merged into
+   * the workflow's `componentConfig` verbatim, so anything the user tuned
+   * (risk preset, HF bands, auto-compound cadence, exit route, ...) lands
+   * in the pinned service.json exactly as the composer sent it. Loop-server
+   * does not interpret the shape here; each entry is passed through
+   * unchanged and the component owns validation of what it reads.
+   * Absent entries default to `{}`, matching pre-composer callers.
+   */
+  strategyParams?: Record<string, string>;
 }
 
 export interface LoopConfig {
@@ -68,6 +78,13 @@ export interface LoopConfig {
   twapWindowSecs: number;
   /** Blocks behind the trigger-time block to pin reads (reorg depth). */
   inputsBlockLag: number;
+  /**
+   * The composer's knobs, string-encoded. Copied verbatim from the publish
+   * input and merged into `componentConfigFor`'s output, so every workflow
+   * on IPFS carries every choice the user made. Empty object on legacy
+   * callers that never sent one.
+   */
+  strategyParams: Record<string, string>;
 }
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -153,6 +170,23 @@ export function validateLoopConfig(input: unknown): LoopConfig {
   const twapWindowSecs = intField(input, "twapWindowSecs", 300, 86400, issues);
   const inputsBlockLag = intField(input, "inputsBlockLag", 0, 100, issues);
 
+  // strategyParams is optional at the stored/internal boundary too, so old
+  // configs that predate the composer still validate.
+  const strategyParams: Record<string, string> = {};
+  if (input.strategyParams !== undefined) {
+    if (!isRecord(input.strategyParams)) {
+      issues.push("strategyParams must be a JSON object when present");
+    } else {
+      for (const [k, v] of Object.entries(input.strategyParams)) {
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(k)) {
+          issues.push(`strategyParams key "${k}" must match /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/`);
+          continue;
+        }
+        strategyParams[k] = typeof v === "string" ? v : String(v);
+      }
+    }
+  }
+
   if (issues.length > 0) throw new ValidationError(issues);
 
   return {
@@ -170,6 +204,7 @@ export function validateLoopConfig(input: unknown): LoopConfig {
     poolAddress,
     twapWindowSecs,
     inputsBlockLag,
+    strategyParams,
   };
 }
 
@@ -200,6 +235,24 @@ export function resolveLoopConfig(input: unknown): LoopConfig {
     }
   }
 
+  // Composer knobs, string-encoded. Absent -> empty object. Every entry is a
+  // string; anything else is a client-side bug and gets stringified rather
+  // than silently dropped, so the user's choice is preserved.
+  const strategyParams: Record<string, string> = {};
+  if (input.strategyParams !== undefined) {
+    if (!isRecord(input.strategyParams)) {
+      issues.push("strategyParams must be a JSON object when present");
+    } else {
+      for (const [k, v] of Object.entries(input.strategyParams)) {
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(k)) {
+          issues.push(`strategyParams key "${k}" must match /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/`);
+          continue;
+        }
+        strategyParams[k] = typeof v === "string" ? v : String(v);
+      }
+    }
+  }
+
   if (issues.length > 0 || market === null) throw new ValidationError(issues);
 
   return {
@@ -217,6 +270,7 @@ export function resolveLoopConfig(input: unknown): LoopConfig {
     poolAddress: market.poolAddress,
     twapWindowSecs: market.twapWindowSecs,
     inputsBlockLag: market.inputsBlockLag,
+    strategyParams,
   };
 }
 
@@ -234,7 +288,11 @@ export function componentConfigFor(
   cfg: LoopConfig,
   server: { chainKey: string; usdcAddress: string; vaultAddress: string },
 ): Record<string, string> {
+  // Composer-supplied knobs are spread FIRST, so the market/server-derived
+  // fields on the right shadow any collision - a user cannot accidentally
+  // (or maliciously) override the vault address or market oracle here.
   return {
+    ...cfg.strategyParams,
     chain_id: server.chainKey,
     vault_address: server.vaultAddress,
     usdc_address: server.usdcAddress,

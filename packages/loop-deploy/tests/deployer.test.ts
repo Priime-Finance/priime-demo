@@ -89,7 +89,7 @@ function makeDeployer(fakes = makeFakes()): { deployer: LoopDeployer; registry: 
     registry,
     chain: fakes.chain,
     ipfs: fakes.ipfs,
-    chainKey: "evm:31337",
+    chainKey: "evm:8453",
     usdcAddress: "0x2222222222222222222222222222222222222222",
     templateWorkflowId: TEMPLATE_WORKFLOW_ID,
     nowNanos: () => 1790000000000000000n,
@@ -116,7 +116,7 @@ describe("LoopDeployer", () => {
     expect(workflowIds(doc)).toContain(loop.workflowId);
     const wf = (doc as { workflows: Record<string, { component: { config: Record<string, string> }; submit: { aggregator: { component: { config: Record<string, string> } } } }> }).workflows[loop.workflowId];
     expect(wf.component.config.vault_address).toBe(loop.handlerAddress);
-    expect(wf.submit.aggregator.component.config).toEqual({ "evm:31337": loop.handlerAddress });
+    expect(wf.submit.aggregator.component.config).toEqual({ "evm:8453": loop.handlerAddress });
   });
 
   it("marks the loop failed on error and resumes without redeploying the handler", async () => {
@@ -189,7 +189,7 @@ describe("LoopDeployer", () => {
 
   it("refuses a candidateId whose chain does not match the deployer's own", async () => {
     const { deployer, registry, fakes } = makeDeployer();
-    // makeDeployer uses chainKey "evm:31337"; the Sepolia entry is
+    // makeDeployer uses chainKey "evm:8453"; the Sepolia entry is
     // "evm:11155111". A user picking the Sepolia candidate on a fork-flavoured
     // server must be refused up front, before any deploy tx.
     const input = { ...validLoopResolveInput(), candidateId: "morpho-blue-sepolia:11155111:USDe-USDC:0xee461cf8" };

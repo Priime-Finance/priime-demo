@@ -10,8 +10,7 @@
  * from the proxy is expected during a demo pause or a fresh dev boot.
  */
 
-import type { Journal } from "@priime-demo/journal-schema";
-import type { LoopRecord } from "@priime-demo/loop-deploy";
+import type { LoopRecord, StrikeRecord } from "@priime-demo/loop-deploy";
 
 export interface LoopsListResponse {
   loops: LoopRecord[];
@@ -22,7 +21,7 @@ export interface LoopDetailResponse {
 }
 
 export interface LoopJournalsResponse {
-  journals: Journal[];
+  journals: StrikeRecord[];
 }
 
 /** Wrap fetch so callers get a typed result or a plain Error. */
@@ -58,6 +57,17 @@ export function fetchLoopJournals(id: string, limit = 20): Promise<LoopJournalsR
   return getJson<LoopJournalsResponse>(`/api/loops/${encodeURIComponent(id)}/journals${suffix}`);
 }
 
+/** Remove the loop's workflow from the service. Handler stays on-chain;
+ *  operators just stop scheduling new triggers. Idempotent server-side. */
+export async function pauseLoop(id: string): Promise<LoopDetailResponse> {
+  const res = await fetch(`/api/loops/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `pause failed: ${String(res.status)}`);
+  }
+  return (await res.json()) as LoopDetailResponse;
+}
+
 /**
  * Body shape for POST /api/loops. Matches the loop-deploy `LoopConfigInput`
  * server-side; kept as a local interface so callers do not need to import
@@ -71,6 +81,11 @@ export interface CreateLoopInput {
   cronSeconds: number;
   candidateId: string;
   targetLeverage: number;
+  /**
+   * Composer knobs, string-encoded. Merged into the workflow's
+   * `componentConfig` verbatim so every user choice lands on IPFS.
+   */
+  strategyParams?: Record<string, string>;
 }
 
 export class LoopValidationError extends Error {

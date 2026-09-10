@@ -39,9 +39,19 @@ const MANAGER_ABI = [
   },
 ] as const;
 
+export interface StrategyConfig {
+  collateralToken: string;
+  morpho: string;
+  morphoOracle: string;
+  morphoIrm: string;
+  morphoLltv: bigint;
+  swapRouter: string;
+  poolTickSpacing: number;
+}
+
 export interface ChainPort {
-  /** Deploy a PriimeVault(serviceManager, asset, strategist). Returns the address. */
-  deployHandler(strategist: string): Promise<string>;
+  /** Deploy a PriimeVault(serviceManager, asset, strategist, StrategyConfig). Returns the address. */
+  deployHandler(strategist: string, strategy: StrategyConfig): Promise<string>;
   getServiceUri(): Promise<string>;
   /** Set the manager's service URI and wait for inclusion. Returns the tx hash. */
   setServiceUri(uri: string): Promise<string>;
@@ -95,17 +105,70 @@ export function makeChain(options: ChainOptions): ChainPort {
   const asset = options.assetAddress as Address;
   const artifact = loadHandlerArtifact(options.artifactPath);
 
+  /**
+   * Alchemy's load-balanced Base RPC pool sometimes routes the next tx from
+   * the same key to a node that has not yet observed the previous tx. viem's
+   * automatic nonce resolution then reads a stale pending-nonce and Alchemy
+   * rejects the second tx as "replacement transaction underpriced". Poll
+   * `getTransactionCount(pending)` on the wallet's account until it reaches
+   * `expectedNonce` (or the deadline elapses), so downstream writes never
+   * submit with a nonce the load-balancer might reject.
+   */
+  const waitForNonce = async (expectedNonce: number, deadlineMs: number): Promise<void> => {
+    const stop = Date.now() + deadlineMs;
+    while (Date.now() < stop) {
+      const current = await publicClient.getTransactionCount({
+        address: account.address,
+        blockTag: "pending",
+      });
+      if (current >= expectedNonce) return;
+      const { promise, resolve } = Promise.withResolvers<void>();
+      setTimeout(resolve, 400);
+      await promise;
+    }
+  };
+
+  /** True when `err` names the load-balancer's stale-nonce refusal. */
+  const isNonceRace = (err: unknown): boolean => {
+    const msg = err instanceof Error ? err.message : String(err);
+    return (
+      msg.includes("replacement transaction underpriced")
+      || msg.includes("nonce too low")
+      || msg.includes("already known")
+    );
+  };
+
   return {
-    async deployHandler(strategist: string): Promise<string> {
+    async deployHandler(strategist: string, strategy: StrategyConfig): Promise<string> {
+      const nonceBefore = await publicClient.getTransactionCount({
+        address: account.address,
+        blockTag: "pending",
+      });
       const hash = await walletClient.deployContract({
         abi: artifact.abi,
         bytecode: artifact.bytecode,
-        args: [manager, asset, strategist as Address],
+        args: [
+          manager,
+          asset,
+          strategist as Address,
+          {
+            collateralToken: strategy.collateralToken as Address,
+            morpho: strategy.morpho as Address,
+            morphoOracle: strategy.morphoOracle as Address,
+            morphoIrm: strategy.morphoIrm as Address,
+            morphoLltv: strategy.morphoLltv,
+            swapRouter: strategy.swapRouter as Address,
+            poolTickSpacing: strategy.poolTickSpacing,
+          },
+        ],
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success" || receipt.contractAddress === null || receipt.contractAddress === undefined) {
         throw new Error(`handler deploy reverted (tx ${hash})`);
       }
+      // Deploy landed; make sure every RPC node in the pool sees the updated
+      // pending-nonce before we hand back control.
+      await waitForNonce(nonceBefore + 1, 10_000);
       return receipt.contractAddress.toLowerCase();
     },
 
@@ -118,12 +181,28 @@ export function makeChain(options: ChainOptions): ChainPort {
     },
 
     async setServiceUri(uri: string): Promise<string> {
-      const hash = await walletClient.writeContract({
-        address: manager,
-        abi: MANAGER_ABI,
-        functionName: "setServiceURI",
-        args: [uri],
-      });
+      // Retry the send on a nonce race: the write itself is idempotent (the
+      // service URI is the same string on every attempt), so a second submit
+      // through a caught-up node lands cleanly.
+      const send = async (): Promise<Hex> =>
+        walletClient.writeContract({
+          address: manager,
+          abi: MANAGER_ABI,
+          functionName: "setServiceURI",
+          args: [uri],
+        });
+      let hash: Hex;
+      try {
+        hash = await send();
+      } catch (err) {
+        if (!isNonceRace(err)) throw err;
+        const pending = await publicClient.getTransactionCount({
+          address: account.address,
+          blockTag: "pending",
+        });
+        await waitForNonce(pending + 1, 8_000);
+        hash = await send();
+      }
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error(`setServiceURI reverted (tx ${hash})`);
       return hash;

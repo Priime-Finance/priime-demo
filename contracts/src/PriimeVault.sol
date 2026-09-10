@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IWavsServiceHandler} from "./interfaces/wavs/IWavsServiceHandler.sol";
 import {IWavsServiceManager} from "./interfaces/wavs/IWavsServiceManager.sol";
+import {IMorphoBlue} from "./interfaces/external/IMorphoBlue.sol";
 
 /// @title PriimeVault
 /// @notice ERC-7540 fully asynchronous vault (async deposits AND async
@@ -88,12 +89,22 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     IWavsServiceManager public immutable serviceManager;
 
     /// @notice Trusted demo role that drives the strategy from the vault's own
-    ///         balance via `execute` (Morpho supply/borrow/swap, approvals).
-    ///         Own capital, unaudited: the strategist is trusted by
-    ///         construction. v2's attested actions replace this role: the
-    ///         operator quorum will authorize actions, whereas today it only
-    ///         attests NAV.
+    ///         balance via `execute` (manual override). Quorum-signed
+    ///         `StrategyPlan`s in `handleSignedEnvelope` are the primary path;
+    ///         `execute` remains for emergency out-of-band moves.
     address public immutable strategist;
+
+    /// @notice Recursive USDe/USDC loop config, pinned at construction so
+    ///         every quorum-signed step targets the market and swap route the
+    ///         vault was configured for. Any target outside this whitelist
+    ///         fails `handleSignedEnvelope`'s dispatch guard.
+    address public immutable collateralToken;
+    IMorphoBlue public immutable morpho;
+    address public immutable morphoOracle;
+    address public immutable morphoIrm;
+    uint256 public immutable morphoLltv;
+    address public immutable swapRouter;
+    int24 public immutable poolTickSpacing;
 
     /// @notice Latest attested NAV in asset base units; what backs outstanding
     ///         shares. `totalAssets()` returns this.
@@ -102,6 +113,13 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     uint256 public lastInputsBlock;
     /// @notice Number of NAV updates successfully recorded.
     uint256 public updateCount;
+    /// @notice keccak256 of the workflow's canonicalized componentConfig, as
+    ///         computed by the vault-nav component on every strike. Stored so
+    ///         off-chain verifiers can prove which pinned service.json the
+    ///         operator quorum ran against - any drift from the config the
+    ///         user chose at publish would produce a different hash here.
+    ///         Zero until the first attested strike lands.
+    bytes32 public lastConfigHash;
     /// @notice Replay guard: each envelope `eventId` is processed at most once.
     mapping(bytes20 => bool) public processed;
 
@@ -135,7 +153,36 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     );
     event OperatorSet(address indexed controller, address indexed operator, bool approved);
     // Implementation events.
-    event NavUpdated(bytes20 indexed eventId, uint256 nav, uint256 inputsBlock, uint256 updateCount);
+    /// @notice A NAV strike lands. `eventId` is the aggregator's dedup key.
+    ///         `nav` is the settled value in USDC base units; `inputsBlock` is
+    ///         the block whose state the operators read; `updateCount` is a
+    ///         monotonically increasing strike count; `configHash` is
+    ///         keccak256 of the canonicalized workflow componentConfig (the
+    ///         "cannot lie about config" cryptographic bind).
+    ///
+    ///         Observation fields are per-strike measurements every operator
+    ///         independently computed at `inputsBlock`:
+    ///           - leverageBps = debt * 10_000 / (par_collateral - debt)
+    ///           - ltvBps       = debt * 10_000 / par_collateral
+    ///           - reserveBps   = usdc_balance * 10_000 / nav
+    ///           - supplyApyBps = annualized supply APY (bps)
+    ///           - hoursSinceUpdate = hours between market lastUpdate and
+    ///             `inputsBlock` timestamp.
+    ///         Each maps to a composer knob (applied_leverage, hf_*_bps,
+    ///         reserve_fraction, collateral_yield_apy, compound_cadence_hours)
+    ///         so downstream verifiers gate on measured-vs-configured drift.
+    event NavUpdated(
+        bytes20 indexed eventId,
+        uint256 nav,
+        uint256 inputsBlock,
+        uint256 updateCount,
+        bytes32 configHash,
+        uint32 leverageBps,
+        uint32 ltvBps,
+        uint32 reserveBps,
+        uint32 supplyApyBps,
+        uint32 hoursSinceUpdate
+    );
     event DepositRequestFulfilled(address indexed controller, uint256 assets, uint256 shares);
     event RedeemRequestFulfilled(address indexed controller, uint256 shares, uint256 assets);
     /// @notice A pending deposit could not be priced at the attested NAV
@@ -147,6 +194,16 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///         call path, so this is the audit trail for every strategy action
     ///         taken between NAV strikes.
     event Executed(address indexed target, bytes data);
+
+    /// @notice A quorum-signed StrategyPlan landed and every whitelisted
+    ///         step in it succeeded. `planHash` binds the log to the exact
+    ///         (targets, calldatas, timestamp) tuple the operators signed.
+    event PlanExecuted(bytes32 indexed planHash, uint256 stepCount);
+    /// @notice The plan reverted somewhere in the batch. `reason` is the raw
+    ///         revert bytes from the failing step or the escrow-floor guard.
+    ///         NAV attestation and fulfillments already landed in the same
+    ///         transaction; only the plan's on-chain writes rolled back.
+    event PlanRejected(bytes32 indexed planHash, bytes reason);
 
     error ZeroServiceManager();
     error ZeroStrategist();
@@ -162,16 +219,133 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     error NotControllerOrOperator();
     error ExceedsClaimable(uint256 requested, uint256 claimable);
     error QueueFull();
-    error AsyncFlowOnly();
+    /// @notice Batch of on-chain steps the operator quorum computed for
+    ///         THIS strike. `targets[i]` is called with `calldatas[i]` under
+    ///         the vault's own escrow-floor guard, once the NAV attestation
+    ///         has landed. Every step is atomic across the batch: if any
+    ///         reverts, the whole plan is rolled back and the strike still
+    ///         records the attested NAV. `timestamp` binds the plan to its
+    /// @notice The bytes every operator signs and the vault decodes. Layout
+    ///         mirrors the component's `sol!` definition in
+    ///         `components/vault-nav/src/nav.rs`; a two-line drift on
+    ///         either side breaks decoding rather than silently reading
+    ///         stale bytes. Encoding is Solidity's tuple format (a single
+    ///         dynamic-typed element in `abi.encode` grows a leading offset
+    ///         word), matching Rust alloy `struct.abi_encode()`.
+    struct BoundNavResult {
+        address handler;
+        uint256 nav;
+        uint256 inputsBlock;
+        bytes32 configHash;
+        uint32 leverageBps;
+        uint32 ltvBps;
+        uint32 reserveBps;
+        uint32 supplyApyBps;
+        uint32 hoursSinceUpdate;
+        StrategyPlan plan;
+    }
+    ///         computing block for downstream verifiers.
+    struct StrategyPlan {
+        address[] targets;
+        bytes[] calldatas;
+        uint256 timestamp;
+    }
 
-    constructor(IWavsServiceManager _serviceManager, IERC20 _asset, address _strategist)
-        ERC4626(_asset)
-        ERC20("Priime Vault Share", "pvUSDC")
-    {
+    error PlanArrayMismatch();
+    error PlanTargetNotWhitelisted(address target);
+    error SelfCallOnly();
+    error AsyncFlowOnly();
+    /// @dev Groups the recursive-loop strategy parameters into one calldata
+    ///      struct so the constructor stays readable; every field lands as
+    ///      an immutable on the contract.
+    struct StrategyConfig {
+        address collateralToken;
+        address morpho;
+        address morphoOracle;
+        address morphoIrm;
+        uint256 morphoLltv;
+        address swapRouter;
+        int24 poolTickSpacing;
+    }
+
+    error ZeroStrategyConfigField();
+
+    constructor(
+        IWavsServiceManager _serviceManager,
+        IERC20 _asset,
+        address _strategist,
+        StrategyConfig memory _strategy
+    ) ERC4626(_asset) ERC20("Priime Vault Share", "pvUSDC") {
         if (address(_serviceManager) == address(0)) revert ZeroServiceManager();
         if (_strategist == address(0)) revert ZeroStrategist();
+        if (
+            _strategy.collateralToken == address(0) || _strategy.morpho == address(0)
+                || _strategy.morphoOracle == address(0) || _strategy.morphoIrm == address(0)
+                || _strategy.morphoLltv == 0 || _strategy.swapRouter == address(0)
+                || _strategy.poolTickSpacing == 0
+        ) revert ZeroStrategyConfigField();
         serviceManager = _serviceManager;
         strategist = _strategist;
+        collateralToken = _strategy.collateralToken;
+        morpho = IMorphoBlue(_strategy.morpho);
+        morphoOracle = _strategy.morphoOracle;
+        morphoIrm = _strategy.morphoIrm;
+        morphoLltv = _strategy.morphoLltv;
+        swapRouter = _strategy.swapRouter;
+        poolTickSpacing = _strategy.poolTickSpacing;
+    }
+
+    /// @dev The Morpho MarketParams tuple this vault is bound to. Built from
+    ///      the strategy immutables so callers never restate them.
+    function _marketParams() internal view returns (IMorphoBlue.MarketParams memory) {
+        return IMorphoBlue.MarketParams({
+            loanToken: asset(),
+            collateralToken: collateralToken,
+            oracle: morphoOracle,
+            irm: morphoIrm,
+            lltv: morphoLltv
+        });
+    }
+
+    /// @dev The set of contracts the operator quorum may call through a
+    ///      StrategyPlan. Kept narrow to the two protocols the recursive
+    ///      loop touches (Morpho Blue for supply/borrow/repay/withdraw, the
+    ///      swap router for USDC<->USDe) plus the two ERC-20s the vault
+    ///      needs to approve. `execute`'s `SelfCallForbidden` covers
+    ///      reentry into this vault; anything else outside the whitelist
+    ///      would let a compromised operator drain funds to a rogue target.
+    function _isPlanTarget(address target) internal view returns (bool) {
+        return target == asset() || target == collateralToken || target == address(morpho)
+            || target == swapRouter;
+    }
+
+    /// @notice Execute a quorum-signed StrategyPlan inside a self-call so
+    ///         any failure rolls back the batch atomically. Callable only
+    ///         from `handleSignedEnvelope` (msg.sender == address(this)); the
+    ///         try/catch wrapper there keeps NAV settlement independent of
+    ///         plan success.
+    /// @dev Each step must target a whitelisted contract. Reverts bubble the
+    ///      failing step's raw revert data. At the tail, the vault must sit
+    ///      at or above its escrow floor, same guard `execute` enforces.
+    /// @param plan The batch (targets, calldatas, timestamp) the quorum signed.
+    /// @return planHash keccak256(abi.encode(plan)) — logged by the caller.
+    function executePlanSelf(StrategyPlan calldata plan) external returns (bytes32 planHash) {
+        if (msg.sender != address(this)) revert SelfCallOnly();
+        if (plan.targets.length != plan.calldatas.length) revert PlanArrayMismatch();
+        planHash = keccak256(abi.encode(plan.targets, plan.calldatas, plan.timestamp));
+        for (uint256 i = 0; i < plan.targets.length; i++) {
+            address target = plan.targets[i];
+            if (!_isPlanTarget(target)) revert PlanTargetNotWhitelisted(target);
+            (bool success, bytes memory ret) = target.call(plan.calldatas[i]);
+            if (!success) {
+                assembly ("memory-safe") {
+                    revert(add(ret, 0x20), mload(ret))
+                }
+            }
+        }
+        uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
+        uint256 balance = IERC20(asset()).balanceOf(address(this));
+        if (balance < floor) revert EscrowFloorBreached(balance, floor);
     }
 
     // ------------------------------------------------------------------------
@@ -533,8 +707,11 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      fulfillment with zero share supply prices 1 share per USDC base
     ///      unit.
     function handleSignedEnvelope(Envelope calldata envelope, SignatureData calldata signatureData) external override {
-        (address handler, uint256 attestedNav, uint256 inputsBlock) =
-            abi.decode(envelope.payload, (address, uint256, uint256));
+        BoundNavResult memory result = abi.decode(envelope.payload, (BoundNavResult));
+        address handler = result.handler;
+        uint256 attestedNav = result.nav;
+        uint256 inputsBlock = result.inputsBlock;
+        bytes32 configHash = result.configHash;
         if (handler != address(this)) revert HandlerMismatch(handler);
 
         // Reverts unless the operator quorum signed this exact envelope.
@@ -549,11 +726,37 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         nav = attestedNav;
         lastInputsBlock = inputsBlock;
         updateCount += 1;
+        lastConfigHash = configHash;
 
         _fulfillDeposits();
         _fulfillRedeems();
 
-        emit NavUpdated(envelope.eventId, attestedNav, inputsBlock, updateCount);
+        emit NavUpdated(
+            envelope.eventId,
+            attestedNav,
+            inputsBlock,
+            updateCount,
+            configHash,
+            result.leverageBps,
+            result.ltvBps,
+            result.reserveBps,
+            result.supplyApyBps,
+            result.hoursSinceUpdate
+        );
+
+        // Plan dispatch is best-effort: NAV settlement and fulfillments have
+        // already committed above. A step reverting on stale slippage or a
+        // market that moved out of the operator's snapshot window rolls back
+        // only the plan's own writes, not the NAV. `executePlanSelf` runs
+        // via an external self-call so its guard trips on any non-vault
+        // caller and its atomicity comes from Solidity try/catch.
+        bytes32 planHash =
+            keccak256(abi.encode(result.plan.targets, result.plan.calldatas, result.plan.timestamp));
+        try this.executePlanSelf(result.plan) {
+            emit PlanExecuted(planHash, result.plan.targets.length);
+        } catch (bytes memory reason) {
+            emit PlanRejected(planHash, reason);
+        }
     }
 
     /// @inheritdoc IWavsServiceHandler

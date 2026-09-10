@@ -133,6 +133,55 @@ export const VAULT_ABI = [
     ],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "requestRedeem",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "shares", type: "uint256" },
+      { name: "controller", type: "address" },
+      { name: "owner", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "redeem",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "shares", type: "uint256" },
+      { name: "receiver", type: "address" },
+      { name: "controller", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "pendingRedeemRequest",
+    stateMutability: "view",
+    inputs: [
+      { name: "requestId", type: "uint256" },
+      { name: "controller", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "claimableRedeemRequest",
+    stateMutability: "view",
+    inputs: [
+      { name: "requestId", type: "uint256" },
+      { name: "controller", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "maxWithdraw",
+    stateMutability: "view",
+    inputs: [{ name: "controller", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
 ] as const satisfies Abi;
 
 /**
@@ -153,18 +202,24 @@ export interface DepositReading {
   walletAssets: bigint | null;
   /** Connected wallet's current allowance to the vault (base units). */
   walletAllowance: bigint | null;
-  /** Escrowed pending deposit for the connected wallet (base units). */
-  pendingAssets: bigint;
-  /** Claimable deposit for the connected wallet, in asset terms (base units). */
-  claimableAssets: bigint;
-  /** Claimable share count for the connected wallet. */
-  claimableShares: bigint;
-  /** Connected wallet's minted share balance. */
-  walletShares: bigint;
-  /** Vault's NAV (total assets attested by the operator quorum). */
-  navAssets: bigint;
-  /** Vault's outstanding share supply. */
-  shareSupply: bigint;
+  /** Escrowed pending deposit for the connected wallet (base units), null on failed read. */
+  pendingAssets: bigint | null;
+  /** Claimable deposit for the connected wallet, in asset terms, null on failed read. */
+  claimableAssets: bigint | null;
+  /** Claimable share count for the connected wallet, null on failed read. */
+  claimableShares: bigint | null;
+  /** Connected wallet's minted share balance, null on failed read. */
+  walletShares: bigint | null;
+  /** Vault's NAV (total assets attested by the operator quorum), null on failed read. */
+  navAssets: bigint | null;
+  /** Vault's outstanding share supply, null on failed read. */
+  shareSupply: bigint | null;
+  /** Escrowed pending redemption shares for the connected wallet, null on failed read. */
+  pendingShares: bigint | null;
+  /** Claimable redemption shares for the connected wallet (7540 `claimableRedeemRequest`). */
+  claimableRedeemShares: bigint | null;
+  /** Claimable redemption assets for the connected wallet (`maxWithdraw`). */
+  claimableRedeemAssets: bigint | null;
   /** True while any of the reads above is still loading. */
   loading: boolean;
   /** Refetch every read on demand; wagmi handles caching + dedupe. */
@@ -206,6 +261,9 @@ export function useDepositReading(handlerAddress: Address | null): DepositReadin
       { address: handlerAddress, abi: VAULT_ABI, functionName: "balanceOf", args: [user] },
       { address: handlerAddress, abi: VAULT_ABI, functionName: "totalAssets" },
       { address: handlerAddress, abi: VAULT_ABI, functionName: "totalSupply" },
+      { address: handlerAddress, abi: VAULT_ABI, functionName: "pendingRedeemRequest", args: [REQUEST_ID, user] },
+      { address: handlerAddress, abi: VAULT_ABI, functionName: "claimableRedeemRequest", args: [REQUEST_ID, user] },
+      { address: handlerAddress, abi: VAULT_ABI, functionName: "maxWithdraw", args: [user] },
     ] as const;
   }, [asset, handlerAddress, enabled, user]);
 
@@ -227,12 +285,15 @@ export function useDepositReading(handlerAddress: Address | null): DepositReadin
     assetSymbol:   r?.[1]?.status === "success" ? r[1].result : null,
     walletAssets:  r?.[2]?.status === "success" ? r[2].result : null,
     walletAllowance: r?.[3]?.status === "success" ? r[3].result : null,
-    pendingAssets:   r?.[4]?.status === "success" ? r[4].result : 0n,
-    claimableAssets: r?.[5]?.status === "success" ? r[5].result : 0n,
-    claimableShares: r?.[6]?.status === "success" ? r[6].result : 0n,
-    walletShares:    r?.[7]?.status === "success" ? r[7].result : 0n,
-    navAssets:       r?.[8]?.status === "success" ? r[8].result : 0n,
-    shareSupply:     r?.[9]?.status === "success" ? r[9].result : 0n,
+    pendingAssets:   r?.[4]?.status === "success" ? r[4].result : null,
+    claimableAssets: r?.[5]?.status === "success" ? r[5].result : null,
+    claimableShares: r?.[6]?.status === "success" ? r[6].result : null,
+    walletShares:    r?.[7]?.status === "success" ? r[7].result : null,
+    navAssets:       r?.[8]?.status === "success" ? r[8].result : null,
+    shareSupply:     r?.[9]?.status === "success" ? r[9].result : null,
+    pendingShares:   r?.[10]?.status === "success" ? r[10].result : null,
+    claimableRedeemShares: r?.[11]?.status === "success" ? r[11].result : null,
+    claimableRedeemAssets: r?.[12]?.status === "success" ? r[12].result : null,
     loading: assetRead.isLoading || batch.isLoading,
     refetch: () => {
       void assetRead.refetch();

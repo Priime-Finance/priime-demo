@@ -40,13 +40,13 @@
  */
 
 import Link from "next/link";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 
-import type { Journal } from "@priime-demo/journal-schema";
-import type { LoopRecord } from "@priime-demo/loop-deploy";
+import type { LoopRecord, StrikeRecord } from "@priime-demo/loop-deploy";
 
 import { ActivityTable, executionRows, verifyHref } from "./ActivitySection";
 import DepositCard from "./DepositCard";
+import RedeemCard from "./RedeemCard";
 import { MarketWord } from "./MarketWord";
 import type { Address } from "viem";
 import SectionTabs, { type TabSection } from "./SectionTabs";
@@ -57,6 +57,7 @@ import {
   journalExecutions,
   liveAttestationNote,
   liveAttestationRows,
+  observedKnobRows,
   liveQuorum,
   loopFacts,
   marketWords,
@@ -64,7 +65,7 @@ import {
 } from "./live-loop";
 import { truncateAddress } from "@/lib/format";
 import { AWAITING_LABEL, strikeRows } from "@/lib/vaults/attested";
-import { fetchLoop, fetchLoopJournals } from "@/lib/vaults/live-source";
+import { fetchLoop, fetchLoopJournals, pauseLoop } from "@/lib/vaults/live-source";
 import { withParamKinds } from "@/lib/vaults/param-kind";
 /* The product's one money format, from the same owner every other headline
    figure on a vault page reads. */
@@ -116,7 +117,7 @@ const NO_EXECUTIONS =
 type LoadState =
   | { kind: "loading" }
   | { kind: "unreachable"; message: string }
-  | { kind: "ready"; loop: LoopRecord; journals: Journal[] };
+  | { kind: "ready"; loop: LoopRecord; journals: StrikeRecord[] };
 
 export default function LiveLoopDetail({ id }: { id: string }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
@@ -155,6 +156,18 @@ export default function LiveLoopDetail({ id }: { id: string }) {
     const tick = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
+  const [pausing, setPausing] = useState<{ kind: "idle" } | { kind: "busy" } | { kind: "error"; message: string }>({ kind: "idle" });
+  const onPause = useCallback(async () => {
+    if (pausing.kind === "busy") return;
+    setPausing({ kind: "busy" });
+    try {
+      const res = await pauseLoop(id);
+      setState((prev) => (prev.kind === "ready" ? { ...prev, loop: res.loop } : prev));
+      setPausing({ kind: "idle" });
+    } catch (err) {
+      setPausing({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  }, [id, pausing.kind]);
 
   if (state.kind === "loading") return <div className="vx-root" />;
 
@@ -196,6 +209,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
   const facts = withParamKinds(loopFacts(loop, config, journals));
   const loopLedger = executionRows(journalExecutions(journals));
   const loopVerifiable = loopLedger.some((r) => verifyHref(r) !== null);
+  const observedKnobs = observedKnobRows(config, journals);
 
   return (
     <div className="vx-root vxd">
@@ -225,6 +239,27 @@ export default function LiveLoopDetail({ id }: { id: string }) {
             Strategist <b>{truncateAddress(loop.strategist)}</b>
           </span>
         </div>
+        {loop.status === "inactive" ? (
+          <p className="vxd-note vxd-note--muted">
+            Paused. Workflow removed from the service; operators no longer schedule strikes. On-chain vault (
+            {truncateAddress(loop.handlerAddress ?? "")}) still holds any deposited assets.
+          </p>
+        ) : (
+          <div className="vxd-actions">
+            <button
+              type="button"
+              className="vxd-btn vxd-btn--ghost"
+              onClick={() => { void onPause(); }}
+              disabled={pausing.kind === "busy"}
+              title="Stop the operator quorum from scheduling this loop's strikes"
+            >
+              {pausing.kind === "busy" ? "Pausing…" : "Pause loop"}
+            </button>
+            {pausing.kind === "error" ? (
+              <span className="vxd-note vxd-note--err">{pausing.message}</span>
+            ) : null}
+          </div>
+        )}
         <p className="vx-dsummary">{DEPLOYMENT_SUMMARY}</p>
       </header>
 
@@ -312,10 +347,13 @@ export default function LiveLoopDetail({ id }: { id: string }) {
                 </p>
               </div>
             ) : (
-              <DepositCard
-                handlerAddress={loop.handlerAddress as Address}
-                hasSettledStrike={settled > 0}
-              />
+              <>
+                <DepositCard
+                  handlerAddress={loop.handlerAddress as Address}
+                  hasSettledStrike={settled > 0}
+                />
+                <RedeemCard handlerAddress={loop.handlerAddress as Address} />
+              </>
             )}
           </section>
 
@@ -336,6 +374,60 @@ export default function LiveLoopDetail({ id }: { id: string }) {
                 <StrikeLedger strikes={strikes} />
               )}
             </div>
+            {strikes.length === 0 ? null : (
+              <div className="vx-panel vx-attest" style={{ marginTop: 16 }}>
+                <div className="vx-panel-h">Operator decisions</div>
+                <p className="vxd-desc vxd-desc--note">
+                  What the quorum decided this vault should do at each strike. Every step is a
+                  whitelisted-target calldata batch signed as part of the same payload the NAV rides
+                  in, so the operators cannot decide one thing and land another. Empty means they saw
+                  no action to take; rejected means the batch reverted on-chain (NAV attestation still
+                  landed) and the reason is the failing step&apos;s revert bytes.
+                </p>
+                {journals
+                  .slice()
+                  .sort((a, b) => b.inputs_block - a.inputs_block)
+                  .slice(0, 6)
+                  .map((j) => (
+                    <div key={j.strike_id} className="vx-kv vx-kv--prose">
+                      <span>
+                        strike {j.inputs_block} ·{" "}
+                        <span data-kind="hex">{j.plan.status}</span>
+                        {j.plan.stepCount === 0 ? null : ` · ${j.plan.stepCount} steps`}
+                      </span>
+                      <b data-kind="phrase">
+                        {j.plan.status === "empty"
+                          ? "no action"
+                          : j.plan.status === "rejected"
+                          ? `rejected: ${j.plan.reason ?? "no reason bytes"}`
+                          : j.plan.steps.map((s) => s.label).join(" -> ")}
+                      </b>
+                    </div>
+                  ))}
+              </div>
+            )}
+            {observedKnobs.length === 0 ? null : (
+              <div className="vx-panel vx-attest" style={{ marginTop: 16 }}>
+                <div className="vx-panel-h">Composer knobs, observed</div>
+                <p className="vxd-desc vxd-desc--note">
+                  Every strategist dial the operator quorum measures at the pinned inputs block.
+                  Configured is what the strategist published; measured is what the quorum attested
+                  in the payload. Both are cryptographically bound to the pinned service.json, so a
+                  single operator running a divergent config or reading a different block produces a
+                  divergent hash and gets outvoted.
+                </p>
+                {observedKnobs.map((r) => (
+                  <div key={r.key} className="vx-kv">
+                    <span>{r.label}</span>
+                    <b data-kind="phrase">
+                      {r.configured ?? "not set"}
+                      {" · "}
+                      {r.measured ?? "awaiting strike"}
+                    </b>
+                  </div>
+                ))}
+              </div>
+            )}
             {attestation.length === 0 ? null : (
               <div className="vx-panel vx-attest">
                 <div className="vx-panel-h">Attestation</div>

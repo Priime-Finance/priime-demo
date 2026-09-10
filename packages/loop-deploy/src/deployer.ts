@@ -123,7 +123,19 @@ export class LoopDeployer {
       const config: LoopConfig = validateLoopConfig(JSON.parse(record.configJson));
 
       if (record.handlerAddress === null) {
-        const handler = await this.chain.deployHandler(config.strategist);
+        const market = lookupMarket(config.candidateId);
+        if (market === null) {
+          throw new Error(`market catalog missing entry for ${config.candidateId}`);
+        }
+        const handler = await this.chain.deployHandler(config.strategist, {
+          collateralToken: market.usdeAddress,
+          morpho: market.morphoAddress,
+          morphoOracle: market.oracleAddress,
+          morphoIrm: market.irmAddress,
+          morphoLltv: BigInt(market.lltv),
+          swapRouter: market.swapRouter,
+          poolTickSpacing: market.poolTickSpacing,
+        });
         record = this.registry.update(id, { handlerAddress: handler, step: "handler_deployed", status: "deploying", error: null });
       }
 

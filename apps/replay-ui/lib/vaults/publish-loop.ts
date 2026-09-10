@@ -29,6 +29,16 @@ export interface PublishInput {
   candidateId: string;
   /** Target leverage the composer's safety-buffer slider settled on. */
   targetLeverage: number;
+  /**
+   * Every OTHER knob the composer tuned, string-encoded. Passed to
+   * loop-server verbatim and merged into the workflow's `componentConfig`
+   * on IPFS, so the operators re-execute EXACTLY what the user picked. The
+   * shape is a flat map by design: each key is a stable name the WASM
+   * component reads (risk_preset, hf_target_bps, compound_cadence_hours,
+   * exit_route_id, ...), each value the string form the composer stored it
+   * in. Absent -> `{}`, which loop-server treats as no extra knobs.
+   */
+  strategyParams?: Record<string, string>;
 }
 
 export interface PublishResult {
@@ -44,6 +54,7 @@ export async function publishLoopToServer(input: PublishInput): Promise<PublishR
     cronSeconds: DEMO_CRON_SECONDS,
     candidateId: input.candidateId,
     targetLeverage: input.targetLeverage,
+    strategyParams: input.strategyParams ?? {},
   };
   const { loop } = await createLoop(body);
   if (loop.handlerAddress === null) {

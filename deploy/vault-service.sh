@@ -75,6 +75,8 @@ ORACLE=$(cfg .morpho.market.params.oracle)
 IRM=$(cfg .morpho.market.params.irm)
 LLTV=$(cfg .morpho.market.params.lltv)
 POOL=$(cfg .swap_route.pool)
+ROUTER=$(cfg .swap_route.router)
+TICKS=$(cfg .swap_route.tick_spacing)
 CRON="$CRON_SCHEDULE"                             # per target: 10s on the fork, hourly on Base
 TWAP_WINDOW=$(cfg .service.twap_window_secs)
 BLOCK_LAG=$(cfg .service.inputs_block_lag)
@@ -318,6 +320,7 @@ mine_or_wait
 VAULT=$( cd "$ROOT/contracts" && forge create src/PriimeVault.sol:PriimeVault \
   --rpc-url "$RPC" --private-key "$K0" --broadcast \
   --constructor-args "$SM" "$USDC" "$STRATEGIST" \
+  "($USDE,$MORPHO,$ORACLE,$IRM,$LLTV,$ROUTER,$TICKS)" \
   | awk '/Deployed to/{print $NF}' )
 echo "vault: $VAULT (strategist $STRATEGIST)"
 # Alchemy-style load-balanced RPCs can return the deploy address from one
@@ -364,6 +367,7 @@ jq -n \
   --arg morpho_address "$MORPHO" --arg market_id "$MKT" --arg lltv "$LLTV" \
   --arg pool_address "$POOL" --arg twap_window_secs "$TWAP_WINDOW" \
   --arg inputs_block_lag "$BLOCK_LAG" \
+  --arg swap_router "$ROUTER" --arg pool_tick_spacing "$TICKS" \
   '$ARGS.named' > "$CLI_HOME/component-config.json"
 "${CLI[@]}" workflow component --id "$WID" config --config-file /data/component-config.json >/dev/null
 "${CLI[@]}" workflow submit    --id "$WID" set-aggregator >/dev/null

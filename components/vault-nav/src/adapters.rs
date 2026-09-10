@@ -63,6 +63,7 @@ pub struct ChainState {
     pub borrow_shares: u128,
     pub collateral_1e18: u128,
     pub total_borrow_assets: u128,
+    pub total_supply_assets: u128,
     pub total_borrow_shares: u128,
     pub market_last_update: u64,
     /// IRM average borrow rate, WAD per second, at `inputs_block`.
@@ -296,6 +297,7 @@ pub fn fetch_state(
             borrow_shares: pos.borrowShares,
             collateral_1e18: pos.collateral,
             total_borrow_assets: mkt.totalBorrowAssets,
+            total_supply_assets: mkt.totalSupplyAssets,
             total_borrow_shares: mkt.totalBorrowShares,
             market_last_update: mkt
                 .lastUpdate

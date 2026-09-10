@@ -28,7 +28,7 @@
  */
 
 import type { Journal } from "@priime-demo/journal-schema";
-import type { LoopRecord } from "@priime-demo/loop-deploy";
+import type { LoopRecord, Observations, StrikeRecord } from "@priime-demo/loop-deploy";
 
 import { candidateSegments } from "@/lib/canvas/ids";
 import { chainLabel, venueNoun } from "@/lib/canvas/labels";
@@ -61,6 +61,10 @@ export interface LoopConfigView {
   twapWindowSecs: number | null;
   /** Blocks behind the trigger the reads are pinned at (reorg depth). */
   inputsBlockLag: number | null;
+  /** Every composer knob, string-encoded, as loop-server stored it. Empty
+   *  object when none were sent. Names use the wire's snake_case so they
+   *  match the observation keys the component emits. */
+  strategyParams: Record<string, string>;
 }
 
 function str(source: Record<string, unknown>, key: string): string | null {
@@ -90,7 +94,19 @@ export function readLoopConfig(configJson: string): LoopConfigView | null {
     targetLeverage: num(cfg, "targetLeverage"),
     twapWindowSecs: num(cfg, "twapWindowSecs"),
     inputsBlockLag: num(cfg, "inputsBlockLag"),
+    strategyParams: readStrategyParams(cfg),
   };
+}
+
+/** Read strategyParams as a flat string map. Non-object -> empty. */
+function readStrategyParams(cfg: Record<string, unknown>): Record<string, string> {
+  const raw = cfg.strategyParams;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === "string") out[k] = v;
+  }
+  return out;
 }
 
 /**
@@ -404,6 +420,93 @@ export function liveAttestationRows(journals: readonly Journal[]): LoopFact[] {
         nav === null
           ? AWAITING_LABEL
           : `${formatAttestedNav(nav, newest.nav_unit.decimals)} ${newest.nav_unit.asset}`,
+    },
+  ];
+}
+
+/**
+ * Rows for the "Composer knobs, observed" panel: each composer knob that the
+ * component now attests against paired with the quorum-measured counterpart
+ * at the newest strike.
+ *
+ * The wiring is:
+ *   applied_leverage       -> leverageBps
+ *   hf_target_bps          -> ltvBps
+ *   hf_deleverage_bps      -> ltvBps
+ *   hf_floor_bps           -> ltvBps
+ *   reserve_fraction       -> reserveBps
+ *   collateral_yield_apy   -> supplyApyBps
+ *   compound_cadence_hours -> hoursSinceUpdate
+ *
+ * `configured` is what the strategist published; `measured` is what the
+ * quorum attested. `null` on either side means "no strike yet" (measured)
+ * or "strategist did not set this" (configured). The row is emitted either
+ * way so the user can see which dials the composer surfaced.
+ *
+ * Every measured value is deterministic from chain state at `inputs_block`,
+ * so two operators running the same config produce identical bytes and any
+ * per-operator lie shows up as a divergent hash outside the quorum.
+ */
+export interface ObservedKnob {
+  key: string;
+  label: string;
+  configured: string | null;
+  measured: string | null;
+}
+
+export function observedKnobRows(
+  config: LoopConfigView | null,
+  strikes: readonly StrikeRecord[],
+): ObservedKnob[] {
+  const params = config?.strategyParams ?? {};
+  const newest = [...strikes].sort((a, b) => b.inputs_block - a.inputs_block)[0] ?? null;
+  const obs: Observations | null = newest?.observations ?? null;
+
+  const fromBps = (bps: number, suffix = "x"): string =>
+    suffix === "x" ? `${(bps / 10_000).toFixed(2)}${suffix}` : `${(bps / 100).toFixed(2)}%`;
+
+  return [
+    {
+      key: "applied_leverage",
+      label: "Applied leverage",
+      configured: params.applied_leverage ? `${params.applied_leverage}x` : null,
+      measured: obs === null ? null : fromBps(obs.leverageBps, "x"),
+    },
+    {
+      key: "hf_target_bps",
+      label: "HF target",
+      configured: params.hf_target_bps ? `${params.hf_target_bps} bps LTV target` : null,
+      measured: obs === null ? null : `${obs.ltvBps} bps LTV`,
+    },
+    {
+      key: "hf_deleverage_bps",
+      label: "HF deleverage trigger",
+      configured: params.hf_deleverage_bps ? `${params.hf_deleverage_bps} bps LTV trim` : null,
+      measured: obs === null ? null : `${obs.ltvBps} bps LTV`,
+    },
+    {
+      key: "hf_floor_bps",
+      label: "HF floor",
+      configured: params.hf_floor_bps ? `${params.hf_floor_bps} bps below LLTV` : null,
+      measured: obs === null ? null : `${obs.ltvBps} bps LTV`,
+    },
+    {
+      key: "reserve_fraction",
+      label: "USDC reserve",
+      configured: params.reserve_fraction ? `${params.reserve_fraction}` : null,
+      measured: obs === null ? null : fromBps(obs.reserveBps, "%"),
+    },
+    {
+      key: "collateral_yield_apy",
+      label: "Supply APY",
+      configured: params.collateral_yield_apy ? `${params.collateral_yield_apy}%` : null,
+      measured: obs === null ? null : fromBps(obs.supplyApyBps, "%"),
+    },
+    {
+      key: "compound_cadence_hours",
+      label: "Compound cadence",
+      configured: params.compound_cadence_hours ? `${params.compound_cadence_hours} h` : null,
+      measured: obs === null ? null : `${obs.hoursSinceUpdate} h since market update`,
     },
   ];
 }

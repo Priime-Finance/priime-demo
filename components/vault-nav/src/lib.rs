@@ -74,6 +74,127 @@ mod component {
             .map_err(|e| format!("bad u64 in config {key}: {e}"))
     }
 
+    /// Read an optional workflow config var. Absent -> None, present -> Some.
+    /// Composer knobs use this because a legacy publish predating the composer
+    /// simply omits the key; the operator must not fail the cycle for that.
+    fn cfg_opt(key: &str) -> Option<String> {
+        host::config_var(key)
+    }
+
+    /// A knob is "meaningfully set" iff its value is present and not empty,
+    /// zero, or a numeric noise value the composer sends for an unset dial.
+    /// The composer forwards every knob it draws (see PublishFlow.tsx), so
+    /// the reader can't distinguish "user unset" from "user picked zero"
+    /// unless we treat zero-ish strings as unset here. Downstream: refuse
+    /// checks and observation computations both share this predicate.
+    fn is_meaningfully_set(key: &str) -> bool {
+        match cfg_opt(key) {
+            None => false,
+            Some(v) => {
+                let t = v.trim();
+                !(t.is_empty() || t == "0" || t == "0.0" || t == "0.00")
+            }
+        }
+    }
+
+    /// Fail the cycle if the strategist configured a knob the component
+    /// cannot honor. The composer surface currently shows hedge, perp, and
+    /// redemption-routing dials that describe strategies THIS vault-nav
+    /// component does not run. Attesting NAV for a strategy the component
+    /// silently ignores is the lie the whole demo is against; refuse
+    /// instead. Loop-server also rejects these at validation, this is
+    /// belt-and-suspenders at run time. When a component honors any of them
+    /// (a hedge leg, a perp margin manager, a redemption router), remove
+    /// its key from this list at the same time.
+    fn refuse_unimplemented() -> Result<(), String> {
+        const UNIMPLEMENTED: &[(&str, &str)] = &[
+            ("hedge_leverage", "hedge leg not implemented"),
+            ("delta_band_pct", "delta-neutral hedging not implemented"),
+            ("margin_trim_pct", "perp margin management not implemented"),
+            (
+                "margin_restore_pct",
+                "perp margin management not implemented",
+            ),
+            (
+                "funding_floor_apr",
+                "perp funding-rate check not implemented",
+            ),
+            ("hl_coin", "HyperLiquid perp leg not implemented"),
+            ("exit_route_id", "redemption venue routing not implemented"),
+            (
+                "exit_settlement_days",
+                "off-ramp settlement window not implemented",
+            ),
+        ];
+        for (key, why) in UNIMPLEMENTED {
+            if is_meaningfully_set(key) {
+                return Err(format!(
+                    "config knob {key} is set but {why}; remove the knob or publish against a component that honors it"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Canonical bytes of every workflow config key/value pair we know about,
+    /// keccak256'd. Present keys are appended in lexicographic order as
+    /// `key=value\n`; absent keys contribute nothing. Every operator with the
+    /// same service.json therefore produces the same hash; anyone tampering
+    /// with any tracked field produces a different one, its result hash
+    /// diverges, and the quorum outvotes it.
+    ///
+    /// The list is closed because WAVS gives us no config-enumeration API - we
+    /// name every key the deploy pipeline can emit. New composer knobs must
+    /// land here at the same time they land in loop-server's componentConfig
+    /// output, or the hash silently drops them (and the "cannot lie" property
+    /// with it). loop-deploy owns the write side; this list owns the read.
+    fn config_hash() -> FixedBytes<32> {
+        const KEYS: &[&str] = &[
+            "applied_leverage",
+            "capacity_binding",
+            "chain_id",
+            "collateral_yield_apy",
+            "compound_cadence_hours",
+            "compound_threshold_usd",
+            "delta_band_pct",
+            "exit_route_id",
+            "exit_settlement_days",
+            "funding_floor_apr",
+            "hedge_leverage",
+            "hf_deleverage_bps",
+            "hf_floor_bps",
+            "hf_target_bps",
+            "hl_coin",
+            "inputs_block_lag",
+            "irm_address",
+            "lltv",
+            "margin_restore_pct",
+            "margin_trim_pct",
+            "market_id",
+            "morpho_address",
+            "oracle_address",
+            "pool_address",
+            "pool_tick_spacing",
+            "reserve_fraction",
+            "risk_preset",
+            "swap_router",
+            "twap_window_secs",
+            "usdc_address",
+            "usde_address",
+            "vault_address",
+        ];
+        let mut buf: Vec<u8> = Vec::new();
+        for key in KEYS {
+            if let Some(value) = cfg_opt(key) {
+                buf.extend_from_slice(key.as_bytes());
+                buf.push(b'=');
+                buf.extend_from_slice(value.as_bytes());
+                buf.push(b'\n');
+            }
+        }
+        alloy_primitives::keccak256(&buf)
+    }
+
     fn rpc_url() -> Result<String, String> {
         let chain_id = cfg("chain_id")?;
         let chain = host::get_evm_chain_config(&chain_id)
@@ -84,6 +205,12 @@ mod component {
     }
 
     fn run_cycle(trigger_time_secs: u64) -> Result<Vec<u8>, String> {
+        // Belt-and-suspenders against a composer that offers dials the
+        // component cannot honor. Loop-server's config validator has the
+        // canonical enforcement; this catches any config that reaches wasm
+        // with a knob we cannot attest against.
+        refuse_unimplemented()?;
+
         let vault = cfg_address("vault_address")?;
         let market_id: FixedBytes<32> = cfg("market_id")?
             .parse()
@@ -102,9 +229,6 @@ mod component {
             pool: cfg_address("pool_address")?,
             usdc,
             vault,
-            // observe() takes uint32 secondsAgos, so an out-of-range window
-            // must fail the cycle rather than silently truncate to a
-            // different (and per-config wrong) TWAP.
             twap_window_secs: u32::try_from(cfg_u64("twap_window_secs")?).map_err(|_| {
                 "twap_window_secs exceeds u32 (observe secondsAgos is uint32)".to_string()
             })?,
@@ -113,8 +237,6 @@ mod component {
 
         let s = fetch_state(rpc_url()?, &targets, trigger_time_secs)?;
 
-        // Degenerate market clock states fail the cycle (idiom: a zero or
-        // future-dated lastUpdate cannot support a sound accrual).
         if s.market_last_update == 0 || s.market_last_update > s.block_timestamp {
             return Err(format!(
                 "market lastUpdate {} incoherent with block timestamp {}",
@@ -126,11 +248,26 @@ mod component {
         let accrued = nav::accrued_total_borrow(s.total_borrow_assets, s.borrow_rate_wad, elapsed);
         let debt = nav::borrow_assets_up(s.borrow_shares, accrued, s.total_borrow_shares);
 
-        // The effective window, not the configured one: the adapter clamps to
-        // what the pool's observation ring can actually answer, and the
-        // divisor must match the secondsAgos that produced the cumulatives.
         let tick = nav::avg_tick(s.tick_cum_old, s.tick_cum_new, s.twap_window_effective_secs)?;
-        let price = nav::bounded_price_1e24(nav::price_1e24_at_tick(tick)?);
+        let twap_price = nav::price_1e24_at_tick(tick)?;
+
+        // Composer knobs that CHANGE the attested NAV or fail the cycle.
+        // See `refuse_unimplemented()` for knobs the component cannot honor
+        // and the observation bag below for knobs bound as attested numbers.
+        let preset = match cfg_opt("risk_preset") {
+            Some(s) => nav::RiskPreset::parse(&s)?,
+            None => nav::RiskPreset::Standard,
+        };
+        let hf_floor_bps: u16 = match cfg_opt("hf_floor_bps") {
+            Some(s) => s
+                .parse()
+                .map_err(|e| format!("bad hf_floor_bps in config: {e}"))?,
+            None => 0,
+        };
+
+        nav::check_hf_floor(s.collateral_1e18, debt, hf_floor_bps, lltv)?;
+
+        let price = nav::preset_collateral_price_1e24(twap_price, preset);
 
         let value = nav::nav_usdc(
             s.collateral_1e18,
@@ -141,7 +278,180 @@ mod component {
             s.total_claimable_redeem,
         )?;
 
-        Ok(nav::encode_payload(vault, value, s.inputs_block))
+        // Per-strike observations. Each maps to a composer knob the strategist
+        // set at publish; downstream verifiers compare configured vs measured
+        // and gate downstream actions on the difference. See
+        // `nav::encode_payload` for the on-chain shape.
+        //   applied_leverage      -> leverage_bps
+        //   hf_target_bps         -> ltv_bps
+        //   hf_deleverage_bps     -> ltv_bps
+        //   reserve_fraction      -> reserve_bps
+        //   collateral_yield_apy  -> supply_apy_bps
+        //   compound_cadence_hours -> hours_since_update
+        // Every value is deterministic from chain state at `inputs_block`, so
+        // two operators running the same config produce identical bytes.
+        let utilization_bps = nav::utilization_bps(s.total_borrow_assets, s.total_supply_assets);
+        let obs = nav::Observations {
+            leverage_bps: nav::measured_leverage_bps(s.collateral_1e18, debt),
+            ltv_bps: nav::measured_ltv_bps(s.collateral_1e18, debt),
+            reserve_bps: nav::measured_reserve_bps(s.vault_usdc_balance, value),
+            supply_apy_bps: nav::measured_supply_apy_bps(s.borrow_rate_wad, utilization_bps),
+            hours_since_update: nav::hours_between(s.market_last_update, s.block_timestamp),
+        };
+
+        // Read the strategist's per-knob invariants and fail the cycle when
+        // the measured observation breaches them. Each check is skipped when
+        // the vault is not in a state the invariant applies to (no debt, no
+        // NAV, no policy declared), so a freshly published vault attests
+        // deterministically before any strategist action has landed.
+        if let Some(raw) = cfg_opt("applied_leverage") {
+            let configured_bps = nav::parse_decimal_bps(&raw)?;
+            // 25% tolerance band: 2.5x published lets the position sit in
+            // [1.875x, 3.125x] before the cycle refuses.
+            nav::check_applied_leverage_drift(obs.leverage_bps, configured_bps, 2_500, debt)?;
+        }
+        if let Some(raw) = cfg_opt("hf_deleverage_bps") {
+            let deleverage_bps: u32 = raw
+                .trim()
+                .parse()
+                .map_err(|e| format!("bad hf_deleverage_bps in config: {e}"))?;
+            nav::check_deleverage_threshold(obs.ltv_bps, deleverage_bps, debt)?;
+        }
+        if let Some(raw) = cfg_opt("reserve_fraction") {
+            let floor_bps = nav::parse_decimal_bps(&raw)?;
+            nav::check_reserve_floor(obs.reserve_bps, floor_bps, value)?;
+        }
+        if let Some(raw) = cfg_opt("compound_cadence_hours") {
+            let cadence_hours: u32 = raw
+                .trim()
+                .parse()
+                .map_err(|e| format!("bad compound_cadence_hours in config: {e}"))?;
+            // Six-hour grace: a missed cron beat does not immediately kill
+            // an otherwise healthy vault.
+            nav::check_compound_cadence(obs.hours_since_update, cadence_hours, 6)?;
+        }
+
+        // Compose the on-chain action plan the vault will dispatch after
+        // NAV settlement. The recursive USDe/USDC loop only ships an
+        // OpenPosition step today: swap idle USDC into USDe via the pinned
+        // Aerodrome pool, supply as Morpho collateral, and borrow the exact
+        // amount that lands the position at `applied_leverage`. Everything
+        // else (deleverage, compound, unwind) is a NoOp for now — the vault
+        // sits at target and NAV keeps attesting.
+        let plan = build_action_plan(&s, debt, value, twap_price)?;
+
+        Ok(nav::encode_payload(
+            vault,
+            value,
+            s.inputs_block,
+            config_hash(),
+            obs,
+            plan,
+        ))
+    }
+
+    /// Decide the plan for this strike from state + composer knobs.
+    /// Returns an empty plan when either the vault has no strategy to run
+    /// (no `applied_leverage` configured), or is already at target, or has
+    /// no free USDC to deploy.
+    fn build_action_plan(
+        s: &crate::adapters::ChainState,
+        debt: U256,
+        nav_value: U256,
+        twap_price_1e24: U256,
+    ) -> Result<nav::PlanBuild, String> {
+        let vault = cfg_address("vault_address")?;
+        let usdc = cfg_address("usdc_address")?;
+        let usde = cfg_address("usde_address")?;
+        let morpho = cfg_address("morpho_address")?;
+
+        // Swap route: composer publishes address + tick spacing. Missing
+        // either -> no plan (the vault has no way to swap). This is not a
+        // cycle-fail: the strike still attests NAV; the action stays empty.
+        let swap_router = match cfg_opt("swap_router") {
+            Some(v) => match v.trim().parse::<alloy_primitives::Address>() {
+                Ok(a) => a,
+                Err(_) => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
+            },
+            None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
+        };
+        let tick_spacing: i32 = match cfg_opt("pool_tick_spacing") {
+            Some(v) => v
+                .trim()
+                .parse()
+                .map_err(|e| format!("bad pool_tick_spacing: {e}"))?,
+            None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
+        };
+
+        let configured_leverage_bps = match cfg_opt("applied_leverage") {
+            Some(v) => nav::parse_decimal_bps(&v)?,
+            None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
+        };
+        if configured_leverage_bps <= 10_000 {
+            return Ok(nav::PlanBuild::empty(s.block_timestamp));
+        }
+
+        // Already-holding-a-position path: skip if measured leverage is
+        // within 15% of target. Rebalancing (increase/deleverage) is a
+        // follow-up plan shape we can add without changing the payload.
+        if !debt.is_zero() {
+            let measured = nav::measured_leverage_bps(s.collateral_1e18, debt);
+            let lo = configured_leverage_bps.saturating_sub(configured_leverage_bps / 7);
+            let hi = configured_leverage_bps.saturating_add(configured_leverage_bps / 7);
+            if measured >= lo && measured <= hi {
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            }
+            return Ok(nav::PlanBuild::empty(s.block_timestamp));
+        }
+
+        // Deployable USDC = balance - reserved (pending deposits already
+        // fulfill BEFORE the plan runs; claimable redeems are already
+        // reserved). Fold-in of a fresh deposit lands as `nav_value` so use
+        // that as the deployable ceiling.
+        let usable_usdc = U256::from(nav_value.min(U256::from(s.vault_usdc_balance)));
+        if usable_usdc < U256::from(1_000_000u64) {
+            return Ok(nav::PlanBuild::empty(s.block_timestamp));
+        }
+        // Leave a 1% cushion so a small pool tick move between operator
+        // read and vault execution does not push the swap under
+        // amountOutMinimum.
+        let deploy_amount = usable_usdc * U256::from(99u16) / U256::from(100u16);
+        if deploy_amount < U256::from(1_000_000u64) {
+            return Ok(nav::PlanBuild::empty(s.block_timestamp));
+        }
+
+        // Rebuild the market params tuple the plan encoder needs.
+        let market_params: (
+            alloy_primitives::Address,
+            alloy_primitives::Address,
+            alloy_primitives::Address,
+            alloy_primitives::Address,
+            U256,
+        ) = (
+            usdc,
+            usde,
+            cfg_address("oracle_address")?,
+            cfg_address("irm_address")?,
+            cfg("lltv")?.parse().map_err(|e| format!("bad lltv: {e}"))?,
+        );
+
+        // Slippage: 50 bps against the pinned TWAP. Deadline 300 s past
+        // inputs_block_ts so a normal cron submission window fits.
+        let plan = nav::plan_open_position(
+            vault,
+            usdc,
+            usde,
+            morpho,
+            swap_router,
+            tick_spacing,
+            market_params,
+            deploy_amount,
+            twap_price_1e24,
+            50,
+            configured_leverage_bps,
+            s.block_timestamp + 300,
+        );
+        Ok(plan)
     }
 
     impl Guest for Component {
