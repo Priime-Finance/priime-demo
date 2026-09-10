@@ -75,11 +75,12 @@ export interface JournalReader {
 }
 
 /**
- * payload = abi.encode(
- *   address handler, uint256 nav, uint256 inputsBlock, bytes32 configHash,
- *   uint32 leverageBps, uint32 ltvBps, uint32 reserveBps,
- *   uint32 supplyApyBps, uint32 hoursSinceUpdate
- * ).
+ * payload = abi.encode(BoundNavResult) where BoundNavResult is a Solidity
+ * struct containing (handler, nav, inputsBlock, configHash, five uint32
+ * observations, StrategyPlan). Because the struct has a dynamic field
+ * (StrategyPlan carries dynamic arrays), the encoding is Solidity's
+ * single-element-tuple wrapper: one 32-byte offset word followed by the
+ * struct body. viem/alloy round-trip cleanly on the `tuple` shape below.
  *
  * Only the first three fields drive `Journal` today (the handler binding
  * check, the attested nav, and the inputs_block cross-check); the rest ride
@@ -88,15 +89,30 @@ export interface JournalReader {
  * any mismatch fails decoding rather than silently reading stale bytes.
  */
 const PAYLOAD_TUPLE = [
-  { type: "address", name: "handler" },
-  { type: "uint256", name: "nav" },
-  { type: "uint256", name: "inputsBlock" },
-  { type: "bytes32", name: "configHash" },
-  { type: "uint32", name: "leverageBps" },
-  { type: "uint32", name: "ltvBps" },
-  { type: "uint32", name: "reserveBps" },
-  { type: "uint32", name: "supplyApyBps" },
-  { type: "uint32", name: "hoursSinceUpdate" },
+  {
+    type: "tuple",
+    name: "result",
+    components: [
+      { type: "address", name: "handler" },
+      { type: "uint256", name: "nav" },
+      { type: "uint256", name: "inputsBlock" },
+      { type: "bytes32", name: "configHash" },
+      { type: "uint32", name: "leverageBps" },
+      { type: "uint32", name: "ltvBps" },
+      { type: "uint32", name: "reserveBps" },
+      { type: "uint32", name: "supplyApyBps" },
+      { type: "uint32", name: "hoursSinceUpdate" },
+      {
+        type: "tuple",
+        name: "plan",
+        components: [
+          { type: "address[]", name: "targets" },
+          { type: "bytes[]", name: "calldatas" },
+          { type: "uint256", name: "timestamp" },
+        ],
+      },
+    ],
+  },
 ] as const;
 
 /** Envelope tuple as WAVS signs it. */
@@ -189,17 +205,17 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           continue;
         }
 
-        const [
-          payloadHandler,
-          payloadNav,
-          payloadInputsBlock,
-          ,
+        const [result] = decodeAbiParameters(PAYLOAD_TUPLE, envelope.payload);
+        const {
+          handler: payloadHandler,
+          nav: payloadNav,
+          inputsBlock: payloadInputsBlock,
           leverageBps,
           ltvBps,
           reserveBps,
           supplyApyBps,
           hoursSinceUpdate,
-        ] = decodeAbiParameters(PAYLOAD_TUPLE, envelope.payload);
+        } = result;
         if (payloadHandler.toLowerCase() !== vault) continue;
         if (payloadInputsBlock !== args.inputsBlock) {
           throw new Error(

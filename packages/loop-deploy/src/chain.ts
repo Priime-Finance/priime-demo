@@ -39,9 +39,19 @@ const MANAGER_ABI = [
   },
 ] as const;
 
+export interface StrategyConfig {
+  collateralToken: string;
+  morpho: string;
+  morphoOracle: string;
+  morphoIrm: string;
+  morphoLltv: bigint;
+  swapRouter: string;
+  poolTickSpacing: number;
+}
+
 export interface ChainPort {
-  /** Deploy a PriimeVault(serviceManager, asset, strategist). Returns the address. */
-  deployHandler(strategist: string): Promise<string>;
+  /** Deploy a PriimeVault(serviceManager, asset, strategist, StrategyConfig). Returns the address. */
+  deployHandler(strategist: string, strategy: StrategyConfig): Promise<string>;
   getServiceUri(): Promise<string>;
   /** Set the manager's service URI and wait for inclusion. Returns the tx hash. */
   setServiceUri(uri: string): Promise<string>;
@@ -96,11 +106,24 @@ export function makeChain(options: ChainOptions): ChainPort {
   const artifact = loadHandlerArtifact(options.artifactPath);
 
   return {
-    async deployHandler(strategist: string): Promise<string> {
+    async deployHandler(strategist: string, strategy: StrategyConfig): Promise<string> {
       const hash = await walletClient.deployContract({
         abi: artifact.abi,
         bytecode: artifact.bytecode,
-        args: [manager, asset, strategist as Address],
+        args: [
+          manager,
+          asset,
+          strategist as Address,
+          {
+            collateralToken: strategy.collateralToken as Address,
+            morpho: strategy.morpho as Address,
+            morphoOracle: strategy.morphoOracle as Address,
+            morphoIrm: strategy.morphoIrm as Address,
+            morphoLltv: strategy.morphoLltv,
+            swapRouter: strategy.swapRouter as Address,
+            poolTickSpacing: strategy.poolTickSpacing,
+          },
+        ],
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success" || receipt.contractAddress === null || receipt.contractAddress === undefined) {

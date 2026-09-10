@@ -138,7 +138,21 @@ contract PriimeVaultTest {
 
         usdc = new TestUSDC();
         manager = new ToggleableServiceManager();
-        vault = new PriimeVault(IWavsServiceManager(address(manager)), IERC20(address(usdc)), STRATEGIST);
+        PriimeVault.StrategyConfig memory strategyConfig = PriimeVault.StrategyConfig({
+            collateralToken: address(0xC0),
+            morpho: address(0xD1),
+            morphoOracle: address(0x02),
+            morphoIrm: address(0x03),
+            morphoLltv: 915_000_000_000_000_000,
+            swapRouter: address(0x04),
+            poolTickSpacing: int24(1)
+        });
+        vault = new PriimeVault(
+            IWavsServiceManager(address(manager)),
+            IERC20(address(usdc)),
+            STRATEGIST,
+            strategyConfig
+        );
 
         usdc.mint(ALICE, 1_000_000 * ONE_USDC);
         usdc.mint(BOB, 1_000_000 * ONE_USDC);
@@ -166,23 +180,29 @@ contract PriimeVaultTest {
         view
         returns (IWavsServiceHandler.Envelope memory)
     {
+        PriimeVault.BoundNavResult memory result = PriimeVault.BoundNavResult({
+            handler: address(vault),
+            nav: nav,
+            inputsBlock: inputsBlock,
+            configHash: configHash,
+            leverageBps: 0,
+            ltvBps: 0,
+            reserveBps: 0,
+            supplyApyBps: 0,
+            hoursSinceUpdate: 0,
+            plan: PriimeVault.StrategyPlan({
+                targets: new address[](0),
+                calldatas: new bytes[](0),
+                timestamp: 0
+            })
+        });
         return IWavsServiceHandler.Envelope({
             eventId: eventId,
             ordering: bytes12(0),
-            // abi.encode(handler, nav, inputsBlock, configHash, five uint32
-            // observation fields), bound to this vault. Zero observations
-            // are legal: an empty vault attests all zeros deterministically.
-            payload: abi.encode(
-                address(vault),
-                nav,
-                inputsBlock,
-                configHash,
-                uint32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0)
-            )
+            // abi.encode(BoundNavResult) mirrors the component's
+            // struct.abi_encode() — a single dynamic tuple with the 0x20
+            // leading offset word.
+            payload: abi.encode(result)
         });
     }
 
@@ -810,15 +830,22 @@ contract PriimeVaultTest {
             eventId: bytes20(uint160(1)),
             ordering: bytes12(0),
             payload: abi.encode(
-                other,
-                uint256(1_000 * ONE_USDC),
-                uint256(100),
-                bytes32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0)
+                PriimeVault.BoundNavResult({
+                    handler: other,
+                    nav: uint256(1_000 * ONE_USDC),
+                    inputsBlock: uint256(100),
+                    configHash: bytes32(0),
+                    leverageBps: 0,
+                    ltvBps: 0,
+                    reserveBps: 0,
+                    supplyApyBps: 0,
+                    hoursSinceUpdate: 0,
+                    plan: PriimeVault.StrategyPlan({
+                        targets: new address[](0),
+                        calldatas: new bytes[](0),
+                        timestamp: 0
+                    })
+                })
             )
         });
 
@@ -988,15 +1015,22 @@ contract PriimeVaultTest {
             eventId: bytes20(uint160(0x5E11)),
             ordering: bytes12(uint96(0xABCDEF)), // non-zero, so a dropped word would show
             payload: abi.encode(
-                address(vault),
-                uint256(1_234 * ONE_USDC),
-                uint256(7),
-                bytes32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0)
+                PriimeVault.BoundNavResult({
+                    handler: address(vault),
+                    nav: uint256(1_234 * ONE_USDC),
+                    inputsBlock: uint256(7),
+                    configHash: bytes32(0),
+                    leverageBps: 0,
+                    ltvBps: 0,
+                    reserveBps: 0,
+                    supplyApyBps: 0,
+                    hoursSinceUpdate: 0,
+                    plan: PriimeVault.StrategyPlan({
+                        targets: new address[](0),
+                        calldatas: new bytes[](0),
+                        timestamp: 0
+                    })
+                })
             )
         });
 
@@ -1021,15 +1055,22 @@ contract PriimeVaultTest {
             eventId: bytes20(uint160(0x5E12)),
             ordering: bytes12(uint96(0xABCDEF)),
             payload: abi.encode(
-                address(vault),
-                uint256(1_235 * ONE_USDC),
-                uint256(8),
-                bytes32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0),
-                uint32(0)
+                PriimeVault.BoundNavResult({
+                    handler: address(vault),
+                    nav: uint256(1_235 * ONE_USDC),
+                    inputsBlock: uint256(8),
+                    configHash: bytes32(0),
+                    leverageBps: 0,
+                    ltvBps: 0,
+                    reserveBps: 0,
+                    supplyApyBps: 0,
+                    hoursSinceUpdate: 0,
+                    plan: PriimeVault.StrategyPlan({
+                        targets: new address[](0),
+                        calldatas: new bytes[](0),
+                        timestamp: 0
+                    })
+                })
             )
         });
         vm.expectRevert(

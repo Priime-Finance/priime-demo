@@ -165,8 +165,10 @@ mod component {
             "morpho_address",
             "oracle_address",
             "pool_address",
+            "pool_tick_spacing",
             "reserve_fraction",
             "risk_preset",
+            "swap_router",
             "twap_window_secs",
             "usdc_address",
             "usde_address",
@@ -320,7 +322,112 @@ mod component {
             nav::check_compound_cadence(obs.hours_since_update, cadence_hours, 6)?;
         }
 
-        Ok(nav::encode_payload(vault, value, s.inputs_block, config_hash(), obs))
+
+        // Compose the on-chain action plan the vault will dispatch after
+        // NAV settlement. The recursive USDe/USDC loop only ships an
+        // OpenPosition step today: swap idle USDC into USDe via the pinned
+        // Aerodrome pool, supply as Morpho collateral, and borrow the exact
+        // amount that lands the position at `applied_leverage`. Everything
+        // else (deleverage, compound, unwind) is a NoOp for now — the vault
+        // sits at target and NAV keeps attesting.
+        let plan = build_action_plan(&s, debt, value, twap_price)?;
+
+        Ok(nav::encode_payload(vault, value, s.inputs_block, config_hash(), obs, plan))
+    }
+
+    /// Decide the plan for this strike from state + composer knobs.
+    /// Returns an empty plan when either the vault has no strategy to run
+    /// (no `applied_leverage` configured), or is already at target, or has
+    /// no free USDC to deploy.
+    fn build_action_plan(
+        s: &crate::adapters::ChainState,
+        debt: U256,
+        nav_value: U256,
+        twap_price_1e24: U256,
+    ) -> Result<nav::PlanBuild, String> {
+        let vault = cfg_address("vault_address")?;
+        let usdc = cfg_address("usdc_address")?;
+        let usde = cfg_address("usde_address")?;
+        let morpho = cfg_address("morpho_address")?;
+
+        // Swap route: composer publishes address + tick spacing. Missing
+        // either -> no plan (the vault has no way to swap). This is not a
+        // cycle-fail: the strike still attests NAV; the action stays empty.
+        let swap_router = match cfg_opt("swap_router") {
+            Some(v) => match v.trim().parse::<alloy_primitives::Address>() {
+                Ok(a) => a,
+                Err(_) => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
+            },
+            None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
+        };
+        let tick_spacing: i32 = match cfg_opt("pool_tick_spacing") {
+            Some(v) => v.trim().parse().map_err(|e| format!("bad pool_tick_spacing: {e}"))?,
+            None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
+        };
+
+        let configured_leverage_bps = match cfg_opt("applied_leverage") {
+            Some(v) => nav::parse_decimal_bps(&v)?,
+            None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
+        };
+        if configured_leverage_bps <= 10_000 {
+            return Ok(nav::PlanBuild::empty(s.block_timestamp));
+        }
+
+        // Already-holding-a-position path: skip if measured leverage is
+        // within 15% of target. Rebalancing (increase/deleverage) is a
+        // follow-up plan shape we can add without changing the payload.
+        if !debt.is_zero() {
+            let measured = nav::measured_leverage_bps(s.collateral_1e18, debt);
+            let lo = configured_leverage_bps.saturating_sub(configured_leverage_bps / 7);
+            let hi = configured_leverage_bps.saturating_add(configured_leverage_bps / 7);
+            if measured >= lo && measured <= hi {
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            }
+            return Ok(nav::PlanBuild::empty(s.block_timestamp));
+        }
+
+        // Deployable USDC = balance - reserved (pending deposits already
+        // fulfill BEFORE the plan runs; claimable redeems are already
+        // reserved). Fold-in of a fresh deposit lands as `nav_value` so use
+        // that as the deployable ceiling.
+        let usable_usdc = U256::from(nav_value.min(U256::from(s.vault_usdc_balance)));
+        if usable_usdc < U256::from(1_000_000u64) {
+            return Ok(nav::PlanBuild::empty(s.block_timestamp));
+        }
+        // Leave a 1% cushion so a small pool tick move between operator
+        // read and vault execution does not push the swap under
+        // amountOutMinimum.
+        let deploy_amount = usable_usdc * U256::from(99u16) / U256::from(100u16);
+        if deploy_amount < U256::from(1_000_000u64) {
+            return Ok(nav::PlanBuild::empty(s.block_timestamp));
+        }
+
+        // Rebuild the market params tuple the plan encoder needs.
+        let market_params: (
+            alloy_primitives::Address,
+            alloy_primitives::Address,
+            alloy_primitives::Address,
+            alloy_primitives::Address,
+            U256,
+        ) = (usdc, usde, cfg_address("oracle_address")?, cfg_address("irm_address")?, cfg("lltv")?.parse().map_err(|e| format!("bad lltv: {e}"))?);
+
+        // Slippage: 50 bps against the pinned TWAP. Deadline 300 s past
+        // inputs_block_ts so a normal cron submission window fits.
+        let plan = nav::plan_open_position(
+            vault,
+            usdc,
+            usde,
+            morpho,
+            swap_router,
+            tick_spacing,
+            market_params,
+            deploy_amount,
+            twap_price_1e24,
+            50,
+            configured_leverage_bps,
+            s.block_timestamp + 300,
+        );
+        Ok(plan)
     }
 
     impl Guest for Component {

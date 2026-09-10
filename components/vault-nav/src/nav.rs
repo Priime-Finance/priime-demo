@@ -16,7 +16,7 @@
 //!   below the floor fails the cycle instead of attesting a wrong number.
 
 use alloy_primitives::{Address, FixedBytes, U256, U512};
-use alloy_sol_types::{sol, SolValue};
+use alloy_sol_types::{sol, SolCall, SolValue};
 
 /// WAD (1e18), the fixed-point base of Morpho rate math.
 pub const WAD: u128 = 1_000_000_000_000_000_000;
@@ -66,7 +66,196 @@ sol! {
         /// Hours between the market's last accrual and `inputs_block`. A
         /// stale market means the strike is measuring an old snapshot.
         uint32 hoursSinceUpdate;
+        /// Quorum-signed on-chain action batch the vault dispatches AFTER
+        /// NAV settlement. Empty when the component chose to hold. Each
+        /// operator running the same config computes identical bytes here;
+        /// a divergent target or calldata means a divergent hash and the
+        /// quorum outvotes it. Vault enforces target whitelist + escrow
+        /// floor at execution time.
+        StrategyPlan plan;
     }
+
+    struct StrategyPlan {
+        address[] targets;
+        bytes[] calldatas;
+        uint256 timestamp;
+    }
+}
+
+sol! {
+    // Call-site ABIs the operator quorum encodes into StrategyPlan calldatas.
+    // Nothing here is called from Rust; the sol! macro just emits abi encoders
+    // for each selector so a two-line change to a target signature would fail
+    // to compile against these.
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    struct MorphoMarketParams {
+        address loanToken;
+        address collateralToken;
+        address oracle;
+        address irm;
+        uint256 lltv;
+    }
+    function supplyCollateral(
+        MorphoMarketParams marketParams,
+        uint256 assets,
+        address onBehalf,
+        bytes data
+    ) external;
+    function borrow(
+        MorphoMarketParams marketParams,
+        uint256 assets,
+        uint256 shares,
+        address onBehalf,
+        address receiver
+    ) external returns (uint256, uint256);
+
+    struct AerodromeExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        int24 tickSpacing;
+        address recipient;
+        uint256 deadline;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+    function exactInputSingle(AerodromeExactInputSingleParams params)
+        external payable returns (uint256 amountOut);
+}
+
+/// Convert a USDC amount into the minimum USDe base-units the operator will
+/// accept from the USDC->USDe swap at the current TWAP. `slippage_bps` is
+/// the maximum deviation below TWAP the operator will tolerate; every
+/// operator computing the same TWAP + slippage produces identical bytes.
+/// USDC has 6 decimals, USDe has 18; the scale factor is 1e12.
+pub fn swap_min_usde_out(usdc_in: U256, twap_price_1e24: U256, slippage_bps: u32) -> U256 {
+    // out = usdc_in * (1e18 base per unit) / (price in USDC-per-USDe base scale)
+    //     = usdc_in * 1e36 / price_1e24
+    // Then trim by (10000 - slippage_bps) / 10000.
+    if twap_price_1e24.is_zero() {
+        return U256::ZERO;
+    }
+    let scale = U256::from(10u8).pow(U256::from(36u8));
+    let expected = usdc_in * scale / twap_price_1e24;
+    let keep_bps = u128::from(10_000u32.saturating_sub(slippage_bps));
+    expected * U256::from(keep_bps) / U256::from(10_000u16)
+}
+
+/// Convert a USDe base-unit amount into the min USDC the operator will
+/// accept from the reverse swap. Same shape, inverse scale.
+pub fn swap_min_usdc_out(usde_in: U256, twap_price_1e24: U256, slippage_bps: u32) -> U256 {
+    let scale = U256::from(10u8).pow(U256::from(36u8));
+    let expected = usde_in * twap_price_1e24 / scale;
+    let keep_bps = u128::from(10_000u32.saturating_sub(slippage_bps));
+    expected * U256::from(keep_bps) / U256::from(10_000u16)
+}
+
+/// Compose the plan for opening a fresh recursive-loop position at the
+/// composer's target leverage.
+///
+/// Sequence (five steps, one strike):
+///   1. USDC.approve(router, usdc_amount)
+///   2. router.exactInputSingle(USDC -> USDe, amountOutMinimum = min_usde_out)
+///   3. USDe.approve(morpho, min_usde_out)
+///   4. morpho.supplyCollateral(marketParams, min_usde_out, vault, "")
+///   5. morpho.borrow(marketParams, target_borrow_usdc, 0, vault, vault)
+///
+/// `target_borrow_usdc` lands so post-strike measured leverage
+/// = collateral / (collateral - debt) = target_leverage_bps / 10_000. Anyone
+/// running the same TWAP + config produces identical bytes; Morpho's own
+/// LLTV guard rejects the borrow at execution if the oracle disagrees.
+#[allow(clippy::too_many_arguments)]
+pub fn plan_open_position(
+    vault: Address,
+    usdc: Address,
+    usde: Address,
+    morpho: Address,
+    swap_router: Address,
+    tick_spacing: i32,
+    market_params: (Address, Address, Address, Address, U256),
+    usdc_amount: U256,
+    twap_price_1e24: U256,
+    slippage_bps: u32,
+    target_leverage_bps: u32,
+    deadline_secs: u64,
+) -> PlanBuild {
+    let min_usde_out = swap_min_usde_out(usdc_amount, twap_price_1e24, slippage_bps);
+
+    // Borrow amount lands us at target leverage.
+    // debt = collateral * (L-1) / L; collateral_value ~= min_usde_out * 1e-12
+    let target_l = U256::from(target_leverage_bps);
+    let collateral_value_usdc = min_usde_out / U256::from(1_000_000_000_000u64);
+    let borrow_usdc = if target_leverage_bps > 10_000 {
+        collateral_value_usdc * (target_l - U256::from(10_000u16)) / target_l
+    } else {
+        U256::ZERO
+    };
+
+    let (loan_token, collateral_token, oracle, irm, lltv) = market_params;
+    let m = MorphoMarketParams {
+        loanToken: loan_token,
+        collateralToken: collateral_token,
+        oracle,
+        irm,
+        lltv,
+    };
+
+    let mut plan = PlanBuild::empty(deadline_secs);
+
+    // 1. approve USDC to router
+    plan.push(
+        usdc,
+        approveCall { spender: swap_router, amount: usdc_amount }.abi_encode(),
+    );
+    // 2. swap USDC -> USDe
+    plan.push(
+        swap_router,
+        exactInputSingleCall {
+            params: AerodromeExactInputSingleParams {
+                tokenIn: usdc,
+                tokenOut: usde,
+                tickSpacing: alloy_primitives::Signed::<24, 1>::try_from(tick_spacing).unwrap_or_default(),
+                recipient: vault,
+                deadline: U256::from(deadline_secs),
+                amountIn: usdc_amount,
+                amountOutMinimum: min_usde_out,
+                sqrtPriceLimitX96: alloy_primitives::Uint::<160, 3>::ZERO,
+            },
+        }
+        .abi_encode(),
+    );
+    // 3. approve USDe to morpho
+    plan.push(
+        usde,
+        approveCall { spender: morpho, amount: min_usde_out }.abi_encode(),
+    );
+    // 4. supplyCollateral
+    plan.push(
+        morpho,
+        supplyCollateralCall {
+            marketParams: m.clone(),
+            assets: min_usde_out,
+            onBehalf: vault,
+            data: Vec::new().into(),
+        }
+        .abi_encode(),
+    );
+    // 5. borrow
+    if !borrow_usdc.is_zero() {
+        plan.push(
+            morpho,
+            borrowCall {
+                marketParams: m,
+                assets: borrow_usdc,
+                shares: U256::ZERO,
+                onBehalf: vault,
+                receiver: vault,
+            }
+            .abi_encode(),
+        );
+    }
+    plan
 }
 
 /// The bag of per-strike observations that ride in `BoundNavResult`. Kept as
@@ -264,11 +453,29 @@ impl RiskPreset {
     }
 }
 
-/// Valuation price for the collateral leg, in the market's 1e24 oracle scale,
-/// after applying the strategist's risk preset. `preset::Aggressive` returns
-/// par verbatim (ignoring depeg downside), `Standard` returns min(par, TWAP)
-/// like the historical formula, and `Conservative` returns min(par, TWAP)
-/// with a 100 bps haircut applied to the TWAP branch.
+/// Measured leverage in bps: par_collateral / (par_collateral - debt), the
+/// standard "position size divided by equity" reading a composer publishes
+/// when a strategist picks `applied_leverage=2.5`. Zero when there is no
+/// debt (unleveraged); saturates at u32::MAX when equity is <= 0 (a state
+/// the hf_floor check should have rejected, but the observation still
+/// lands as a signal rather than a panic).
+pub fn measured_leverage_bps(collateral_1e18: u128, debt_usdc: U256) -> u32 {
+    if debt_usdc.is_zero() {
+        return 0;
+    }
+    let par_col = U256::from(collateral_1e18) / U256::from(1_000_000_000_000u64);
+    if par_col <= debt_usdc {
+        return u32::MAX;
+    }
+    let equity = par_col - debt_usdc;
+    let ratio = par_col * U256::from(10_000u16) / equity;
+    u32::try_from(ratio).unwrap_or(u32::MAX)
+}
+
+/// Valuation price for the collateral leg, in the market's 1e24 oracle
+/// scale, after applying the strategist's risk preset. `Aggressive` returns
+/// par unconditionally, `Standard` returns min(par, TWAP), `Conservative`
+/// haircuts the min-branch by 100 bps.
 pub fn preset_collateral_price_1e24(twap_price_1e24: U256, preset: RiskPreset) -> U256 {
     let par = U256::from(PAR_PRICE_1E24);
     match preset {
@@ -338,23 +545,6 @@ pub fn nav_usdc(
     let collateral_value =
         U256::from(collateral_1e18) * price_1e24 / U256::from(10u8).pow(U256::from(36u8));
     Ok((collateral_value + U256::from(folded_idle)).saturating_sub(debt_usdc))
-}
-
-/// Measured leverage in bps: debt / (par_collateral - debt). Zero when
-/// there is no debt; saturates at u32::MAX when equity is <= 0 (a state the
-/// hf_floor check should have rejected, but the observation still lands as
-/// a signal rather than a panic).
-pub fn measured_leverage_bps(collateral_1e18: u128, debt_usdc: U256) -> u32 {
-    if debt_usdc.is_zero() {
-        return 0;
-    }
-    let par_col = U256::from(collateral_1e18) / U256::from(1_000_000_000_000u64);
-    if par_col <= debt_usdc {
-        return u32::MAX;
-    }
-    let equity = par_col - debt_usdc;
-    let ratio = debt_usdc * U256::from(10_000u16) / equity;
-    u32::try_from(ratio).unwrap_or(u32::MAX)
 }
 
 /// Measured LTV in bps: debt / par_collateral. Zero when there is no
@@ -525,15 +715,54 @@ pub fn check_compound_cadence(
     Ok(())
 }
 
+/// A plan the quorum signs and the vault dispatches after NAV settlement.
+/// Steps are ordered; each `(target, calldata)` must call one of the vault's
+/// four whitelisted contracts (USDC, USDe, Morpho Blue, swap router). An
+/// empty plan is legal — the vault emits `PlanExecuted(hash, 0)` and no
+/// action runs. `timestamp` binds the plan to the block whose state the
+/// operator observed, so a stale plan submitted at a later block can be
+/// audited against its own snapshot.
+#[derive(Clone, Debug, Default)]
+pub struct PlanBuild {
+    pub targets: Vec<Address>,
+    pub calldatas: Vec<Vec<u8>>,
+    pub timestamp_secs: u64,
+}
+
+impl PlanBuild {
+    pub fn empty(timestamp_secs: u64) -> Self {
+        Self { targets: Vec::new(), calldatas: Vec::new(), timestamp_secs }
+    }
+
+    pub fn push(&mut self, target: Address, calldata: Vec<u8>) {
+        self.targets.push(target);
+        self.calldatas.push(calldata);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.targets.is_empty()
+    }
+
+    /// Convert to the sol! wrapper for `abi_encode`. Zero-copy where possible.
+    fn into_sol(self) -> StrategyPlan {
+        StrategyPlan {
+            targets: self.targets,
+            calldatas: self.calldatas.into_iter().map(Into::into).collect(),
+            timestamp: U256::from(self.timestamp_secs),
+        }
+    }
+}
+
 /// The signed payload bytes:
 /// abi.encode(handler, nav, inputsBlock, configHash, leverageBps, ltvBps,
-///            reserveBps, supplyApyBps, hoursSinceUpdate).
+///            reserveBps, supplyApyBps, hoursSinceUpdate, StrategyPlan).
 pub fn encode_payload(
     handler: Address,
     nav: U256,
     inputs_block: u64,
     config_hash: FixedBytes<32>,
     obs: Observations,
+    plan: PlanBuild,
 ) -> Vec<u8> {
     BoundNavResult {
         handler,
@@ -545,6 +774,7 @@ pub fn encode_payload(
         reserveBps: obs.reserve_bps,
         supplyApyBps: obs.supply_apy_bps,
         hoursSinceUpdate: obs.hours_since_update,
+        plan: plan.into_sol(),
     }
     .abi_encode()
 }
@@ -892,10 +1122,11 @@ mod tests {
 
     #[test]
     fn measured_leverage_matches_expected_ratio() {
-        // par_col = $10, debt = $6 -> equity = $4, leverage = 6/4 = 1.5x.
+        // par_col = $10, debt = $6 -> equity = $4,
+        // leverage = collateral/equity = 10/4 = 2.5x.
         let collateral_1e18 = 10_000_000_000_000_000_000u128;
         let debt = U256::from(6_000_000u64);
-        assert_eq!(measured_leverage_bps(collateral_1e18, debt), 15_000);
+        assert_eq!(measured_leverage_bps(collateral_1e18, debt), 25_000);
     }
 
     #[test]
@@ -962,7 +1193,7 @@ mod tests {
     // --- payload ------------------------------------------------------------
 
     #[test]
-    fn payload_is_nine_abi_words_bound_to_handler() {
+    fn payload_carries_observations_and_empty_plan() {
         let handler = address!("73BB3CE07d25057A9265B476E80c08CBbA5d80d9");
         let config_hash = FixedBytes::<32>::from([0xAB; 32]);
         let obs = Observations {
@@ -972,20 +1203,63 @@ mod tests {
             supply_apy_bps: 700,
             hours_since_update: 3,
         };
-        let bytes = encode_payload(handler, U256::from(500_000_000u64), 49_911_282, config_hash, obs);
-        // 9 fixed 32-byte words: handler, nav, inputsBlock, configHash,
-        // then five uint32 padded to 32 bytes each.
-        assert_eq!(bytes.len(), 288);
-        assert_eq!(&bytes[0..12], &[0u8; 12]);
-        assert_eq!(&bytes[12..32], handler.as_slice());
-        assert_eq!(U256::from_be_slice(&bytes[32..64]), U256::from(500_000_000u64));
-        assert_eq!(U256::from_be_slice(&bytes[64..96]), U256::from(49_911_282u64));
-        assert_eq!(&bytes[96..128], config_hash.as_slice());
-        assert_eq!(U256::from_be_slice(&bytes[128..160]), U256::from(25_000u64));
-        assert_eq!(U256::from_be_slice(&bytes[160..192]), U256::from(8_000u64));
-        assert_eq!(U256::from_be_slice(&bytes[192..224]), U256::from(500u64));
-        assert_eq!(U256::from_be_slice(&bytes[224..256]), U256::from(700u64));
-        assert_eq!(U256::from_be_slice(&bytes[256..288]), U256::from(3u64));
+        let plan = PlanBuild::empty(1_234_567);
+        let bytes = encode_payload(
+            handler,
+            U256::from(500_000_000u64),
+            49_911_282,
+            config_hash,
+            obs,
+            plan,
+        );
+        // Dynamic sol! struct (StrategyPlan carries dynamic arrays) is
+        // encoded as a single-element tuple: 32-byte leading offset (0x20)
+        // then the struct body. Solidity decodes with
+        // abi.decode(payload, (BoundNavResult)).
+        assert_eq!(U256::from_be_slice(&bytes[0..32]), U256::from(32u8));
+        let body = &bytes[32..];
+        assert_eq!(&body[0..12], &[0u8; 12]);
+        assert_eq!(&body[12..32], handler.as_slice());
+        assert_eq!(U256::from_be_slice(&body[32..64]), U256::from(500_000_000u64));
+        assert_eq!(U256::from_be_slice(&body[64..96]), U256::from(49_911_282u64));
+        assert_eq!(&body[96..128], config_hash.as_slice());
+        assert_eq!(U256::from_be_slice(&body[128..160]), U256::from(25_000u64));
+        assert_eq!(U256::from_be_slice(&body[160..192]), U256::from(8_000u64));
+        assert_eq!(U256::from_be_slice(&body[192..224]), U256::from(500u64));
+        assert_eq!(U256::from_be_slice(&body[224..256]), U256::from(700u64));
+        assert_eq!(U256::from_be_slice(&body[256..288]), U256::from(3u64));
+    }
+
+    #[test]
+    fn plan_open_position_lands_at_target_leverage() {
+        let vault = address!("0000000000000000000000000000000000000A11");
+        let usdc = address!("833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+        let usde = address!("5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34");
+        let morpho = address!("BBBBBbbBBb9cC5e90e3b3AF64bdAF62C37EEFFCb");
+        let router = address!("BE6D8f0d05cC4be24d5167a3eF062215bE6D18a5");
+        let usdc_amount = U256::from(5_000_000u64); // 5 USDC
+        let twap = U256::from(PAR_PRICE_1E24); // par
+        let plan = plan_open_position(
+            vault,
+            usdc,
+            usde,
+            morpho,
+            router,
+            1, // tick spacing
+            (usdc, usde, Address::ZERO, Address::ZERO, U256::from(915_000_000_000_000_000u64)),
+            usdc_amount,
+            twap,
+            50,      // 50 bps slippage
+            25_000,  // 2.5x
+            1_800_000_000,
+        );
+        // 5 steps: approve USDC, swap, approve USDe, supply, borrow.
+        assert_eq!(plan.targets.len(), 5);
+        assert_eq!(plan.targets[0], usdc);
+        assert_eq!(plan.targets[1], router);
+        assert_eq!(plan.targets[2], usde);
+        assert_eq!(plan.targets[3], morpho);
+        assert_eq!(plan.targets[4], morpho);
     }
 
     // --- knob invariants ----------------------------------------------------
