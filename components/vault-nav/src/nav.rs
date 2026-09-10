@@ -462,22 +462,35 @@ impl RiskPreset {
     }
 }
 
-/// Measured leverage in bps: par_collateral / (par_collateral - debt), the
-/// standard "position size divided by equity" reading a composer publishes
-/// when a strategist picks `applied_leverage=2.5`. Zero when there is no
-/// debt (unleveraged); saturates at u32::MAX when equity is <= 0 (a state
-/// the hf_floor check should have rejected, but the observation still
-/// lands as a signal rather than a panic).
-pub fn measured_leverage_bps(collateral_1e18: u128, debt_usdc: U256) -> u32 {
+/// Priced collateral in USDC base units: `collateral_1e18 * price_1e24 / 1e36`.
+/// Same math `nav_usdc` uses, extracted so every LTV-shaped reading (the
+/// hf_floor guard and both attested observations) values collateral at the
+/// same market price the attested NAV does.
+#[inline]
+pub fn priced_collateral_usdc(collateral_1e18: u128, price_1e24: U256) -> U256 {
+    // 1e24 * 1e18 / 1e36 == 1 base unit per par-priced USDe; the general form
+    // holds for any market price. Widen to U256 first to avoid overflow.
+    U256::from(collateral_1e18) * price_1e24 / U256::from(10u8).pow(U256::from(36u8))
+}
+
+/// Measured leverage in bps: priced_collateral / (priced_collateral - debt),
+/// the standard "position size divided by equity" reading a composer
+/// publishes when a strategist picks `applied_leverage=2.5`. `price_1e24`
+/// is the same collateral valuation the vault attests to (post-preset), so
+/// the reading agrees with what liquidation actually keys off during a
+/// depeg. Zero when there is no debt (unleveraged); saturates at u32::MAX
+/// when equity is <= 0 (a state the hf_floor check should have rejected,
+/// but the observation still lands as a signal rather than a panic).
+pub fn measured_leverage_bps(collateral_1e18: u128, price_1e24: U256, debt_usdc: U256) -> u32 {
     if debt_usdc.is_zero() {
         return 0;
     }
-    let par_col = U256::from(collateral_1e18) / U256::from(1_000_000_000_000u64);
-    if par_col <= debt_usdc {
+    let priced_col = priced_collateral_usdc(collateral_1e18, price_1e24);
+    if priced_col <= debt_usdc {
         return u32::MAX;
     }
-    let equity = par_col - debt_usdc;
-    let ratio = par_col * U256::from(10_000u16) / equity;
+    let equity = priced_col - debt_usdc;
+    let ratio = priced_col * U256::from(10_000u16) / equity;
     u32::try_from(ratio).unwrap_or(u32::MAX)
 }
 
@@ -509,6 +522,7 @@ pub fn preset_collateral_price_1e24(twap_price_1e24: U256, preset: RiskPreset) -
 /// but keep attesting": the guard's whole purpose is to stop attesting there.
 pub fn check_hf_floor(
     collateral_1e18: u128,
+    price_1e24: U256,
     debt_usdc: U256,
     hf_floor_bps: u32,
     lltv_wad: U256,
@@ -521,15 +535,16 @@ pub fn check_hf_floor(
             "hf_floor_bps {hf_floor_bps} is below 10_000 (HF < 1.0 sits at or past liquidation)"
         ));
     }
-    // Par-valued collateral in USDC base units: collateral_1e18 * par_1e24 / 1e36
-    // == collateral_1e18 / 1e12 (since par_1e24 == 1e24 and 1e24/1e36 == 1e-12).
-    let par_collateral_usdc = U256::from(collateral_1e18) / U256::from(1_000_000_000_000u64);
-    if par_collateral_usdc.is_zero() {
-        // No collateral means no leverage - the check is vacuous.
+    // Priced collateral at the same valuation the attested NAV uses.
+    // Par used to hardcode this, silencing a depeg while the vault attests
+    // a lower NAV against the same collateral; now they agree.
+    let priced_collateral = priced_collateral_usdc(collateral_1e18, price_1e24);
+    if priced_collateral.is_zero() {
+        // No collateral (or zero-priced) means no leverage - the check is vacuous.
         return Ok(());
     }
-    // ltv_bps = debt * 10_000 / par_collateral. Widen once to avoid overflow.
-    let ltv_bps = debt_usdc * U256::from(10_000u16) / par_collateral_usdc;
+    // ltv_bps = debt * 10_000 / priced_collateral. Widen once to avoid overflow.
+    let ltv_bps = debt_usdc * U256::from(10_000u16) / priced_collateral;
     // allowed_ltv_bps = lltv_bps * 10_000 / hf_floor_bps.
     // lltv is in WAD (1e18). Convert to bps: lltv_wad / 1e14.
     let lltv_bps = lltv_wad / U256::from(100_000_000_000_000u64);
@@ -557,19 +572,21 @@ pub fn nav_usdc(
     let folded_idle = usdc_balance.checked_sub(floor).ok_or_else(|| {
         format!("escrow floor breached: idle {usdc_balance} < pending+claimable {floor}")
     })?;
-    let collateral_value =
-        U256::from(collateral_1e18) * price_1e24 / U256::from(10u8).pow(U256::from(36u8));
+    let collateral_value = priced_collateral_usdc(collateral_1e18, price_1e24);
     Ok((collateral_value + U256::from(folded_idle)).saturating_sub(debt_usdc))
 }
 
-/// Measured LTV in bps: debt / par_collateral. Zero when there is no
-/// collateral (the vacuous-check case: no leverage story to tell).
-pub fn measured_ltv_bps(collateral_1e18: u128, debt_usdc: U256) -> u32 {
-    let par_col = U256::from(collateral_1e18) / U256::from(1_000_000_000_000u64);
-    if par_col.is_zero() {
+/// Measured LTV in bps: debt / priced_collateral. Zero when there is no
+/// collateral or the market price is zero (the vacuous-check case: no
+/// leverage story to tell). Same `price_1e24` the attested NAV uses, so
+/// the observation matches the valuation liquidation keys off during a
+/// depeg.
+pub fn measured_ltv_bps(collateral_1e18: u128, price_1e24: U256, debt_usdc: U256) -> u32 {
+    let priced_col = priced_collateral_usdc(collateral_1e18, price_1e24);
+    if priced_col.is_zero() {
         return 0;
     }
-    let ratio = debt_usdc * U256::from(10_000u16) / par_col;
+    let ratio = debt_usdc * U256::from(10_000u16) / priced_col;
     u32::try_from(ratio).unwrap_or(u32::MAX)
 }
 
@@ -1048,35 +1065,59 @@ mod tests {
         let collateral_1e18 = 1_000_000_000_000_000_000u128; // 1 USDe
         let debt_usdc = U256::from(1_000_000u64); // 1 USDC
         let lltv_wad = U256::from(915_000_000_000_000_000u64); // 91.5%
-        assert!(check_hf_floor(collateral_1e18, debt_usdc, 0, lltv_wad).is_ok());
+        let par = U256::from(PAR_PRICE_1E24);
+        assert!(check_hf_floor(collateral_1e18, par, debt_usdc, 0, lltv_wad).is_ok());
     }
 
     #[test]
-    fn hf_floor_allows_ltv_below_floor() {
+    fn hf_floor_allows_ltv_below_floor_at_par() {
+        // Collateral priced at par (1 USDe = 1 USDC), no depeg.
         // hf_floor_bps = 11_000 (HF 1.10) vs 91.5% LLTV
         // -> allowed LTV = 9150 * 10_000 / 11_000 = 8318 bps.
         // Measured LTV = 80% = 8000 bps; 8000 <= 8318, passes.
-        let collateral_1e18 = 1_000_000_000_000_000_000u128; // 1 USDe = $1 par
+        let collateral_1e18 = 1_000_000_000_000_000_000u128; // 1 USDe
         let debt_usdc = U256::from(800_000u64); // 0.8 USDC
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        assert!(check_hf_floor(collateral_1e18, debt_usdc, 11_000, lltv_wad).is_ok());
+        let par = U256::from(PAR_PRICE_1E24);
+        assert!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad).is_ok());
     }
 
     #[test]
-    fn hf_floor_rejects_floor_breach() {
-        // hf_floor_bps = 11_000, allowed 8318 bps as above.
-        // Measured LTV = 85% = 8500 bps; 8500 > 8318, fails.
+    fn hf_floor_rejects_floor_breach_at_par() {
+        // Same allowed 8318 bps; measured 85% = 8500 bps > 8318, fails.
         let collateral_1e18 = 1_000_000_000_000_000_000u128;
         let debt_usdc = U256::from(850_000u64);
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        let err = check_hf_floor(collateral_1e18, debt_usdc, 11_000, lltv_wad).unwrap_err();
+        let par = U256::from(PAR_PRICE_1E24);
+        let err = check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad).unwrap_err();
+        assert!(err.contains("hf_floor_breached"));
+    }
+
+    #[test]
+    fn hf_floor_catches_depeg_that_par_would_hide() {
+        // The whole point of roadmap #11: par-priced this would pass silently,
+        // priced at the same market TWAP the NAV attests to it fails.
+        // Position: 1 USDe collateral, 0.8 USDC debt.
+        //  - At par: LTV = 8000 bps -> under the 8318 allowance for hf_floor=11_000.
+        //  - At TWAP 0.9 par (10% depeg): priced_col = 0.9 USDC,
+        //    LTV = 8000/0.9 ≈ 8888 bps -> above 8318, guard fires.
+        let collateral_1e18 = 1_000_000_000_000_000_000u128;
+        let debt_usdc = U256::from(800_000u64);
+        let lltv_wad = U256::from(915_000_000_000_000_000u64);
+        let par = U256::from(PAR_PRICE_1E24);
+        // Sanity: at par the check passes (as the reviewer flagged).
+        assert!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad).is_ok());
+        // At market, it refuses.
+        let depeg_price = par * U256::from(9_000u16) / U256::from(10_000u16);
+        let err = check_hf_floor(collateral_1e18, depeg_price, debt_usdc, 11_000, lltv_wad).unwrap_err();
         assert!(err.contains("hf_floor_breached"));
     }
 
     #[test]
     fn hf_floor_vacuous_on_zero_collateral() {
         // No collateral means no leverage story; the check has nothing to say.
-        assert!(check_hf_floor(0, U256::ZERO, 11_000, U256::from(915_000_000_000_000_000u64)).is_ok());
+        let par = U256::from(PAR_PRICE_1E24);
+        assert!(check_hf_floor(0, par, U256::ZERO, 11_000, U256::from(915_000_000_000_000_000u64)).is_ok());
     }
 
     #[test]
@@ -1084,7 +1125,8 @@ mod tests {
         // hf_floor_bps < 10_000 means HF < 1.0 (past liquidation) - the guard
         // exists to stop attesting there, not to be configurable to accept it.
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        let err = check_hf_floor(1_000_000_000_000_000_000u128, U256::from(1u64), 9_999, lltv_wad).unwrap_err();
+        let par = U256::from(PAR_PRICE_1E24);
+        let err = check_hf_floor(1_000_000_000_000_000_000u128, par, U256::from(1u64), 9_999, lltv_wad).unwrap_err();
         assert!(err.contains("is below 10_000"));
     }
     // --- NAV assembly -------------------------------------------------------
@@ -1151,42 +1193,69 @@ mod tests {
 
     #[test]
     fn measured_leverage_is_zero_with_no_debt() {
+        let par = U256::from(PAR_PRICE_1E24);
         assert_eq!(
-            measured_leverage_bps(1_000_000_000_000_000_000u128, U256::ZERO),
+            measured_leverage_bps(1_000_000_000_000_000_000u128, par, U256::ZERO),
             0
         );
     }
 
     #[test]
     fn measured_leverage_saturates_above_equity() {
-        // debt >= par_collateral means equity <= 0 - the position is
+        // debt >= priced_collateral means equity <= 0 - the position is
         // insolvent. The floor check should reject it, but the observation
         // still lands as u32::MAX so downstream verifiers see the signal.
         let collateral_1e18 = 1_000_000_000_000_000_000u128; // 1 USDe -> $1 par
         let debt = U256::from(1_000_000u64); // exactly 1 USDC
-        assert_eq!(measured_leverage_bps(collateral_1e18, debt), u32::MAX);
+        let par = U256::from(PAR_PRICE_1E24);
+        assert_eq!(measured_leverage_bps(collateral_1e18, par, debt), u32::MAX);
     }
 
     #[test]
-    fn measured_leverage_matches_expected_ratio() {
-        // par_col = $10, debt = $6 -> equity = $4,
-        // leverage = collateral/equity = 10/4 = 2.5x.
+    fn measured_leverage_matches_expected_ratio_at_par() {
+        // priced_col = $10, debt = $6 -> equity = $4,
+        // leverage = priced_col/equity = 10/4 = 2.5x.
         let collateral_1e18 = 10_000_000_000_000_000_000u128;
         let debt = U256::from(6_000_000u64);
-        assert_eq!(measured_leverage_bps(collateral_1e18, debt), 25_000);
+        let par = U256::from(PAR_PRICE_1E24);
+        assert_eq!(measured_leverage_bps(collateral_1e18, par, debt), 25_000);
     }
 
     #[test]
-    fn measured_ltv_matches_check_hf_floor_computation() {
-        // par_col $1, debt $0.80 -> 8000 bps LTV.
+    fn measured_leverage_reads_higher_during_depeg() {
+        // Same position as above, USDe at 0.9 par -> priced_col $9, equity $3,
+        // leverage 9/3 = 3.0x. The par-priced reading (2.5x) hid the depeg
+        // exposure; the priced reading surfaces it.
+        let collateral_1e18 = 10_000_000_000_000_000_000u128;
+        let debt = U256::from(6_000_000u64);
+        let depeg_price = U256::from(PAR_PRICE_1E24) * U256::from(9_000u16) / U256::from(10_000u16);
+        assert_eq!(measured_leverage_bps(collateral_1e18, depeg_price, debt), 30_000);
+    }
+
+    #[test]
+    fn measured_ltv_matches_check_hf_floor_computation_at_par() {
+        // priced_col $1, debt $0.80 -> 8000 bps LTV.
         let collateral_1e18 = 1_000_000_000_000_000_000u128;
         let debt = U256::from(800_000u64);
-        assert_eq!(measured_ltv_bps(collateral_1e18, debt), 8_000);
+        let par = U256::from(PAR_PRICE_1E24);
+        assert_eq!(measured_ltv_bps(collateral_1e18, par, debt), 8_000);
+    }
+
+    #[test]
+    fn measured_ltv_reads_higher_during_depeg() {
+        // Same position, TWAP 0.9 par -> priced_col $0.90, LTV = 8000/0.9
+        // = 8888 bps. Whereas the par-priced reading stays at 8000, the
+        // priced one surfaces what liquidation sees.
+        let collateral_1e18 = 1_000_000_000_000_000_000u128;
+        let debt = U256::from(800_000u64);
+        let depeg_price = U256::from(PAR_PRICE_1E24) * U256::from(9_000u16) / U256::from(10_000u16);
+        assert_eq!(measured_ltv_bps(collateral_1e18, depeg_price, debt), 8_888);
     }
 
     #[test]
     fn measured_ltv_is_zero_with_no_collateral() {
-        assert_eq!(measured_ltv_bps(0, U256::from(1_000_000u64)), 0);
+        let par = U256::from(PAR_PRICE_1E24);
+        assert_eq!(measured_ltv_bps(0, par, U256::from(1_000_000u64)), 0);
     }
 
     #[test]

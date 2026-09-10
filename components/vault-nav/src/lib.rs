@@ -265,10 +265,13 @@ mod component {
                 .map_err(|e| format!("bad hf_floor_bps in config: {e}"))?,
             None => 0,
         };
-
-        nav::check_hf_floor(s.collateral_1e18, debt, hf_floor_bps, lltv)?;
-
+        // Preset-adjusted collateral valuation MUST be computed first: the
+        // hf_floor guard and the leverage/LTV observations all use the same
+        // price the attested NAV does, or a depeg silently misaligns the
+        // three surfaces (roadmap P00 #11).
         let price = nav::preset_collateral_price_1e24(twap_price, preset);
+
+        nav::check_hf_floor(s.collateral_1e18, price, debt, hf_floor_bps, lltv)?;
 
         let value = nav::nav_usdc(
             s.collateral_1e18,
@@ -293,8 +296,8 @@ mod component {
         // two operators running the same config produce identical bytes.
         let utilization_bps = nav::utilization_bps(s.total_borrow_assets, s.total_supply_assets);
         let obs = nav::Observations {
-            leverage_bps: nav::measured_leverage_bps(s.collateral_1e18, debt),
-            ltv_bps: nav::measured_ltv_bps(s.collateral_1e18, debt),
+            leverage_bps: nav::measured_leverage_bps(s.collateral_1e18, price, debt),
+            ltv_bps: nav::measured_ltv_bps(s.collateral_1e18, price, debt),
             reserve_bps: nav::measured_reserve_bps(s.vault_usdc_balance, value),
             supply_apy_bps: nav::measured_supply_apy_bps(s.borrow_rate_wad, utilization_bps),
             hours_since_update: nav::hours_between(s.market_last_update, s.block_timestamp),
@@ -339,7 +342,7 @@ mod component {
         // amount that lands the position at `applied_leverage`. Everything
         // else (deleverage, compound, unwind) is a NoOp for now — the vault
         // sits at target and NAV keeps attesting.
-        let plan = build_action_plan(&s, debt, value, twap_price)?;
+        let plan = build_action_plan(&s, debt, value, twap_price, price)?;
 
         Ok(nav::encode_payload(
             vault,
@@ -360,6 +363,7 @@ mod component {
         debt: U256,
         nav_value: U256,
         twap_price_1e24: U256,
+        priced_collateral_1e24: U256,
     ) -> Result<nav::PlanBuild, String> {
         let vault = cfg_address("vault_address")?;
         let usdc = cfg_address("usdc_address")?;
@@ -396,7 +400,7 @@ mod component {
         // within 15% of target. Rebalancing (increase/deleverage) is a
         // follow-up plan shape we can add without changing the payload.
         if !debt.is_zero() {
-            let measured = nav::measured_leverage_bps(s.collateral_1e18, debt);
+            let measured = nav::measured_leverage_bps(s.collateral_1e18, priced_collateral_1e24, debt);
             let lo = configured_leverage_bps.saturating_sub(configured_leverage_bps / 7);
             let hi = configured_leverage_bps.saturating_add(configured_leverage_bps / 7);
             if measured >= lo && measured <= hi {
