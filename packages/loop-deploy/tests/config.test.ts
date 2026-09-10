@@ -48,7 +48,19 @@ describe("validateLoopConfig", () => {
   it("rejects non-whole-minute cadences at 60s or more", () => {
     const input = validLoopInput();
     input.cronSeconds = 90;
-    expect(() => validateLoopConfig(input)).toThrow(/multiple of 60/);
+    expect(() => validateLoopConfig(input)).toThrow(/whole minute/);
+  });
+
+  it("rejects sub-60s cadences (roadmap P0 #2)", () => {
+    /* User-published loops run on the operator quorum; anything faster than
+       60 seconds hammers Base RPC and gives MEV bots more of a window than
+       the operators have to sign. Seed vaults bypass this via the shell
+       script, which is the operator's own knob. */
+    for (const bad of [5, 10, 30, 59]) {
+      const input = validLoopInput();
+      input.cronSeconds = bad;
+      expect(() => validateLoopConfig(input)).toThrow(/cronSeconds/);
+    }
   });
 
   it("rejects lltv of zero and above 1e18", () => {
@@ -75,7 +87,7 @@ describe("resolveLoopConfig", () => {
     expect(cfg.marketId).toBe("0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354");
     expect(cfg.usdeAddress).toBe("0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34");
     expect(cfg.targetLeverage).toBe(5);
-    expect(cfg.cronSeconds).toBe(30);
+    expect(cfg.cronSeconds).toBe(60);
     /* Regression pin: resolveLoopConfig must source the router and tick
        spacing from the catalog, not the user input, so a composer-published
        loop can actually compose swap calldata every strike. */
@@ -129,18 +141,20 @@ describe("resolveLoopConfig", () => {
 });
 
 describe("cronFromSeconds", () => {
-  it("uses the seconds field below one minute", () => {
-    expect(cronFromSeconds(10)).toBe("*/10 * * * * *");
-    expect(cronFromSeconds(59)).toBe("*/59 * * * * *");
-  });
-
   it("uses the minutes field for whole minutes", () => {
     expect(cronFromSeconds(60)).toBe("0 */1 * * * *");
+    expect(cronFromSeconds(120)).toBe("0 */2 * * * *");
     expect(cronFromSeconds(600)).toBe("0 */10 * * * *");
   });
 
   it("uses the hour form at 3600", () => {
     expect(cronFromSeconds(3600)).toBe("0 0 * * * *");
+  });
+
+  it("rejects sub-minute cadences (roadmap P0 #2)", () => {
+    expect(() => cronFromSeconds(10)).toThrow(ValidationError);
+    expect(() => cronFromSeconds(30)).toThrow(ValidationError);
+    expect(() => cronFromSeconds(59)).toThrow(ValidationError);
   });
 
   it("rejects out-of-range and ragged cadences", () => {

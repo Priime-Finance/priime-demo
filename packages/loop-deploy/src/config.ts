@@ -138,10 +138,18 @@ function nameField(input: Record<string, unknown>, issues: string[]): string {
   return "unnamed loop";
 }
 
-/** Validated strike cadence. */
+/**
+ * Validated strike cadence. User-published loops must run at 60 seconds or
+ * more (measured on the operator side: shorter intervals hammer Base RPC,
+ * confuse indexers, and give MEV bots a bigger window than the operators
+ * have to sign a quorum). Multiples of 60 up to 3600 are accepted.
+ *
+ * The seed vault's cadence comes from `deploy/targets/<TARGET>.json` and
+ * bypasses this path; the shell script is the operator's own knob.
+ */
 function cronField(input: Record<string, unknown>, issues: string[]): number {
-  const seconds = intField(input, "cronSeconds", 5, 3600, issues);
-  if (seconds >= 60 && seconds % 60 !== 0) issues.push("cronSeconds of 60 or more must be a multiple of 60");
+  const seconds = intField(input, "cronSeconds", 60, 3600, issues);
+  if (seconds % 60 !== 0) issues.push("cronSeconds must be a whole minute (60, 120, ..., 3600)");
   return seconds;
 }
 
@@ -294,11 +302,18 @@ export function resolveLoopConfig(input: unknown): LoopConfig {
   };
 }
 
-/** Six-field cron expression (seconds granularity) for a cadence in seconds. */
+/**
+ * Six-field cron expression (seconds granularity) for a cadence in seconds.
+ * Whole minutes only (60..3600); sub-minute cadences are refused for the
+ * same reason `cronField` refuses them at validation time.
+ */
 export function cronFromSeconds(seconds: number): string {
-  if (!Number.isInteger(seconds) || seconds < 5 || seconds > 3600) throw new ValidationError([`unsupported cron cadence: ${seconds}`]);
-  if (seconds < 60) return `*/${seconds} * * * * *`;
-  if (seconds % 60 !== 0) throw new ValidationError([`cadence of 60s or more must be a whole minute: ${seconds}`]);
+  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 3600) {
+    throw new ValidationError([`unsupported cron cadence: ${seconds}`]);
+  }
+  if (seconds % 60 !== 0) {
+    throw new ValidationError([`cadence must be a whole minute: ${seconds}`]);
+  }
   if (seconds === 3600) return "0 0 * * * *";
   return `0 */${seconds / 60} * * * *`;
 }

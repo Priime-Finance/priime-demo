@@ -243,7 +243,7 @@ describe("LoopDeployer", () => {
     const legacyConfig = {
       name: "legacy resume",
       strategist: "0xabcd00000000000000000000000000000000abcd",
-      cronSeconds: 30,
+      cronSeconds: 60,
       candidateId: "morpho-blue-base:8453:USDe-USDC:0x54cf9be5",
       targetLeverage: 5,
       marketId: "0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354",

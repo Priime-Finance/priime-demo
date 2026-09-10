@@ -94,7 +94,7 @@ export function validLoopInput(): Record<string, unknown> {
   return {
     name: "my recursive loop",
     strategist: "0xAbCd00000000000000000000000000000000AbCd",
-    cronSeconds: 30,
+    cronSeconds: 60,
     candidateId: "morpho-blue-base:8453:USDe-USDC:0x54cf9be5",
     targetLeverage: 5,
     marketId: "0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354",
@@ -119,7 +119,7 @@ export function validLoopResolveInput(): Record<string, unknown> {
   return {
     name: "my recursive loop",
     strategist: "0xAbCd00000000000000000000000000000000AbCd",
-    cronSeconds: 30,
+    cronSeconds: 60,
     candidateId: "morpho-blue-base:8453:USDe-USDC:0x54cf9be5",
     targetLeverage: 5,
   };
