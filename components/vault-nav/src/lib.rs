@@ -320,7 +320,7 @@ mod component {
             supply_apy_bps: nav::measured_supply_apy_bps(s.borrow_rate_wad, utilization_bps),
             hours_since_update: nav::hours_between(s.market_last_update, s.block_timestamp),
             /* Rewritten below once every check has run so callers see one
-               finalised bag, not a partially-filled snapshot. */
+            finalised bag, not a partially-filled snapshot. */
             breach_flags: 0,
         };
 
@@ -432,7 +432,8 @@ mod component {
         // within 15% of target. Rebalancing (increase/deleverage) is a
         // follow-up plan shape we can add without changing the payload.
         if !debt.is_zero() {
-            let measured = nav::measured_leverage_bps(s.collateral_1e18, priced_collateral_1e24, debt);
+            let measured =
+                nav::measured_leverage_bps(s.collateral_1e18, priced_collateral_1e24, debt);
             let lo = configured_leverage_bps.saturating_sub(configured_leverage_bps / 7);
             let hi = configured_leverage_bps.saturating_add(configured_leverage_bps / 7);
             if measured >= lo && measured <= hi {

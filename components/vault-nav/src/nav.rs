@@ -1125,7 +1125,10 @@ mod tests {
         let debt_usdc = U256::from(1_000_000u64); // 1 USDC
         let lltv_wad = U256::from(915_000_000_000_000_000u64); // 91.5%
         let par = U256::from(PAR_PRICE_1E24);
-        assert_eq!(check_hf_floor(collateral_1e18, par, debt_usdc, 0, lltv_wad), Ok(false));
+        assert_eq!(
+            check_hf_floor(collateral_1e18, par, debt_usdc, 0, lltv_wad),
+            Ok(false)
+        );
     }
 
     #[test]
@@ -1138,7 +1141,10 @@ mod tests {
         let debt_usdc = U256::from(800_000u64); // 0.8 USDC
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
         let par = U256::from(PAR_PRICE_1E24);
-        assert_eq!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad), Ok(false));
+        assert_eq!(
+            check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad),
+            Ok(false)
+        );
     }
 
     #[test]
@@ -1150,7 +1156,10 @@ mod tests {
         let par = U256::from(PAR_PRICE_1E24);
         // Breach is signalled as Ok(true) so run_cycle can attest with the
         // BREACH_HF_FLOOR bit set instead of aborting the whole strike.
-        assert_eq!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad), Ok(true));
+        assert_eq!(
+            check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad),
+            Ok(true)
+        );
     }
 
     #[test]
@@ -1166,17 +1175,32 @@ mod tests {
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
         let par = U256::from(PAR_PRICE_1E24);
         // Sanity: at par the check passes (as the reviewer flagged).
-        assert_eq!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad), Ok(false));
+        assert_eq!(
+            check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad),
+            Ok(false)
+        );
         // At market, it flags a breach.
         let depeg_price = par * U256::from(9_000u16) / U256::from(10_000u16);
-        assert_eq!(check_hf_floor(collateral_1e18, depeg_price, debt_usdc, 11_000, lltv_wad), Ok(true));
+        assert_eq!(
+            check_hf_floor(collateral_1e18, depeg_price, debt_usdc, 11_000, lltv_wad),
+            Ok(true)
+        );
     }
 
     #[test]
     fn hf_floor_vacuous_on_zero_collateral() {
         // No collateral means no leverage story; the check has nothing to say.
         let par = U256::from(PAR_PRICE_1E24);
-        assert_eq!(check_hf_floor(0, par, U256::ZERO, 11_000, U256::from(915_000_000_000_000_000u64)), Ok(false));
+        assert_eq!(
+            check_hf_floor(
+                0,
+                par,
+                U256::ZERO,
+                11_000,
+                U256::from(915_000_000_000_000_000u64)
+            ),
+            Ok(false)
+        );
     }
 
     #[test]
@@ -1185,7 +1209,14 @@ mod tests {
         // exists to stop attesting there, not to be configurable to accept it.
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
         let par = U256::from(PAR_PRICE_1E24);
-        let err = check_hf_floor(1_000_000_000_000_000_000u128, par, U256::from(1u64), 9_999, lltv_wad).unwrap_err();
+        let err = check_hf_floor(
+            1_000_000_000_000_000_000u128,
+            par,
+            U256::from(1u64),
+            9_999,
+            lltv_wad,
+        )
+        .unwrap_err();
         assert!(err.contains("is below 10_000"));
     }
     // --- NAV assembly -------------------------------------------------------
@@ -1288,7 +1319,10 @@ mod tests {
         let collateral_1e18 = 10_000_000_000_000_000_000u128;
         let debt = U256::from(6_000_000u64);
         let depeg_price = U256::from(PAR_PRICE_1E24) * U256::from(9_000u16) / U256::from(10_000u16);
-        assert_eq!(measured_leverage_bps(collateral_1e18, depeg_price, debt), 30_000);
+        assert_eq!(
+            measured_leverage_bps(collateral_1e18, depeg_price, debt),
+            30_000
+        );
     }
 
     #[test]
@@ -1497,7 +1531,10 @@ mod tests {
     #[test]
     fn deleverage_threshold_skipped_when_no_debt() {
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        assert_eq!(check_deleverage_threshold(9_500, 14_550, U256::ZERO, lltv_wad), Ok(false));
+        assert_eq!(
+            check_deleverage_threshold(9_500, 14_550, U256::ZERO, lltv_wad),
+            Ok(false)
+        );
     }
 
     #[test]
@@ -1507,7 +1544,10 @@ mod tests {
         // Measured 6000 bps < 6289, passes.
         let debt = U256::from(5_000_000u64);
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        assert_eq!(check_deleverage_threshold(6_000, 14_550, debt, lltv_wad), Ok(false));
+        assert_eq!(
+            check_deleverage_threshold(6_000, 14_550, debt, lltv_wad),
+            Ok(false)
+        );
     }
 
     #[test]
@@ -1516,7 +1556,10 @@ mod tests {
         let debt = U256::from(5_000_000u64);
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
         // Breach signalled as Ok(true); run_cycle sets BREACH_DELEVERAGE.
-        assert_eq!(check_deleverage_threshold(6_500, 14_550, debt, lltv_wad), Ok(true));
+        assert_eq!(
+            check_deleverage_threshold(6_500, 14_550, debt, lltv_wad),
+            Ok(true)
+        );
     }
 
     #[test]
