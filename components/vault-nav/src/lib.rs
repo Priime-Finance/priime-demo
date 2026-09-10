@@ -403,8 +403,7 @@ mod component {
         let morpho = cfg_address("morpho_address")?;
 
         // Swap route: composer publishes address + tick spacing. Missing
-        // either -> no plan (the vault has no way to swap). This is not a
-        // cycle-fail: the strike still attests NAV; the action stays empty.
+        // either -> no plan (the vault has no way to swap).
         let swap_router = match cfg_opt("swap_router") {
             Some(v) => match v.trim().parse::<alloy_primitives::Address>() {
                 Ok(a) => a,
@@ -419,6 +418,69 @@ mod component {
                 .map_err(|e| format!("bad pool_tick_spacing: {e}"))?,
             None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
         };
+
+        // Redemption shortfall: how much USDC the plan must free so the
+        // vault sits at or above the escrow floor after `_fulfillRedeems`
+        // carves this strike's redemption claims out of `nav`. Mirrors the
+        // vault's own bootstrap-price math so the two sides can't drift.
+        let redeem_assets_out = if s.share_supply == 0 || s.total_pending_redeem_shares == 0 {
+            U256::ZERO
+        } else {
+            // Fresh deposits are folded into NAV BEFORE redeems fulfill on
+            // chain, so the effective NAV redeems price against is
+            // `attested_nav + total_pending_deposit`. Using the pre-strike
+            // share supply here overestimates by the deposit-minted shares —
+            // conservative (frees a little more USDC than strictly needed),
+            // so a small over-cushion is fine.
+            let effective_nav = nav_value + U256::from(s.total_pending_deposit);
+            U256::from(s.total_pending_redeem_shares) * effective_nav / U256::from(s.share_supply)
+        };
+        let post_strike_claimable = U256::from(s.total_claimable_redeem) + redeem_assets_out;
+        let vault_balance = U256::from(s.vault_usdc_balance);
+        let shortfall = if post_strike_claimable > vault_balance {
+            post_strike_claimable - vault_balance
+        } else {
+            U256::ZERO
+        };
+
+        // Delever branch (roadmap P1 #4): shortfall > 0 means the strike
+        // will breach the escrow floor unless the plan frees enough USDC.
+        // Emit `plan_deleverage` — a single Morpho flashLoan step whose
+        // callback repays + withdraws + swaps atomically. See
+        // `contracts/src/PriimeVault.sol::onMorphoFlashLoan`.
+        if !shortfall.is_zero() && !debt.is_zero() {
+            let priced_collateral =
+                nav::priced_collateral_usdc(s.collateral_1e18, priced_collateral_1e24);
+            let equity = if priced_collateral > debt {
+                priced_collateral - debt
+            } else {
+                // Debt already exceeds priced collateral: floor check should
+                // have flagged this. Empty plan attests and lets the guard
+                // surface it.
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            };
+            if equity.is_zero() {
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            }
+            // 1% cushion on top of the shortfall to absorb swap slippage.
+            let target_free_usdc = shortfall + (shortfall / U256::from(100u16));
+            let one_wad = U256::from(1_000_000_000_000_000_000u64);
+            // proportion_wad = min(target_free / equity, 1.0).
+            let proportion_wad = (target_free_usdc * one_wad / equity).min(one_wad);
+            let collateral_out_usde = U256::from(s.collateral_1e18) * proportion_wad / one_wad;
+            let debt_repay_usdc = debt * proportion_wad / one_wad;
+            // 50 bps against TWAP — same convention plan_open_position uses.
+            let min_usdc_out = nav::swap_min_usdc_out(collateral_out_usde, twap_price_1e24, 50);
+            let _ = (vault, usde, tick_spacing, swap_router); // reserved for future lever-up branch parity
+            return Ok(nav::plan_deleverage(
+                usdc,
+                morpho,
+                debt_repay_usdc,
+                collateral_out_usde,
+                min_usdc_out,
+                s.block_timestamp + 300,
+            ));
+        }
 
         let configured_leverage_bps = match cfg_opt("applied_leverage") {
             Some(v) => nav::parse_decimal_bps(&v)?,
