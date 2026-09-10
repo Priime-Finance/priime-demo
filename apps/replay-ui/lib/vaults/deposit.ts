@@ -84,6 +84,7 @@ export const VAULT_ABI = [
   { type: "function", name: "asset", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "totalAssets", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "breachFlags", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
   { type: "function", name: "totalSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   {
     type: "function",
@@ -220,6 +221,14 @@ export interface DepositReading {
   claimableRedeemShares: bigint | null;
   /** Claimable redemption assets for the connected wallet (`maxWithdraw`). */
   claimableRedeemAssets: bigint | null;
+  /**
+   * Non-zero when the last accepted NAV strike raised a strategist-
+   * configured guard (LTV above hf_floor, or drift past the deleverage
+   * trigger). `requestDeposit` / `requestRedeem` revert with
+   * `VaultBreached(flags)` while set; the frontend surfaces a banner so
+   * the user does not learn about the freeze from a chain revert.
+   */
+  breachFlags: number | null;
   /** True while any of the reads above is still loading. */
   loading: boolean;
   /** Refetch every read on demand; wagmi handles caching + dedupe. */
@@ -264,6 +273,7 @@ export function useDepositReading(handlerAddress: Address | null): DepositReadin
       { address: handlerAddress, abi: VAULT_ABI, functionName: "pendingRedeemRequest", args: [REQUEST_ID, user] },
       { address: handlerAddress, abi: VAULT_ABI, functionName: "claimableRedeemRequest", args: [REQUEST_ID, user] },
       { address: handlerAddress, abi: VAULT_ABI, functionName: "maxWithdraw", args: [user] },
+      { address: handlerAddress, abi: VAULT_ABI, functionName: "breachFlags" },
     ] as const;
   }, [asset, handlerAddress, enabled, user]);
 
@@ -294,6 +304,7 @@ export function useDepositReading(handlerAddress: Address | null): DepositReadin
     pendingShares:   r?.[10]?.status === "success" ? r[10].result : null,
     claimableRedeemShares: r?.[11]?.status === "success" ? r[11].result : null,
     claimableRedeemAssets: r?.[12]?.status === "success" ? r[12].result : null,
+    breachFlags:           r?.[13]?.status === "success" ? Number(r[13].result) : null,
     loading: assetRead.isLoading || batch.isLoading,
     refetch: () => {
       void assetRead.refetch();

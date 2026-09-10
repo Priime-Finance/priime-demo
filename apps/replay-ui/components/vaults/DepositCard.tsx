@@ -183,7 +183,8 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
 
   const overWallet = parsedAmount !== null && reading.walletAssets !== null && parsedAmount > reading.walletAssets;
   const inputInvalid = rawAmount !== "" && parsedAmount === null;
-  const disableInputActions = pendingWrite !== null || receipt.isLoading;
+  const isBreached = (reading.breachFlags ?? 0) !== 0;
+  const disableInputActions = pendingWrite !== null || receipt.isLoading || isBreached;
 
   // Shared for the panel body: the banner. Also handles the "the receipt
   // failed" case so a reverted tx does not appear as a permanent spinner.
@@ -332,6 +333,12 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
         </p>
       ) : overWallet ? (
         <p className="vxd-dep-err">Amount exceeds your wallet balance.</p>
+      ) : null}
+      {isBreached ? (
+        <p className="vxd-dep-err">
+          Vault is under a strategist-configured breach (flags {reading.breachFlags}) — new
+          deposits are blocked until the next clean strike. Existing claims are unaffected.
+        </p>
       ) : null}
       <button
         type="button"

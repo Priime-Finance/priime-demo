@@ -66,6 +66,13 @@ sol! {
         /// Hours between the market's last accrual and `inputs_block`. A
         /// stale market means the strike is measuring an old snapshot.
         uint32 hoursSinceUpdate;
+        /// Bit set OR-composed from `BREACH_HF_FLOOR` (1<<0) /
+        /// `BREACH_DELEVERAGE` (1<<1). Non-zero means a strategist-
+        /// configured guard fired this strike. The vault contract mirrors
+        /// the bit into `isBreached` and refuses new deposit / redeem
+        /// requests until a subsequent strike attests a clean flag set.
+        /// See `components/vault-nav/src/nav.rs::BREACH_*`.
+        uint16 breachFlags;
         /// Quorum-signed on-chain action batch the vault dispatches AFTER
         /// NAV settlement. Empty when the component chose to hold. Each
         /// operator running the same config computes identical bytes here;
@@ -277,7 +284,21 @@ pub struct Observations {
     pub reserve_bps: u32,
     pub supply_apy_bps: u32,
     pub hours_since_update: u32,
+    /// Bit set OR-composed from `BREACH_*` constants. Non-zero means at
+    /// least one strategist-configured guard fired this strike. The vault
+    /// contract reads this and refuses new deposit / redeem requests until
+    /// the position has been trimmed and a subsequent strike attests a
+    /// clean flag set (roadmap P00 #13).
+    pub breach_flags: u16,
 }
+
+/// Bit set on `Observations::breach_flags` when the current LTV exceeds
+/// what `hf_floor_bps` allows under the market's LLTV.
+pub const BREACH_HF_FLOOR: u16 = 1 << 0;
+
+/// Bit set when the current LTV crosses the strategist's `hf_deleverage_bps`
+/// trim trigger. Both flags can be set at once.
+pub const BREACH_DELEVERAGE: u16 = 1 << 1;
 
 /// Morpho `toAssetsUp`: borrow shares to assets, rounded up, with the
 /// virtual-shares convention. Zero shares is zero assets.
@@ -522,24 +543,31 @@ pub fn preset_equity_haircut_bps(preset: RiskPreset) -> u32 {
     }
 }
 
-/// Fail the cycle if the current position's health factor drops below the
-/// strategist's floor. The floor is `hf_floor_bps = HF * 1e4` (so 11_000 is
-/// HF 1.10, 15_000 is HF 1.50). The allowed LTV under that floor is
-/// `lltv_bps * 10_000 / hf_floor_bps`; the cycle fails when the measured
-/// LTV exceeds it. Zero disables the check.
+/// Detect whether the current position's health factor has dropped below the
+/// strategist's floor. `Ok(true)` means the guard fired this strike; the
+/// caller sets [`BREACH_HF_FLOOR`] on the observations bag and (from
+/// roadmap P00 #13 onward) still attests, so the vault contract can gate
+/// new deposit / redeem requests instead of the whole strike silently
+/// disappearing. `Ok(false)` means the position is inside the allowed band.
 ///
-/// A value below 10_000 (HF < 1.0) sits at or past the liquidation boundary
-/// and is refused rather than accepted as "the position may be liquidatable
-/// but keep attesting": the guard's whole purpose is to stop attesting there.
+/// `Err` is only returned for a CONFIG-level problem: an `hf_floor_bps`
+/// below 10_000 sits at or past the liquidation boundary, so accepting it
+/// would let a strategist attest into insolvency. That is not a breach the
+/// runtime can recover from — it means the workflow was misconfigured and
+/// the cycle must refuse to attest at all.
+///
+/// The floor is `hf_floor_bps = HF * 1e4` (so 11_000 is HF 1.10, 15_000 is
+/// HF 1.50). Allowed LTV is `lltv_bps * 10_000 / hf_floor_bps`; breach when
+/// the measured LTV exceeds it. Zero disables the check.
 pub fn check_hf_floor(
     collateral_1e18: u128,
     price_1e24: U256,
     debt_usdc: U256,
     hf_floor_bps: u32,
     lltv_wad: U256,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if hf_floor_bps == 0 {
-        return Ok(());
+        return Ok(false);
     }
     if hf_floor_bps < 10_000 {
         return Err(format!(
@@ -552,20 +580,12 @@ pub fn check_hf_floor(
     let priced_collateral = priced_collateral_usdc(collateral_1e18, price_1e24);
     if priced_collateral.is_zero() {
         // No collateral (or zero-priced) means no leverage - the check is vacuous.
-        return Ok(());
+        return Ok(false);
     }
-    // ltv_bps = debt * 10_000 / priced_collateral. Widen once to avoid overflow.
     let ltv_bps = debt_usdc * U256::from(10_000u16) / priced_collateral;
-    // allowed_ltv_bps = lltv_bps * 10_000 / hf_floor_bps.
-    // lltv is in WAD (1e18). Convert to bps: lltv_wad / 1e14.
     let lltv_bps = lltv_wad / U256::from(100_000_000_000_000u64);
     let allowed_bps = lltv_bps * U256::from(10_000u16) / U256::from(hf_floor_bps);
-    if ltv_bps > allowed_bps {
-        return Err(format!(
-            "hf_floor_breached: ltv_bps {ltv_bps} exceeds allowed {allowed_bps} (lltv_bps {lltv_bps}, hf_floor_bps {hf_floor_bps})"
-        ));
-    }
-    Ok(())
+    Ok(ltv_bps > allowed_bps)
 }
 
 /// Attested NAV in USDC base units. Errors if the vault's idle balance is
@@ -689,27 +709,23 @@ pub fn check_applied_leverage_drift(
     Ok(())
 }
 
-/// Fail the cycle when the position's health factor has dropped below the
-/// strategist's trim trigger. The trigger is `deleverage_bps = HF * 1e4`
-/// (so 14_550 is HF 1.455). The allowed LTV under that trigger is
-/// `lltv_bps * 10_000 / deleverage_bps`; the cycle fails when the measured
-/// LTV exceeds it. Zero disables the check.
-///
-/// If the strike measures a value past the trigger and nothing has trimmed,
-/// attesting a NAV as though the position matched policy is a lie of
-/// omission. A value below 10_000 (HF < 1.0) sits at or past liquidation
-/// and is refused for the same reason as `check_hf_floor`.
+/// Detect whether the position has drifted past the strategist's trim
+/// trigger. Same semantics as [`check_hf_floor`]: `Ok(true)` means breached
+/// (caller sets [`BREACH_DELEVERAGE`]); `Ok(false)` means inside the
+/// allowed band; `Err` is reserved for the config-level "HF < 1.0" refusal.
+/// The trigger is `deleverage_bps = HF * 1e4` (so 14_550 is HF 1.455).
+/// Allowed LTV is `lltv_bps * 10_000 / deleverage_bps`. Zero disables.
 pub fn check_deleverage_threshold(
     measured_ltv_bps: u32,
     deleverage_bps: u32,
     debt_usdc: U256,
     lltv_wad: U256,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if debt_usdc < U256::from(1_000_000u64) {
-        return Ok(());
+        return Ok(false);
     }
     if deleverage_bps == 0 {
-        return Ok(());
+        return Ok(false);
     }
     if deleverage_bps < 10_000 {
         return Err(format!(
@@ -718,13 +734,7 @@ pub fn check_deleverage_threshold(
     }
     let lltv_bps = lltv_wad / U256::from(100_000_000_000_000u64);
     let allowed_bps = lltv_bps * U256::from(10_000u16) / U256::from(deleverage_bps);
-    let measured = U256::from(measured_ltv_bps);
-    if measured > allowed_bps {
-        return Err(format!(
-            "hf_deleverage_threshold_breached: measured LTV {measured_ltv_bps} bps exceeds trim trigger {allowed_bps} bps (lltv_bps {lltv_bps}, hf_deleverage_bps {deleverage_bps})"
-        ));
-    }
-    Ok(())
+    Ok(U256::from(measured_ltv_bps) > allowed_bps)
 }
 
 /// Fail the cycle when the vault's USDC reserve is below the strategist's
@@ -814,7 +824,8 @@ impl PlanBuild {
 
 /// The signed payload bytes:
 /// abi.encode(handler, nav, inputsBlock, configHash, leverageBps, ltvBps,
-///            reserveBps, supplyApyBps, hoursSinceUpdate, StrategyPlan).
+///            reserveBps, supplyApyBps, hoursSinceUpdate, breachFlags,
+///            StrategyPlan).
 pub fn encode_payload(
     handler: Address,
     nav: U256,
@@ -833,6 +844,7 @@ pub fn encode_payload(
         reserveBps: obs.reserve_bps,
         supplyApyBps: obs.supply_apy_bps,
         hoursSinceUpdate: obs.hours_since_update,
+        breachFlags: obs.breach_flags,
         plan: plan.into_sol(),
     }
     .abi_encode()
@@ -1113,7 +1125,7 @@ mod tests {
         let debt_usdc = U256::from(1_000_000u64); // 1 USDC
         let lltv_wad = U256::from(915_000_000_000_000_000u64); // 91.5%
         let par = U256::from(PAR_PRICE_1E24);
-        assert!(check_hf_floor(collateral_1e18, par, debt_usdc, 0, lltv_wad).is_ok());
+        assert_eq!(check_hf_floor(collateral_1e18, par, debt_usdc, 0, lltv_wad), Ok(false));
     }
 
     #[test]
@@ -1126,7 +1138,7 @@ mod tests {
         let debt_usdc = U256::from(800_000u64); // 0.8 USDC
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
         let par = U256::from(PAR_PRICE_1E24);
-        assert!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad).is_ok());
+        assert_eq!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad), Ok(false));
     }
 
     #[test]
@@ -1136,8 +1148,9 @@ mod tests {
         let debt_usdc = U256::from(850_000u64);
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
         let par = U256::from(PAR_PRICE_1E24);
-        let err = check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad).unwrap_err();
-        assert!(err.contains("hf_floor_breached"));
+        // Breach is signalled as Ok(true) so run_cycle can attest with the
+        // BREACH_HF_FLOOR bit set instead of aborting the whole strike.
+        assert_eq!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad), Ok(true));
     }
 
     #[test]
@@ -1153,18 +1166,17 @@ mod tests {
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
         let par = U256::from(PAR_PRICE_1E24);
         // Sanity: at par the check passes (as the reviewer flagged).
-        assert!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad).is_ok());
-        // At market, it refuses.
+        assert_eq!(check_hf_floor(collateral_1e18, par, debt_usdc, 11_000, lltv_wad), Ok(false));
+        // At market, it flags a breach.
         let depeg_price = par * U256::from(9_000u16) / U256::from(10_000u16);
-        let err = check_hf_floor(collateral_1e18, depeg_price, debt_usdc, 11_000, lltv_wad).unwrap_err();
-        assert!(err.contains("hf_floor_breached"));
+        assert_eq!(check_hf_floor(collateral_1e18, depeg_price, debt_usdc, 11_000, lltv_wad), Ok(true));
     }
 
     #[test]
     fn hf_floor_vacuous_on_zero_collateral() {
         // No collateral means no leverage story; the check has nothing to say.
         let par = U256::from(PAR_PRICE_1E24);
-        assert!(check_hf_floor(0, par, U256::ZERO, 11_000, U256::from(915_000_000_000_000_000u64)).is_ok());
+        assert_eq!(check_hf_floor(0, par, U256::ZERO, 11_000, U256::from(915_000_000_000_000_000u64)), Ok(false));
     }
 
     #[test]
@@ -1365,6 +1377,7 @@ mod tests {
             reserve_bps: 500,
             supply_apy_bps: 700,
             hours_since_update: 3,
+            breach_flags: BREACH_HF_FLOOR | BREACH_DELEVERAGE,
         };
         let plan = PlanBuild::empty(1_234_567);
         let bytes = encode_payload(
@@ -1397,6 +1410,11 @@ mod tests {
         assert_eq!(U256::from_be_slice(&body[192..224]), U256::from(500u64));
         assert_eq!(U256::from_be_slice(&body[224..256]), U256::from(700u64));
         assert_eq!(U256::from_be_slice(&body[256..288]), U256::from(3u64));
+        // breachFlags (uint16) sits after hoursSinceUpdate, still 32-byte word.
+        assert_eq!(
+            U256::from_be_slice(&body[288..320]),
+            U256::from(u64::from(BREACH_HF_FLOOR | BREACH_DELEVERAGE)),
+        );
     }
 
     #[test]
@@ -1479,7 +1497,7 @@ mod tests {
     #[test]
     fn deleverage_threshold_skipped_when_no_debt() {
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        assert!(check_deleverage_threshold(9_500, 14_550, U256::ZERO, lltv_wad).is_ok());
+        assert_eq!(check_deleverage_threshold(9_500, 14_550, U256::ZERO, lltv_wad), Ok(false));
     }
 
     #[test]
@@ -1489,7 +1507,7 @@ mod tests {
         // Measured 6000 bps < 6289, passes.
         let debt = U256::from(5_000_000u64);
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        assert!(check_deleverage_threshold(6_000, 14_550, debt, lltv_wad).is_ok());
+        assert_eq!(check_deleverage_threshold(6_000, 14_550, debt, lltv_wad), Ok(false));
     }
 
     #[test]
@@ -1497,8 +1515,8 @@ mod tests {
         // Same trigger 6289 bps; measured 6500 bps > 6289, fails.
         let debt = U256::from(5_000_000u64);
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        let err = check_deleverage_threshold(6_500, 14_550, debt, lltv_wad).unwrap_err();
-        assert!(err.contains("hf_deleverage_threshold_breached"));
+        // Breach signalled as Ok(true); run_cycle sets BREACH_DELEVERAGE.
+        assert_eq!(check_deleverage_threshold(6_500, 14_550, debt, lltv_wad), Ok(true));
     }
 
     #[test]

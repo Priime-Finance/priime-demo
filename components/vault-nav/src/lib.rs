@@ -271,7 +271,15 @@ mod component {
         // three surfaces (roadmap P00 #11).
         let price = nav::preset_collateral_price_1e24(twap_price, preset);
 
-        nav::check_hf_floor(s.collateral_1e18, price, debt, hf_floor_bps, lltv)?;
+        // hf_floor breach no longer aborts the strike: we attest with the
+        // BREACH_HF_FLOOR bit set (roadmap P00 #13) so the vault contract
+        // can stop taking new deposit / redeem requests instead of the
+        // whole cycle silently disappearing. `?` still bubbles a config
+        // error (hf_floor_bps below HF 1.0), which is not a runtime state.
+        let mut breach_flags: u16 = 0;
+        if nav::check_hf_floor(s.collateral_1e18, price, debt, hf_floor_bps, lltv)? {
+            breach_flags |= nav::BREACH_HF_FLOOR;
+        }
 
         let value = nav::nav_usdc(
             s.collateral_1e18,
@@ -305,12 +313,15 @@ mod component {
         // Every value is deterministic from chain state at `inputs_block`, so
         // two operators running the same config produce identical bytes.
         let utilization_bps = nav::utilization_bps(s.total_borrow_assets, s.total_supply_assets);
-        let obs = nav::Observations {
+        let mut obs = nav::Observations {
             leverage_bps: nav::measured_leverage_bps(s.collateral_1e18, price, debt),
             ltv_bps: nav::measured_ltv_bps(s.collateral_1e18, price, debt),
             reserve_bps: nav::measured_reserve_bps(s.vault_usdc_balance, value),
             supply_apy_bps: nav::measured_supply_apy_bps(s.borrow_rate_wad, utilization_bps),
             hours_since_update: nav::hours_between(s.market_last_update, s.block_timestamp),
+            /* Rewritten below once every check has run so callers see one
+               finalised bag, not a partially-filled snapshot. */
+            breach_flags: 0,
         };
 
         // Read the strategist's per-knob invariants and fail the cycle when
@@ -329,7 +340,9 @@ mod component {
                 .trim()
                 .parse()
                 .map_err(|e| format!("bad hf_deleverage_bps in config: {e}"))?;
-            nav::check_deleverage_threshold(obs.ltv_bps, deleverage_bps, debt, lltv)?;
+            if nav::check_deleverage_threshold(obs.ltv_bps, deleverage_bps, debt, lltv)? {
+                breach_flags |= nav::BREACH_DELEVERAGE;
+            }
         }
         if let Some(raw) = cfg_opt("reserve_fraction") {
             let floor_bps = nav::parse_decimal_bps(&raw)?;
@@ -345,14 +358,23 @@ mod component {
             nav::check_compound_cadence(obs.hours_since_update, cadence_hours, 6)?;
         }
 
+        // Fold every guard's verdict into the observations bag so the vault
+        // contract can decode `breachFlags != 0` and stop taking new
+        // deposit / redeem requests (roadmap P00 #13). Non-fatal: the strike
+        // still attests, downstream verifiers still see every reading.
+        obs.breach_flags = breach_flags;
+
         // Compose the on-chain action plan the vault will dispatch after
-        // NAV settlement. The recursive USDe/USDC loop only ships an
-        // OpenPosition step today: swap idle USDC into USDe via the pinned
-        // Aerodrome pool, supply as Morpho collateral, and borrow the exact
-        // amount that lands the position at `applied_leverage`. Everything
-        // else (deleverage, compound, unwind) is a NoOp for now — the vault
-        // sits at target and NAV keeps attesting.
-        let plan = build_action_plan(&s, debt, value, twap_price, price)?;
+        // NAV settlement. On breach we force an empty plan: the position
+        // has drifted past what the strategist configured, and continuing
+        // to lever up (or emit any other loop action) against a live guard
+        // would be a lie of omission. Plan-deleverage lands in P1 #4 and
+        // will replace the empty plan with an unwind step.
+        let plan = if breach_flags != 0 {
+            nav::PlanBuild::empty(s.block_timestamp)
+        } else {
+            build_action_plan(&s, debt, value, twap_price, price)?
+        };
 
         Ok(nav::encode_payload(
             vault,

@@ -190,6 +190,7 @@ contract PriimeVaultTest {
             reserveBps: 0,
             supplyApyBps: 0,
             hoursSinceUpdate: 0,
+            breachFlags: 0,
             plan: PriimeVault.StrategyPlan({
                 targets: new address[](0),
                 calldatas: new bytes[](0),
@@ -202,6 +203,35 @@ contract PriimeVaultTest {
             // abi.encode(BoundNavResult) mirrors the component's
             // struct.abi_encode() — a single dynamic tuple with the 0x20
             // leading offset word.
+            payload: abi.encode(result)
+        });
+    }
+
+    function _envelopeWithBreach(bytes20 eventId, uint256 nav, uint256 inputsBlock, uint16 flags)
+        internal
+        view
+        returns (IWavsServiceHandler.Envelope memory)
+    {
+        PriimeVault.BoundNavResult memory result = PriimeVault.BoundNavResult({
+            handler: address(vault),
+            nav: nav,
+            inputsBlock: inputsBlock,
+            configHash: bytes32(0),
+            leverageBps: 0,
+            ltvBps: 0,
+            reserveBps: 0,
+            supplyApyBps: 0,
+            hoursSinceUpdate: 0,
+            breachFlags: flags,
+            plan: PriimeVault.StrategyPlan({
+                targets: new address[](0),
+                calldatas: new bytes[](0),
+                timestamp: 0
+            })
+        });
+        return IWavsServiceHandler.Envelope({
+            eventId: eventId,
+            ordering: bytes12(0),
             payload: abi.encode(result)
         });
     }
@@ -773,6 +803,41 @@ contract PriimeVaultTest {
         require(vault.processed(bytes20(uint160(1))), "eventId marked processed");
     }
 
+    function test_BreachFlagSetOnStrikeRejectsNewRequests() public {
+        // Bootstrap: one round of clean deposit + strike so BOB can hold shares
+        // and prove the breach gate blocks REDEEM as well as DEPOSIT.
+        _bootstrapAlice();
+
+        // Strike lands with breachFlags != 0 (bit 0 = hf_floor). Vault
+        // attests NAV and stores the flag; existing balances are unaffected.
+        vault.handleSignedEnvelope(
+            _envelopeWithBreach(bytes20(uint160(0xB01)), 1_000 * ONE_USDC, 2, uint16(1)),
+            _sigs()
+        );
+        require(vault.breachFlags() == uint16(1), "flag stored");
+        require(vault.totalAssets() == 1_000 * ONE_USDC, "nav still attested");
+        // New deposit request refused with VaultBreached(1). BOB already
+        // approved the vault in setUp, so no allowance dance needed here.
+        vm.prank(BOB);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.VaultBreached.selector, uint16(1)));
+        vault.requestDeposit(100 * ONE_USDC, BOB, BOB);
+
+        // Existing share holder cannot open a new redeem request either.
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.VaultBreached.selector, uint16(1)));
+        vault.requestRedeem(100 * ONE_USDC, ALICE, ALICE);
+
+        // Next strike clears the flag: requests resume normally.
+        vault.handleSignedEnvelope(
+            _envelopeWithBreach(bytes20(uint160(0xB02)), 1_000 * ONE_USDC, 3, uint16(0)),
+            _sigs()
+        );
+        require(vault.breachFlags() == 0, "flag cleared by fresh strike");
+
+        vm.prank(BOB);
+        vault.requestDeposit(100 * ONE_USDC, BOB, BOB);
+    }
+
     function test_UpdateRejectedWhenValidationFails() public {
         manager.setReject(true);
 
@@ -840,6 +905,7 @@ contract PriimeVaultTest {
                     reserveBps: 0,
                     supplyApyBps: 0,
                     hoursSinceUpdate: 0,
+                    breachFlags: 0,
                     plan: PriimeVault.StrategyPlan({
                         targets: new address[](0),
                         calldatas: new bytes[](0),
@@ -992,7 +1058,8 @@ contract PriimeVaultTest {
             uint32(0),
             uint32(0),
             uint32(0),
-            uint32(0)
+            uint32(0),
+            uint16(0)
         );
         _attest(bytes20(uint160(0xE7E21)), 2_000 * ONE_USDC, 2);
     }
@@ -1025,6 +1092,7 @@ contract PriimeVaultTest {
                     reserveBps: 0,
                     supplyApyBps: 0,
                     hoursSinceUpdate: 0,
+                    breachFlags: 0,
                     plan: PriimeVault.StrategyPlan({
                         targets: new address[](0),
                         calldatas: new bytes[](0),
@@ -1065,6 +1133,7 @@ contract PriimeVaultTest {
                     reserveBps: 0,
                     supplyApyBps: 0,
                     hoursSinceUpdate: 0,
+                    breachFlags: 0,
                     plan: PriimeVault.StrategyPlan({
                         targets: new address[](0),
                         calldatas: new bytes[](0),

@@ -144,6 +144,17 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     /// @notice USDC reserved for claimable redemptions; NOT part of NAV.
     uint256 public totalClaimableRedeemAssets;
 
+    /// @notice Non-zero when the last accepted NAV strike raised at least
+    ///         one strategist-configured guard (LTV above the hf_floor, or
+    ///         drift past the deleverage trigger). While set, the vault
+    ///         refuses new `requestDeposit` / `requestRedeem`; existing
+    ///         claims fulfill normally. Cleared automatically the next
+    ///         strike whose payload attests clean flags. Bit layout:
+    ///           bit 0 = hf_floor breached
+    ///           bit 1 = deleverage trigger crossed
+    ///         Mirrors `components/vault-nav/src/nav.rs::BREACH_*`.
+    uint16 public breachFlags;
+
     // ERC-7540 events.
     event DepositRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address sender, uint256 assets
@@ -181,7 +192,8 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         uint32 ltvBps,
         uint32 reserveBps,
         uint32 supplyApyBps,
-        uint32 hoursSinceUpdate
+        uint32 hoursSinceUpdate,
+        uint16 breachFlags
     );
     event DepositRequestFulfilled(address indexed controller, uint256 assets, uint256 shares);
     event RedeemRequestFulfilled(address indexed controller, uint256 shares, uint256 assets);
@@ -219,6 +231,10 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     error NotControllerOrOperator();
     error ExceedsClaimable(uint256 requested, uint256 claimable);
     error QueueFull();
+    /// @notice `requestDeposit` / `requestRedeem` while the vault is under a
+    ///         breach flag. Existing claims are unaffected; only NEW
+    ///         requests are refused, until the next strike clears the flag.
+    error VaultBreached(uint16 flags);
     /// @notice Batch of on-chain steps the operator quorum computed for
     ///         THIS strike. `targets[i]` is called with `calldatas[i]` under
     ///         the vault's own escrow-floor guard, once the NAV attestation
@@ -242,6 +258,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         uint32 reserveBps;
         uint32 supplyApyBps;
         uint32 hoursSinceUpdate;
+        uint16 breachFlags;
         StrategyPlan plan;
     }
     ///         computing block for downstream verifiers.
@@ -404,6 +421,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      and the deposit queue holds `MAX_QUEUE_LENGTH` controllers.
     function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256) {
         if (assets == 0) revert ZeroAmount();
+        if (breachFlags != 0) revert VaultBreached(breachFlags);
         if (msg.sender != owner && !_operators[owner][msg.sender]) revert NotOwnerOrOperator();
 
         IERC20(asset()).safeTransferFrom(owner, address(this), assets);
@@ -441,6 +459,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      and the redeem queue holds `MAX_QUEUE_LENGTH` controllers.
     function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256) {
         if (shares == 0) revert ZeroAmount();
+        if (breachFlags != 0) revert VaultBreached(breachFlags);
         if (msg.sender != owner && !_operators[owner][msg.sender]) {
             _spendAllowance(owner, msg.sender, shares);
         }
@@ -727,6 +746,11 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         lastInputsBlock = inputsBlock;
         updateCount += 1;
         lastConfigHash = configHash;
+        /* Mirror the operator quorum's breach verdict so `requestDeposit` /
+           `requestRedeem` refuse new capital while a strategist-configured
+           guard is live. Existing pending claims fulfill above regardless
+           because a breach is exactly when redeemers most need to exit. */
+        breachFlags = result.breachFlags;
 
         _fulfillDeposits();
         _fulfillRedeems();
@@ -741,7 +765,8 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
             result.ltvBps,
             result.reserveBps,
             result.supplyApyBps,
-            result.hoursSinceUpdate
+            result.hoursSinceUpdate,
+            result.breachFlags
         );
 
         // Plan dispatch is best-effort: NAV settlement and fulfillments have
