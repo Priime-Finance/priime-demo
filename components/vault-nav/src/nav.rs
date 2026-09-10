@@ -407,6 +407,124 @@ pub fn hours_between(from_secs: u64, to_secs: u64) -> u32 {
     u32::try_from(secs / 3_600).unwrap_or(u32::MAX)
 }
 
+/// Parse a decimal-string leverage/fraction into bps. `"2.5"` -> `25_000`,
+/// `"0.05"` -> `500`, `"1"` -> `10_000`. Rejects negatives, NaN, and any
+/// value that overflows `u32`. Uses `f64` intentionally: IEEE 754 `parse`
+/// is deterministic across every wasm operator running the same host.
+pub fn parse_decimal_bps(raw: &str) -> Result<u32, String> {
+    let v: f64 = raw
+        .trim()
+        .parse()
+        .map_err(|e| format!("cannot parse {raw:?} as decimal: {e}"))?;
+    if !v.is_finite() || v < 0.0 {
+        return Err(format!("decimal {raw:?} must be finite and non-negative"));
+    }
+    let bps = (v * 10_000.0).round();
+    if bps > f64::from(u32::MAX) {
+        return Err(format!("decimal {raw:?} overflows u32 bps"));
+    }
+    Ok(bps as u32)
+}
+
+/// Fail the cycle when measured leverage drifts more than `tolerance_bps`
+/// (relative to configured) from what the strategist published. Skips when
+/// the vault has essentially no debt: a freshly seeded loop reads zero
+/// leverage regardless of the user's target, and a fresh vault is not a
+/// lie about a position that does not exist yet.
+pub fn check_applied_leverage_drift(
+    measured_bps: u32,
+    configured_bps: u32,
+    tolerance_bps: u32,
+    debt_usdc: U256,
+) -> Result<(), String> {
+    // Under 1 USDC of debt there is no leverage story worth policing.
+    if debt_usdc < U256::from(1_000_000u64) {
+        return Ok(());
+    }
+    if configured_bps == 0 {
+        return Ok(());
+    }
+    let lo = configured_bps.saturating_sub(
+        (u64::from(configured_bps) * u64::from(tolerance_bps) / 10_000) as u32,
+    );
+    let hi = configured_bps.saturating_add(
+        (u64::from(configured_bps) * u64::from(tolerance_bps) / 10_000) as u32,
+    );
+    if measured_bps < lo || measured_bps > hi {
+        return Err(format!(
+            "applied_leverage_drift: measured {measured_bps} bps outside [{lo}, {hi}] (configured {configured_bps} bps, tolerance {tolerance_bps} bps)"
+        ));
+    }
+    Ok(())
+}
+
+/// Fail the cycle when the position's LTV is above the trim trigger the
+/// strategist configured. The vault publishes a deleverage_bps threshold as
+/// "when LTV crosses this, trim the position"; if the strike measures a
+/// value above the trim line and nothing has trimmed, attesting a NAV as
+/// though the position matched policy is a lie of omission.
+pub fn check_deleverage_threshold(
+    measured_ltv_bps: u32,
+    deleverage_bps: u32,
+    debt_usdc: U256,
+) -> Result<(), String> {
+    if debt_usdc < U256::from(1_000_000u64) {
+        return Ok(());
+    }
+    if deleverage_bps == 0 {
+        return Ok(());
+    }
+    if measured_ltv_bps > deleverage_bps {
+        return Err(format!(
+            "hf_deleverage_threshold_breached: measured LTV {measured_ltv_bps} bps exceeds trim trigger {deleverage_bps} bps"
+        ));
+    }
+    Ok(())
+}
+
+/// Fail the cycle when the vault's USDC reserve is below the strategist's
+/// floor. Skipped for near-empty vaults (nav < 1 USDC): a freshly published
+/// vault holds no assets and any reserve fraction of zero is vacuous.
+pub fn check_reserve_floor(
+    measured_reserve_bps: u32,
+    floor_bps: u32,
+    nav_usdc: U256,
+) -> Result<(), String> {
+    if nav_usdc < U256::from(1_000_000u64) {
+        return Ok(());
+    }
+    if floor_bps == 0 {
+        return Ok(());
+    }
+    if measured_reserve_bps < floor_bps {
+        return Err(format!(
+            "reserve_below_floor: measured {measured_reserve_bps} bps below floor {floor_bps} bps"
+        ));
+    }
+    Ok(())
+}
+
+/// Fail the cycle when the market has not accrued within the strategist's
+/// compound cadence. `grace_hours` is added to the configured cadence so a
+/// missed cron beat does not immediately kill the vault. A cadence of zero
+/// disables the check (no policy declared).
+pub fn check_compound_cadence(
+    hours_since_update: u32,
+    cadence_hours: u32,
+    grace_hours: u32,
+) -> Result<(), String> {
+    if cadence_hours == 0 {
+        return Ok(());
+    }
+    let ceiling = cadence_hours.saturating_add(grace_hours);
+    if hours_since_update > ceiling {
+        return Err(format!(
+            "compound_overdue: {hours_since_update} hours since market update, cadence {cadence_hours} h (+ {grace_hours} h grace)"
+        ));
+    }
+    Ok(())
+}
+
 /// The signed payload bytes:
 /// abi.encode(handler, nav, inputsBlock, configHash, leverageBps, ltvBps,
 ///            reserveBps, supplyApyBps, hoursSinceUpdate).
@@ -868,5 +986,99 @@ mod tests {
         assert_eq!(U256::from_be_slice(&bytes[192..224]), U256::from(500u64));
         assert_eq!(U256::from_be_slice(&bytes[224..256]), U256::from(700u64));
         assert_eq!(U256::from_be_slice(&bytes[256..288]), U256::from(3u64));
+    }
+
+    // --- knob invariants ----------------------------------------------------
+
+    #[test]
+    fn parse_decimal_bps_common_shapes() {
+        assert_eq!(parse_decimal_bps("2.5").unwrap(), 25_000);
+        assert_eq!(parse_decimal_bps("0.05").unwrap(), 500);
+        assert_eq!(parse_decimal_bps("1").unwrap(), 10_000);
+        assert_eq!(parse_decimal_bps(" 3.0 ").unwrap(), 30_000);
+    }
+
+    #[test]
+    fn parse_decimal_bps_rejects_bad_input() {
+        assert!(parse_decimal_bps("-1").is_err());
+        assert!(parse_decimal_bps("nan").is_err());
+        assert!(parse_decimal_bps("abc").is_err());
+    }
+
+    #[test]
+    fn applied_leverage_skipped_when_no_debt() {
+        // Empty vault: measured leverage is 0, configured is 2.5x. No cycle-fail.
+        assert!(check_applied_leverage_drift(0, 25_000, 2_500, U256::ZERO).is_ok());
+    }
+
+    #[test]
+    fn applied_leverage_within_tolerance_passes() {
+        // Configured 2.5x, tolerance 25% -> band [1.875x, 3.125x].
+        let debt = U256::from(5_000_000u64);
+        assert!(check_applied_leverage_drift(20_000, 25_000, 2_500, debt).is_ok());
+        assert!(check_applied_leverage_drift(30_000, 25_000, 2_500, debt).is_ok());
+    }
+
+    #[test]
+    fn applied_leverage_drift_fails_the_cycle() {
+        let debt = U256::from(5_000_000u64);
+        // 4x measured vs 2.5x configured is a real drift.
+        let err = check_applied_leverage_drift(40_000, 25_000, 2_500, debt).unwrap_err();
+        assert!(err.contains("applied_leverage_drift"));
+    }
+
+    #[test]
+    fn deleverage_threshold_skipped_when_no_debt() {
+        assert!(check_deleverage_threshold(9_500, 8_500, U256::ZERO).is_ok());
+    }
+
+    #[test]
+    fn deleverage_threshold_passes_below_trigger() {
+        let debt = U256::from(5_000_000u64);
+        assert!(check_deleverage_threshold(8_400, 8_500, debt).is_ok());
+    }
+
+    #[test]
+    fn deleverage_threshold_fails_above_trigger() {
+        let debt = U256::from(5_000_000u64);
+        let err = check_deleverage_threshold(9_000, 8_500, debt).unwrap_err();
+        assert!(err.contains("hf_deleverage_threshold_breached"));
+    }
+
+    #[test]
+    fn reserve_floor_skipped_when_nav_is_empty() {
+        assert!(check_reserve_floor(0, 500, U256::ZERO).is_ok());
+    }
+
+    #[test]
+    fn reserve_floor_passes_at_or_above_floor() {
+        let nav = U256::from(10_000_000u64);
+        assert!(check_reserve_floor(500, 500, nav).is_ok());
+        assert!(check_reserve_floor(600, 500, nav).is_ok());
+    }
+
+    #[test]
+    fn reserve_floor_fails_below_floor() {
+        let nav = U256::from(10_000_000u64);
+        let err = check_reserve_floor(400, 500, nav).unwrap_err();
+        assert!(err.contains("reserve_below_floor"));
+    }
+
+    #[test]
+    fn compound_cadence_zero_disables_the_check() {
+        // Old vault, no cadence configured; a stale market is not a lie.
+        assert!(check_compound_cadence(1_000_000, 0, 6).is_ok());
+    }
+
+    #[test]
+    fn compound_cadence_within_grace_passes() {
+        assert!(check_compound_cadence(24, 24, 6).is_ok());
+        assert!(check_compound_cadence(30, 24, 6).is_ok());
+    }
+
+    #[test]
+    fn compound_cadence_beyond_grace_fails() {
+        let err = check_compound_cadence(31, 24, 6).unwrap_err();
+        assert!(err.contains("compound_overdue"));
     }
 }

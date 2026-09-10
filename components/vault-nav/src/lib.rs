@@ -288,6 +288,38 @@ mod component {
             hours_since_update: nav::hours_between(s.market_last_update, s.block_timestamp),
         };
 
+        // Read the strategist's per-knob invariants and fail the cycle when
+        // the measured observation breaches them. Each check is skipped when
+        // the vault is not in a state the invariant applies to (no debt, no
+        // NAV, no policy declared), so a freshly published vault attests
+        // deterministically before any strategist action has landed.
+        if let Some(raw) = cfg_opt("applied_leverage") {
+            let configured_bps = nav::parse_decimal_bps(&raw)?;
+            // 25% tolerance band: 2.5x published lets the position sit in
+            // [1.875x, 3.125x] before the cycle refuses.
+            nav::check_applied_leverage_drift(obs.leverage_bps, configured_bps, 2_500, debt)?;
+        }
+        if let Some(raw) = cfg_opt("hf_deleverage_bps") {
+            let deleverage_bps: u32 = raw
+                .trim()
+                .parse()
+                .map_err(|e| format!("bad hf_deleverage_bps in config: {e}"))?;
+            nav::check_deleverage_threshold(obs.ltv_bps, deleverage_bps, debt)?;
+        }
+        if let Some(raw) = cfg_opt("reserve_fraction") {
+            let floor_bps = nav::parse_decimal_bps(&raw)?;
+            nav::check_reserve_floor(obs.reserve_bps, floor_bps, value)?;
+        }
+        if let Some(raw) = cfg_opt("compound_cadence_hours") {
+            let cadence_hours: u32 = raw
+                .trim()
+                .parse()
+                .map_err(|e| format!("bad compound_cadence_hours in config: {e}"))?;
+            // Six-hour grace: a missed cron beat does not immediately kill
+            // an otherwise healthy vault.
+            nav::check_compound_cadence(obs.hours_since_update, cadence_hours, 6)?;
+        }
+
         Ok(nav::encode_payload(vault, value, s.inputs_block, config_hash(), obs))
     }
 
