@@ -206,7 +206,11 @@ pub fn plan_open_position(
     // 1. approve USDC to router
     plan.push(
         usdc,
-        approveCall { spender: swap_router, amount: usdc_amount }.abi_encode(),
+        approveCall {
+            spender: swap_router,
+            amount: usdc_amount,
+        }
+        .abi_encode(),
     );
     // 2. swap USDC -> USDe
     plan.push(
@@ -215,7 +219,8 @@ pub fn plan_open_position(
             params: AerodromeExactInputSingleParams {
                 tokenIn: usdc,
                 tokenOut: usde,
-                tickSpacing: alloy_primitives::Signed::<24, 1>::try_from(tick_spacing).unwrap_or_default(),
+                tickSpacing: alloy_primitives::Signed::<24, 1>::try_from(tick_spacing)
+                    .unwrap_or_default(),
                 recipient: vault,
                 deadline: U256::from(deadline_secs),
                 amountIn: usdc_amount,
@@ -228,7 +233,11 @@ pub fn plan_open_position(
     // 3. approve USDe to morpho
     plan.push(
         usde,
-        approveCall { spender: morpho, amount: min_usde_out }.abi_encode(),
+        approveCall {
+            spender: morpho,
+            amount: min_usde_out,
+        }
+        .abi_encode(),
     );
     // 4. supplyCollateral
     plan.push(
@@ -634,12 +643,10 @@ pub fn check_applied_leverage_drift(
     if configured_bps == 0 {
         return Ok(());
     }
-    let lo = configured_bps.saturating_sub(
-        (u64::from(configured_bps) * u64::from(tolerance_bps) / 10_000) as u32,
-    );
-    let hi = configured_bps.saturating_add(
-        (u64::from(configured_bps) * u64::from(tolerance_bps) / 10_000) as u32,
-    );
+    let lo = configured_bps
+        .saturating_sub((u64::from(configured_bps) * u64::from(tolerance_bps) / 10_000) as u32);
+    let hi = configured_bps
+        .saturating_add((u64::from(configured_bps) * u64::from(tolerance_bps) / 10_000) as u32);
     if measured_bps < lo || measured_bps > hi {
         return Err(format!(
             "applied_leverage_drift: measured {measured_bps} bps outside [{lo}, {hi}] (configured {configured_bps} bps, tolerance {tolerance_bps} bps)"
@@ -731,7 +738,11 @@ pub struct PlanBuild {
 
 impl PlanBuild {
     pub fn empty(timestamp_secs: u64) -> Self {
-        Self { targets: Vec::new(), calldatas: Vec::new(), timestamp_secs }
+        Self {
+            targets: Vec::new(),
+            calldatas: Vec::new(),
+            timestamp_secs,
+        }
     }
 
     pub fn push(&mut self, target: Address, calldata: Vec<u8>) {
@@ -963,7 +974,6 @@ mod tests {
         assert_eq!(bounded_price_1e24(depeg), depeg);
     }
 
-
     // --- risk preset --------------------------------------------------------
 
     #[test]
@@ -1003,7 +1013,10 @@ mod tests {
     fn preset_parse_round_trip() {
         assert_eq!(RiskPreset::parse("aggressive"), Ok(RiskPreset::Aggressive));
         assert_eq!(RiskPreset::parse("standard"), Ok(RiskPreset::Standard));
-        assert_eq!(RiskPreset::parse("conservative"), Ok(RiskPreset::Conservative));
+        assert_eq!(
+            RiskPreset::parse("conservative"),
+            Ok(RiskPreset::Conservative)
+        );
         assert!(RiskPreset::parse("yolo").is_err());
     }
 
@@ -1107,7 +1120,10 @@ mod tests {
 
     #[test]
     fn measured_leverage_is_zero_with_no_debt() {
-        assert_eq!(measured_leverage_bps(1_000_000_000_000_000_000u128, U256::ZERO), 0);
+        assert_eq!(
+            measured_leverage_bps(1_000_000_000_000_000_000u128, U256::ZERO),
+            0
+        );
     }
 
     #[test]
@@ -1220,8 +1236,14 @@ mod tests {
         let body = &bytes[32..];
         assert_eq!(&body[0..12], &[0u8; 12]);
         assert_eq!(&body[12..32], handler.as_slice());
-        assert_eq!(U256::from_be_slice(&body[32..64]), U256::from(500_000_000u64));
-        assert_eq!(U256::from_be_slice(&body[64..96]), U256::from(49_911_282u64));
+        assert_eq!(
+            U256::from_be_slice(&body[32..64]),
+            U256::from(500_000_000u64)
+        );
+        assert_eq!(
+            U256::from_be_slice(&body[64..96]),
+            U256::from(49_911_282u64)
+        );
         assert_eq!(&body[96..128], config_hash.as_slice());
         assert_eq!(U256::from_be_slice(&body[128..160]), U256::from(25_000u64));
         assert_eq!(U256::from_be_slice(&body[160..192]), U256::from(8_000u64));
@@ -1246,11 +1268,17 @@ mod tests {
             morpho,
             router,
             1, // tick spacing
-            (usdc, usde, Address::ZERO, Address::ZERO, U256::from(915_000_000_000_000_000u64)),
+            (
+                usdc,
+                usde,
+                Address::ZERO,
+                Address::ZERO,
+                U256::from(915_000_000_000_000_000u64),
+            ),
             usdc_amount,
             twap,
-            50,      // 50 bps slippage
-            25_000,  // 2.5x
+            50,     // 50 bps slippage
+            25_000, // 2.5x
             1_800_000_000,
         );
         // 5 steps: approve USDC, swap, approve USDe, supply, borrow.

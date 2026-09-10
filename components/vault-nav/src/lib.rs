@@ -111,11 +111,20 @@ mod component {
             ("hedge_leverage", "hedge leg not implemented"),
             ("delta_band_pct", "delta-neutral hedging not implemented"),
             ("margin_trim_pct", "perp margin management not implemented"),
-            ("margin_restore_pct", "perp margin management not implemented"),
-            ("funding_floor_apr", "perp funding-rate check not implemented"),
+            (
+                "margin_restore_pct",
+                "perp margin management not implemented",
+            ),
+            (
+                "funding_floor_apr",
+                "perp funding-rate check not implemented",
+            ),
             ("hl_coin", "HyperLiquid perp leg not implemented"),
             ("exit_route_id", "redemption venue routing not implemented"),
-            ("exit_settlement_days", "off-ramp settlement window not implemented"),
+            (
+                "exit_settlement_days",
+                "off-ramp settlement window not implemented",
+            ),
         ];
         for (key, why) in UNIMPLEMENTED {
             if is_meaningfully_set(key) {
@@ -322,7 +331,6 @@ mod component {
             nav::check_compound_cadence(obs.hours_since_update, cadence_hours, 6)?;
         }
 
-
         // Compose the on-chain action plan the vault will dispatch after
         // NAV settlement. The recursive USDe/USDC loop only ships an
         // OpenPosition step today: swap idle USDC into USDe via the pinned
@@ -332,7 +340,14 @@ mod component {
         // sits at target and NAV keeps attesting.
         let plan = build_action_plan(&s, debt, value, twap_price)?;
 
-        Ok(nav::encode_payload(vault, value, s.inputs_block, config_hash(), obs, plan))
+        Ok(nav::encode_payload(
+            vault,
+            value,
+            s.inputs_block,
+            config_hash(),
+            obs,
+            plan,
+        ))
     }
 
     /// Decide the plan for this strike from state + composer knobs.
@@ -361,7 +376,10 @@ mod component {
             None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
         };
         let tick_spacing: i32 = match cfg_opt("pool_tick_spacing") {
-            Some(v) => v.trim().parse().map_err(|e| format!("bad pool_tick_spacing: {e}"))?,
+            Some(v) => v
+                .trim()
+                .parse()
+                .map_err(|e| format!("bad pool_tick_spacing: {e}"))?,
             None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
         };
 
@@ -409,7 +427,13 @@ mod component {
             alloy_primitives::Address,
             alloy_primitives::Address,
             U256,
-        ) = (usdc, usde, cfg_address("oracle_address")?, cfg_address("irm_address")?, cfg("lltv")?.parse().map_err(|e| format!("bad lltv: {e}"))?);
+        ) = (
+            usdc,
+            usde,
+            cfg_address("oracle_address")?,
+            cfg_address("irm_address")?,
+            cfg("lltv")?.parse().map_err(|e| format!("bad lltv: {e}"))?,
+        );
 
         // Slippage: 50 bps against the pinned TWAP. Deadline 300 s past
         // inputs_block_ts so a normal cron submission window fits.
