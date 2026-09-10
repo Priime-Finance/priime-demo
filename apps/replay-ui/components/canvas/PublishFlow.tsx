@@ -389,11 +389,14 @@ export default function PublishFlow({
           if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") return;
           sp[k] = String(v);
         };
-        // Composer's HF fields are HF-ratio-in-bps (10_000 = 1.0x HF); the
-        // vault-nav component reads `hf_floor_bps` as "bps below LLTV" and
-        // errors on any value >10_000. Convention drift; strip the HF
-        // triplet from the wire until the two sides are reconciled.
-        // Position invariants stay covered by `applied_leverage` below.
+        /* Both sides now agree that hf_*_bps is HF-ratio-in-bps (10_000 = HF 1.0):
+           the vault-nav component derives `allowed_ltv_bps = lltv_bps * 10_000 /
+           hf_ratio_bps` in `check_hf_floor` / `check_deleverage_threshold`
+           (components/vault-nav/src/nav.rs). Values below 10_000 sit at or past
+           liquidation and the component refuses them. */
+        emit("hf_target_bps", draft.hfTargetBps);
+        emit("hf_deleverage_bps", draft.hfDeleverageBps);
+        emit("hf_floor_bps", draft.hfFloorBps);
         /* The vault-nav component reads this to pick collateral valuation
            (see `preset_collateral_price_1e24` in components/vault-nav/src/nav.rs)
            AND to feed `config_hash`, so two loops on the same market with

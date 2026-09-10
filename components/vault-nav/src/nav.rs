@@ -498,22 +498,28 @@ pub fn preset_collateral_price_1e24(twap_price_1e24: U256, preset: RiskPreset) -
     }
 }
 
-/// Fail the cycle if the current LTV breaches the strategist's floor. LTV is
-/// debt (USDC base units) divided by par-valued collateral (also USDC base
-/// units). The floor is expressed as `hf_floor_bps` under the market's LLTV:
-/// the acceptable LTV is `lltv * (10_000 - hf_floor_bps) / 10_000`.
-/// Zero `hf_floor_bps` disables the check.
+/// Fail the cycle if the current position's health factor drops below the
+/// strategist's floor. The floor is `hf_floor_bps = HF * 1e4` (so 11_000 is
+/// HF 1.10, 15_000 is HF 1.50). The allowed LTV under that floor is
+/// `lltv_bps * 10_000 / hf_floor_bps`; the cycle fails when the measured
+/// LTV exceeds it. Zero disables the check.
+///
+/// A value below 10_000 (HF < 1.0) sits at or past the liquidation boundary
+/// and is refused rather than accepted as "the position may be liquidatable
+/// but keep attesting": the guard's whole purpose is to stop attesting there.
 pub fn check_hf_floor(
     collateral_1e18: u128,
     debt_usdc: U256,
-    hf_floor_bps: u16,
+    hf_floor_bps: u32,
     lltv_wad: U256,
 ) -> Result<(), String> {
     if hf_floor_bps == 0 {
         return Ok(());
     }
-    if hf_floor_bps > 10_000 {
-        return Err(format!("hf_floor_bps {hf_floor_bps} exceeds 10_000"));
+    if hf_floor_bps < 10_000 {
+        return Err(format!(
+            "hf_floor_bps {hf_floor_bps} is below 10_000 (HF < 1.0 sits at or past liquidation)"
+        ));
     }
     // Par-valued collateral in USDC base units: collateral_1e18 * par_1e24 / 1e36
     // == collateral_1e18 / 1e12 (since par_1e24 == 1e24 and 1e24/1e36 == 1e-12).
@@ -524,10 +530,10 @@ pub fn check_hf_floor(
     }
     // ltv_bps = debt * 10_000 / par_collateral. Widen once to avoid overflow.
     let ltv_bps = debt_usdc * U256::from(10_000u16) / par_collateral_usdc;
-    // allowed_ltv_bps = lltv_bps * (10_000 - hf_floor_bps) / 10_000
+    // allowed_ltv_bps = lltv_bps * 10_000 / hf_floor_bps.
     // lltv is in WAD (1e18). Convert to bps: lltv_wad / 1e14.
     let lltv_bps = lltv_wad / U256::from(100_000_000_000_000u64);
-    let allowed_bps = lltv_bps * U256::from(10_000 - hf_floor_bps) / U256::from(10_000u16);
+    let allowed_bps = lltv_bps * U256::from(10_000u16) / U256::from(hf_floor_bps);
     if ltv_bps > allowed_bps {
         return Err(format!(
             "hf_floor_breached: ltv_bps {ltv_bps} exceeds allowed {allowed_bps} (lltv_bps {lltv_bps}, hf_floor_bps {hf_floor_bps})"
@@ -655,15 +661,21 @@ pub fn check_applied_leverage_drift(
     Ok(())
 }
 
-/// Fail the cycle when the position's LTV is above the trim trigger the
-/// strategist configured. The vault publishes a deleverage_bps threshold as
-/// "when LTV crosses this, trim the position"; if the strike measures a
-/// value above the trim line and nothing has trimmed, attesting a NAV as
-/// though the position matched policy is a lie of omission.
+/// Fail the cycle when the position's health factor has dropped below the
+/// strategist's trim trigger. The trigger is `deleverage_bps = HF * 1e4`
+/// (so 14_550 is HF 1.455). The allowed LTV under that trigger is
+/// `lltv_bps * 10_000 / deleverage_bps`; the cycle fails when the measured
+/// LTV exceeds it. Zero disables the check.
+///
+/// If the strike measures a value past the trigger and nothing has trimmed,
+/// attesting a NAV as though the position matched policy is a lie of
+/// omission. A value below 10_000 (HF < 1.0) sits at or past liquidation
+/// and is refused for the same reason as `check_hf_floor`.
 pub fn check_deleverage_threshold(
     measured_ltv_bps: u32,
     deleverage_bps: u32,
     debt_usdc: U256,
+    lltv_wad: U256,
 ) -> Result<(), String> {
     if debt_usdc < U256::from(1_000_000u64) {
         return Ok(());
@@ -671,9 +683,17 @@ pub fn check_deleverage_threshold(
     if deleverage_bps == 0 {
         return Ok(());
     }
-    if measured_ltv_bps > deleverage_bps {
+    if deleverage_bps < 10_000 {
         return Err(format!(
-            "hf_deleverage_threshold_breached: measured LTV {measured_ltv_bps} bps exceeds trim trigger {deleverage_bps} bps"
+            "hf_deleverage_bps {deleverage_bps} is below 10_000 (HF < 1.0 sits at or past liquidation)"
+        ));
+    }
+    let lltv_bps = lltv_wad / U256::from(100_000_000_000_000u64);
+    let allowed_bps = lltv_bps * U256::from(10_000u16) / U256::from(deleverage_bps);
+    let measured = U256::from(measured_ltv_bps);
+    if measured > allowed_bps {
+        return Err(format!(
+            "hf_deleverage_threshold_breached: measured LTV {measured_ltv_bps} bps exceeds trim trigger {allowed_bps} bps (lltv_bps {lltv_bps}, hf_deleverage_bps {deleverage_bps})"
         ));
     }
     Ok(())
@@ -1033,28 +1053,39 @@ mod tests {
 
     #[test]
     fn hf_floor_allows_ltv_below_floor() {
-        // 80% LTV vs 91.5% LLTV, 500 bps floor -> allowed_bps = 9150 * 0.95 = 8692.5
-        // Actual LTV = 8000 bps; passes.
+        // hf_floor_bps = 11_000 (HF 1.10) vs 91.5% LLTV
+        // -> allowed LTV = 9150 * 10_000 / 11_000 = 8318 bps.
+        // Measured LTV = 80% = 8000 bps; 8000 <= 8318, passes.
         let collateral_1e18 = 1_000_000_000_000_000_000u128; // 1 USDe = $1 par
         let debt_usdc = U256::from(800_000u64); // 0.8 USDC
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        assert!(check_hf_floor(collateral_1e18, debt_usdc, 500, lltv_wad).is_ok());
+        assert!(check_hf_floor(collateral_1e18, debt_usdc, 11_000, lltv_wad).is_ok());
     }
 
     #[test]
     fn hf_floor_rejects_floor_breach() {
-        // 90% LTV vs 91.5% LLTV, 500 bps floor -> allowed 8693 bps. 9000 > 8693.
+        // hf_floor_bps = 11_000, allowed 8318 bps as above.
+        // Measured LTV = 85% = 8500 bps; 8500 > 8318, fails.
         let collateral_1e18 = 1_000_000_000_000_000_000u128;
-        let debt_usdc = U256::from(900_000u64);
+        let debt_usdc = U256::from(850_000u64);
         let lltv_wad = U256::from(915_000_000_000_000_000u64);
-        let err = check_hf_floor(collateral_1e18, debt_usdc, 500, lltv_wad).unwrap_err();
+        let err = check_hf_floor(collateral_1e18, debt_usdc, 11_000, lltv_wad).unwrap_err();
         assert!(err.contains("hf_floor_breached"));
     }
 
     #[test]
     fn hf_floor_vacuous_on_zero_collateral() {
         // No collateral means no leverage story; the check has nothing to say.
-        assert!(check_hf_floor(0, U256::ZERO, 500, U256::from(915_000_000_000_000_000u64)).is_ok());
+        assert!(check_hf_floor(0, U256::ZERO, 11_000, U256::from(915_000_000_000_000_000u64)).is_ok());
+    }
+
+    #[test]
+    fn hf_floor_rejects_below_1x_hf() {
+        // hf_floor_bps < 10_000 means HF < 1.0 (past liquidation) - the guard
+        // exists to stop attesting there, not to be configurable to accept it.
+        let lltv_wad = U256::from(915_000_000_000_000_000u64);
+        let err = check_hf_floor(1_000_000_000_000_000_000u128, U256::from(1u64), 9_999, lltv_wad).unwrap_err();
+        assert!(err.contains("is below 10_000"));
     }
     // --- NAV assembly -------------------------------------------------------
 
@@ -1331,20 +1362,36 @@ mod tests {
 
     #[test]
     fn deleverage_threshold_skipped_when_no_debt() {
-        assert!(check_deleverage_threshold(9_500, 8_500, U256::ZERO).is_ok());
+        let lltv_wad = U256::from(915_000_000_000_000_000u64);
+        assert!(check_deleverage_threshold(9_500, 14_550, U256::ZERO, lltv_wad).is_ok());
     }
 
     #[test]
     fn deleverage_threshold_passes_below_trigger() {
+        // deleverage_bps = 14_550 (HF 1.455) vs 91.5% LLTV
+        // -> trigger LTV = 9150 * 10_000 / 14_550 = 6289 bps.
+        // Measured 6000 bps < 6289, passes.
         let debt = U256::from(5_000_000u64);
-        assert!(check_deleverage_threshold(8_400, 8_500, debt).is_ok());
+        let lltv_wad = U256::from(915_000_000_000_000_000u64);
+        assert!(check_deleverage_threshold(6_000, 14_550, debt, lltv_wad).is_ok());
     }
 
     #[test]
     fn deleverage_threshold_fails_above_trigger() {
+        // Same trigger 6289 bps; measured 6500 bps > 6289, fails.
         let debt = U256::from(5_000_000u64);
-        let err = check_deleverage_threshold(9_000, 8_500, debt).unwrap_err();
+        let lltv_wad = U256::from(915_000_000_000_000_000u64);
+        let err = check_deleverage_threshold(6_500, 14_550, debt, lltv_wad).unwrap_err();
         assert!(err.contains("hf_deleverage_threshold_breached"));
+    }
+
+    #[test]
+    fn deleverage_threshold_rejects_below_1x_hf() {
+        // deleverage_bps < 10_000 means HF < 1.0 (past liquidation); refused.
+        let debt = U256::from(5_000_000u64);
+        let lltv_wad = U256::from(915_000_000_000_000_000u64);
+        let err = check_deleverage_threshold(6_500, 9_999, debt, lltv_wad).unwrap_err();
+        assert!(err.contains("is below 10_000"));
     }
 
     #[test]

@@ -258,8 +258,9 @@ mod component {
             Some(s) => nav::RiskPreset::parse(&s)?,
             None => nav::RiskPreset::Standard,
         };
-        let hf_floor_bps: u16 = match cfg_opt("hf_floor_bps") {
+        let hf_floor_bps: u32 = match cfg_opt("hf_floor_bps") {
             Some(s) => s
+                .trim()
                 .parse()
                 .map_err(|e| format!("bad hf_floor_bps in config: {e}"))?,
             None => 0,
@@ -315,7 +316,7 @@ mod component {
                 .trim()
                 .parse()
                 .map_err(|e| format!("bad hf_deleverage_bps in config: {e}"))?;
-            nav::check_deleverage_threshold(obs.ltv_bps, deleverage_bps, debt)?;
+            nav::check_deleverage_threshold(obs.ltv_bps, deleverage_bps, debt, lltv)?;
         }
         if let Some(raw) = cfg_opt("reserve_fraction") {
             let floor_bps = nav::parse_decimal_bps(&raw)?;
