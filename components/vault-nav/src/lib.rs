@@ -462,20 +462,44 @@ mod component {
             if equity.is_zero() {
                 return Ok(nav::PlanBuild::empty(s.block_timestamp));
             }
-            // 1% cushion on top of the shortfall to absorb swap slippage.
-            let target_free_usdc = shortfall + (shortfall / U256::from(100u16));
+            /* Cushion scales with leverage. Swap slippage tolerated by
+            `swap_min_usdc_out` is 50 bps of the GROSS collateral leg
+            (`collateral_out_usde × price`), and that leg equals
+            `proportion × priced_collateral ≈ target_free × L`. A flat
+            1% cushion undershoots at L > ~2 (Khaled review, roadmap
+            follow-up). Formula: 100 bps floor + 60 bps per unit of
+            leverage. Landings: L=2.5 -> 250 bps, L=5 -> 400 bps,
+            L=10 -> 700 bps. Bounded to u32 in leverage_bps ceiling. */
+            let leverage_bps_u256 = priced_collateral * U256::from(10_000u16) / equity;
+            let leverage_bps = u32::try_from(leverage_bps_u256).unwrap_or(u32::MAX);
+            let cushion_bps = U256::from(100u64 + 60u64 * u64::from(leverage_bps) / 10_000u64);
+            let target_free_usdc = shortfall + shortfall * cushion_bps / U256::from(10_000u16);
             let one_wad = U256::from(1_000_000_000_000_000_000u64);
             // proportion_wad = min(target_free / equity, 1.0).
             let proportion_wad = (target_free_usdc * one_wad / equity).min(one_wad);
             let collateral_out_usde = U256::from(s.collateral_1e18) * proportion_wad / one_wad;
-            let debt_repay_usdc = debt * proportion_wad / one_wad;
-            // 50 bps against TWAP — same convention plan_open_position uses.
+            /* SHARES, not assets, on the repay leg. Morpho computes the
+            exact assets pulled from `shares × total_borrow_assets /
+            total_borrow_shares` at execution time, so interest that
+            accrued between our inputs_block estimate and the vault's
+            execution block is captured cleanly. Full unwind
+            (proportion_wad = 1e18) sends the vault's entire
+            `borrow_shares`, which zeroes debt exactly and lets
+            `withdrawCollateral(full)` pass Morpho's LLTV check.
+            Flashloan principal (`debt_repay_usdc`) covers the
+            stale-estimate repay amount + a 20 bps cushion for accrual
+            so `morpho.repay`'s allowance pull cannot underflow. */
+            let shares_to_repay = U256::from(s.borrow_shares) * proportion_wad / one_wad;
+            let debt_repay_usdc = debt * proportion_wad / one_wad
+                + debt * proportion_wad / one_wad / U256::from(5_000u16); // + 20 bps
+                                                                          // 50 bps against TWAP — same convention plan_open_position uses.
             let min_usdc_out = nav::swap_min_usdc_out(collateral_out_usde, twap_price_1e24, 50);
             let _ = (vault, usde, tick_spacing, swap_router); // reserved for future lever-up branch parity
             return Ok(nav::plan_deleverage(
                 usdc,
                 morpho,
                 debt_repay_usdc,
+                shares_to_repay,
                 collateral_out_usde,
                 min_usdc_out,
                 s.block_timestamp + 300,

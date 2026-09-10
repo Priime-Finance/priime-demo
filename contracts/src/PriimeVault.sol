@@ -223,6 +223,12 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
     error NotStrategist();
     error SelfCallForbidden();
     error EscrowFloorBreached(uint256 balance, uint256 floor);
+    /// @notice `emergencyExecute` was called while the vault is at or above
+    ///         its escrow floor. The manual-recovery path is intentionally
+    ///         only unlocked while the vault is stuck; once the floor is
+    ///         restored, ordinary `execute` handles subsequent moves and
+    ///         re-enforces the invariant.
+    error VaultNotStuck(uint256 balance, uint256 floor);
     error ZeroAmount();
     error HandlerMismatch(address handler);
     error AlreadyProcessed(bytes20 eventId);
@@ -355,8 +361,13 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
     ///         try/catch wrapper there keeps NAV settlement independent of
     ///         plan success.
     /// @dev Each step must target a whitelisted contract. Reverts bubble the
-    ///      failing step's raw revert data. At the tail, the vault must sit
-    ///      at or above its escrow floor, same guard `execute` enforces.
+    ///      failing step's raw revert data. At the tail:
+    ///        1. `_fulfillRedeems()` books this strike's redemption claims —
+    ///           INSIDE the self-call so a plan revert rolls back the claim
+    ///           bookkeeping too, and the vault never sits with
+    ///           `totalClaimableRedeemAssets` raised against a balance the
+    ///           plan failed to free (Khaled review, roadmap follow-up).
+    ///        2. Escrow floor check, same guard `execute` enforces.
     /// @param plan The batch (targets, calldatas, timestamp) the quorum signed.
     /// @return planHash keccak256(abi.encode(plan)) — logged by the caller.
     function executePlanSelf(StrategyPlan calldata plan) external returns (bytes32 planHash) {
@@ -373,6 +384,11 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
                 }
             }
         }
+        // Book redemption claims AFTER the plan brought USDC in. If the
+        // floor check below fails, `_fulfillRedeems` rolls back with the
+        // rest of this self-call and shares stay in `_pendingRedeemShares`
+        // for the next strike to try again.
+        _fulfillRedeems();
         uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
         uint256 balance = IERC20(asset()).balanceOf(address(this));
         if (balance < floor) revert EscrowFloorBreached(balance, floor);
@@ -413,12 +429,21 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
     ///        does.
     function onMorphoFlashLoan(uint256 assets, bytes calldata data) external override {
         if (msg.sender != address(morpho)) revert FlashLoanCallerNotMorpho(msg.sender);
-        (uint256 collateralOut, uint256 minUsdcOut, uint256 deadline) = abi.decode(data, (uint256, uint256, uint256));
+        (uint256 collateralOut, uint256 minUsdcOut, uint256 deadline, uint256 sharesToRepay) =
+            abi.decode(data, (uint256, uint256, uint256, uint256));
 
-        // 1. Repay Morpho debt with the flashloan proceeds. Approvals are
-        //    exact-amount and consumed by the call, so no lingering allowance.
+        // 1. Repay Morpho debt by SHARES so accrued interest between the
+        //    component's inputs_block estimate and this call is captured
+        //    exactly (Khaled review). `assets = 0` tells Morpho to compute
+        //    the pull amount from `shares × total_borrow_assets /
+        //    total_borrow_shares` at the current rate. Full-unwind
+        //    (`sharesToRepay == vault's borrow_shares`) zeroes debt, so the
+        //    subsequent `withdrawCollateral(full)` passes the LLTV check.
+        //    Approval is `assets` (the flashloan principal we hold, which
+        //    is sized to cover the actual repay + 20 bps of accrual buffer),
+        //    so a small over-allowance stays inside the vault as surplus.
         IERC20(asset()).forceApprove(address(morpho), assets);
-        morpho.repay(_marketParams(), assets, 0, address(this), "");
+        morpho.repay(_marketParams(), 0, sharesToRepay, address(this), "");
 
         // 2. Withdraw the freed collateral (USDe). Morpho enforces the new
         //    HF against the post-repay debt, so this can never leave the
@@ -494,6 +519,42 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
         uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
         uint256 balance = IERC20(asset()).balanceOf(address(this));
         if (balance < floor) revert EscrowFloorBreached(balance, floor);
+
+        emit Executed(target, data);
+    }
+
+    /// @notice Strategist-only recovery path that skips the escrow-floor
+    ///         check. Only unlocks when the vault is ALREADY stuck (balance
+    ///         < floor); once ordinary strategy actions restore the floor
+    ///         it refuses to run, so ordinary `execute` reasserts the
+    ///         invariant.
+    /// @dev Same shape as `execute` minus the post-call floor guard.
+    ///      Motivation: when a plan_deleverage revert leaves
+    ///      `totalClaimableRedeemAssets` raised against an idle balance
+    ///      that never materialised, the standard `execute` path refuses
+    ///      every intermediate step of a manual unwind (repay is
+    ///      floor-under-water, withdraw is floor-under-water). This path
+    ///      lets the strategist walk out of that state (repay, withdraw,
+    ///      swap, back to solvent) without every step reasserting a floor
+    ///      the sequence is trying to restore. The pre-check makes it
+    ///      strictly a recovery tool: at any point above floor it reverts.
+    ///      `msg.sender == strategist` + no self-call keeps the trust
+    ///      surface identical to `execute`.
+    function emergencyExecute(address target, bytes calldata data) external returns (bytes memory result) {
+        if (msg.sender != strategist) revert NotStrategist();
+        if (target == address(this)) revert SelfCallForbidden();
+
+        uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
+        uint256 balance = IERC20(asset()).balanceOf(address(this));
+        if (balance >= floor) revert VaultNotStuck(balance, floor);
+
+        bool success;
+        (success, result) = target.call(data);
+        if (!success) {
+            assembly ("memory-safe") {
+                revert(add(result, 0x20), mload(result))
+            }
+        }
 
         emit Executed(target, data);
     }
@@ -840,7 +901,11 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
         breachFlags = result.breachFlags;
 
         _fulfillDeposits();
-        _fulfillRedeems();
+        // NOTE: `_fulfillRedeems` now runs INSIDE `executePlanSelf` (Khaled
+        // review). If the plan can't free enough USDC to cover the fresh
+        // claims, the whole self-call reverts and the fulfilment rolls
+        // back with it, so `totalClaimableRedeemAssets` never sits raised
+        // against a balance the plan failed to lift.
 
         emit NavUpdated(
             envelope.eventId,
@@ -856,12 +921,12 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
             result.breachFlags
         );
 
-        // Plan dispatch is best-effort: NAV settlement and fulfillments have
-        // already committed above. A step reverting on stale slippage or a
-        // market that moved out of the operator's snapshot window rolls back
-        // only the plan's own writes, not the NAV. `executePlanSelf` runs
-        // via an external self-call so its guard trips on any non-vault
-        // caller and its atomicity comes from Solidity try/catch.
+        /* Plan + redemption fulfilment run atomically inside `executePlanSelf`.
+           NAV settlement and DEPOSIT fulfilment above already committed; if
+           the plan or its downstream fulfilment reverts, only the plan's own
+           writes AND the redemption bookkeeping roll back. Shares stay in
+           `_pendingRedeemShares` for the next strike to try again. The
+           try/catch here keeps NAV settlement independent of plan success. */
         bytes32 planHash = keccak256(abi.encode(result.plan.targets, result.plan.calldatas, result.plan.timestamp));
         try this.executePlanSelf(result.plan) {
             emit PlanExecuted(planHash, result.plan.targets.length);

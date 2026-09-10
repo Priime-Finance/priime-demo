@@ -295,35 +295,40 @@ pub fn plan_open_position(
 /// vault dispatches it inside `handleSignedEnvelope`.
 ///
 /// Every unwind is a Morpho flashLoan of `debt_repay_usdc` (the debt slice
-/// this proportion covers). Morpho transfers USDC to the vault, calls back
-/// `onMorphoFlashLoan(assets, data)`, which then:
-///   1. `USDC.approve(morpho, debt_repay_usdc)` and `morpho.repay(...)`
-///   2. `morpho.withdrawCollateral(collateral_out_usde)` freed by the repay
-///   3. `USDe.approve(router, collateral_out_usde)` and swap USDe -> USDC
-///   4. `USDC.approve(morpho, debt_repay_usdc)` for Morpho's own pull-back
+/// this proportion covers plus a small accrual cushion). Morpho transfers
+/// USDC to the vault, calls back `onMorphoFlashLoan(assets, data)`, which
+/// then:
+///   1. `USDC.approve(morpho, debt_repay_usdc)` and
+///      `morpho.repay(marketParams, 0, shares_to_repay, vault, "")`
+///      -- SHARES on the repay leg so Morpho computes the exact
+///      current-rate assets pull and any interest that accrued between the
+///      component's inputs_block estimate and vault execution is captured.
+///   2. `morpho.withdrawCollateral(collateral_out_usde)` freed by the repay.
+///   3. `USDe.approve(router, collateral_out_usde)` and swap USDe -> USDC.
+///   4. `USDC.approve(morpho, debt_repay_usdc)` for Morpho's own pull-back.
 ///
 /// The one plan step is the flashLoan call; every other action lives inside
 /// the callback and is verified in `contracts/src/PriimeVault.sol`.
 ///
-/// Net USDC to the vault ≈ `collateral_out_usde * price - debt_repay_usdc`
-/// = `proportion * nav_usdc - swap_slippage`, which is exactly what the
-/// caller sized to cover the escrow floor after `_fulfillRedeems`.
+/// Callback ABI: `(uint256 collateralOut, uint256 minUsdcOut,
+/// uint256 deadline, uint256 sharesToRepay)` — decoded in
+/// `PriimeVault::onMorphoFlashLoan`.
 #[allow(clippy::too_many_arguments)]
 pub fn plan_deleverage(
     usdc: Address,
     morpho: Address,
     debt_repay_usdc: U256,
+    shares_to_repay: U256,
     collateral_out_usde: U256,
     min_usdc_out: U256,
     deadline_secs: u64,
 ) -> PlanBuild {
     let mut plan = PlanBuild::empty(deadline_secs);
-    // Callback payload the vault decodes in `onMorphoFlashLoan`:
-    // (uint256 collateralOut, uint256 minUsdcOut, uint256 deadline).
-    let callback_data = <(U256, U256, U256)>::abi_encode_params(&(
+    let callback_data = <(U256, U256, U256, U256)>::abi_encode_params(&(
         collateral_out_usde,
         min_usdc_out,
         U256::from(deadline_secs),
+        shares_to_repay,
     ));
     plan.push(
         morpho,
@@ -1557,6 +1562,7 @@ mod tests {
         let usdc = address!("833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
         let morpho = address!("BBBBBbbBBb9cC5e90e3b3AF64bdAF62C37EEFFCb");
         let debt_repay = U256::from(500u64 * 1_000_000u64); // 500 USDC
+        let shares_to_repay = U256::from(500u64 * 1_000_000u64); // 1:1 in mock, full shares
         let collateral_out = U256::from(1_500u64) * U256::from(10u128.pow(18));
         let min_usdc_out = U256::from(1_485u64 * 1_000_000u64);
         let deadline = 1_800_000_300u64;
@@ -1564,28 +1570,25 @@ mod tests {
             usdc,
             morpho,
             debt_repay,
+            shares_to_repay,
             collateral_out,
             min_usdc_out,
             deadline,
         );
         assert_eq!(plan.targets.len(), 1);
         assert_eq!(plan.targets[0], morpho);
-        // Selector must be `flashLoan(address,uint256,bytes)` — the four
-        // leading bytes of the calldata match what alloy encodes from the
-        // sol! definition above.
         let expected_selector = flashLoanCall::SELECTOR;
         assert_eq!(&plan.calldatas[0][0..4], &expected_selector[..]);
-        // Decode the outer call and confirm the callback data round-trips
-        // to the (collateralOut, minUsdcOut, deadline) triple.
         let decoded =
             flashLoanCall::abi_decode(&plan.calldatas[0]).expect("flashLoan calldata decodes");
         assert_eq!(decoded.token, usdc);
         assert_eq!(decoded.assets, debt_repay);
-        let (co, mu, dl) =
-            <(U256, U256, U256)>::abi_decode_params(&decoded.data).expect("callback data decodes");
+        let (co, mu, dl, sh) = <(U256, U256, U256, U256)>::abi_decode_params(&decoded.data)
+            .expect("callback data decodes");
         assert_eq!(co, collateral_out);
         assert_eq!(mu, min_usdc_out);
         assert_eq!(dl, U256::from(deadline));
+        assert_eq!(sh, shares_to_repay);
     }
 
     // --- knob invariants ----------------------------------------------------
