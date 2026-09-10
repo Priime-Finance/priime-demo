@@ -64,6 +64,7 @@ import type { PublishInput } from "@/lib/vaults/store";
    re-exports loop-server's own validation error; `live-id` owns where a
    deployed loop is read. This file spells neither the route nor the path. */
 import { LoopValidationError, publishLoopToServer } from "@/lib/vaults/publish-loop";
+import { friendlyErrorMessage } from "@/lib/errors";
 import { liveLoopHref } from "@/lib/vaults/live-id";
 import { fmtCapacityUsd } from "@/lib/canvas/capacity";
 // R5 grep: the published APY is the single most consequential number this
@@ -441,7 +442,7 @@ export default function PublishFlow({
           setFailure({ message: "loop-server rejected this composition.", issues: err.issues });
         } else {
           setFailure({
-            message: err instanceof Error ? err.message : String(err),
+            message: friendlyErrorMessage(err),
             issues: [],
           });
         }

@@ -47,6 +47,7 @@ import {
   parseAssetAmount,
   useDepositReading,
 } from "@/lib/vaults/deposit";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface DepositCardProps {
   handlerAddress: Address;
@@ -196,7 +197,7 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
         if (receipt.isError) {
           return (
             <p className="vxd-dep-banner vxd-dep-banner--err">
-              Transaction failed: {receipt.error?.message ?? "unknown reason"}
+              Transaction failed: {friendlyErrorMessage(receipt.error)}
             </p>
           );
         }

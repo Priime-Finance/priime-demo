@@ -26,6 +26,7 @@ import {
   useDepositReading,
   VAULT_ABI,
 } from "@/lib/vaults/deposit";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface RedeemCardProps {
   handlerAddress: Address;
@@ -129,7 +130,7 @@ export default function RedeemCard({ handlerAddress }: RedeemCardProps) {
         </p>
       );
     }
-    if (write.error) return <p className="vxd-dep-banner vxd-dep-banner--err">{write.error.message}</p>;
+    if (write.error) return <p className="vxd-dep-banner vxd-dep-banner--err">{friendlyErrorMessage(write.error)}</p>;
     return null;
   }, [write.isPending, write.data, write.error, receipt.isLoading, pendingWrite?.kind]);
 
