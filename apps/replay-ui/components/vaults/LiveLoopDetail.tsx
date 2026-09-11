@@ -44,6 +44,8 @@ import { useCallback, useEffect, useState, type CSSProperties } from "react";
 
 import type { LoopRecord, StrikeRecord } from "@priime-demo/loop-deploy";
 
+import { friendlyErrorMessage } from "@/lib/errors";
+
 import { ActivityTable, executionRows, verifyHref } from "./ActivitySection";
 import DepositCard from "./DepositCard";
 import RedeemCard from "./RedeemCard";
@@ -165,7 +167,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
       setState((prev) => (prev.kind === "ready" ? { ...prev, loop: res.loop } : prev));
       setPausing({ kind: "idle" });
     } catch (err) {
-      setPausing({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+      setPausing({ kind: "error", message: friendlyErrorMessage(err) });
     }
   }, [id, pausing.kind]);
 

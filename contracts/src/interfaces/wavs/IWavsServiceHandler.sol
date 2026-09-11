@@ -28,10 +28,7 @@ interface IWavsServiceHandler {
      * @param envelope The envelope containing the data.
      * @param signatureData The signature data.
      */
-    function handleSignedEnvelope(
-        Envelope calldata envelope,
-        SignatureData calldata signatureData
-    ) external;
+    function handleSignedEnvelope(Envelope calldata envelope, SignatureData calldata signatureData) external;
 
     /**
      * @notice Returns the address of the service manager

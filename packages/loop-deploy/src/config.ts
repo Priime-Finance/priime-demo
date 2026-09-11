@@ -79,12 +79,52 @@ export interface LoopConfig {
   /** Blocks behind the trigger-time block to pin reads (reorg depth). */
   inputsBlockLag: number;
   /**
+   * Aerodrome Slipstream router for USDC<->USDe swaps. Set on vault
+   * construction AND read every strike by the WASM component when it
+   * composes StrategyPlan swap calldata. Absent -> the component emits an
+   * empty plan on every strike (dead loop). Sourced from the market catalog
+   * on `resolveLoopConfig`; the value the composer wrote never overrides.
+   */
+  swapRouter: string;
+  /**
+   * Slipstream tick spacing for the USDC/USDe pool (not a fee tier).
+   * Same lifecycle as `swapRouter` — set at construction, read every
+   * strike. Zero/absent -> empty plan.
+   */
+  poolTickSpacing: number;
+  /**
    * The composer's knobs, string-encoded. Copied verbatim from the publish
    * input and merged into `componentConfigFor`'s output, so every workflow
    * on IPFS carries every choice the user made. Empty object on legacy
    * callers that never sent one.
    */
   strategyParams: Record<string, string>;
+}
+
+/**
+ * Strategy-param keys the on-chain vault-nav component's `refuse_unimplemented`
+ * refuses to attest against. Kept in lockstep with
+ * `components/vault-nav/src/lib.rs::UNIMPLEMENTED`. Composer publishes that
+ * carry any of these die on the first strike, so loop-server rejects them
+ * at validation time rather than deploying a workflow that will never
+ * attest. Remove a key here the same commit a component honors it.
+ */
+const REFUSED_STRATEGY_PARAMS: Record<string, true> = {
+  hedge_leverage: true,
+  delta_band_pct: true,
+  margin_trim_pct: true,
+  margin_restore_pct: true,
+  funding_floor_apr: true,
+  hl_coin: true,
+  exit_route_id: true,
+  exit_settlement_days: true,
+};
+
+/** A "meaningfully-set" value: present and not empty/zero-shaped. Mirrors
+ *  the component's `is_meaningfully_set`. */
+function isMeaningfullySet(v: unknown): boolean {
+  const s = typeof v === "string" ? v.trim() : v === null || v === undefined ? "" : String(v).trim();
+  return !(s === "" || s === "0" || s === "0.0" || s === "0.00");
 }
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -124,10 +164,18 @@ function nameField(input: Record<string, unknown>, issues: string[]): string {
   return "unnamed loop";
 }
 
-/** Validated strike cadence. */
+/**
+ * Validated strike cadence. User-published loops must run at 60 seconds or
+ * more (measured on the operator side: shorter intervals hammer Base RPC,
+ * confuse indexers, and give MEV bots a bigger window than the operators
+ * have to sign a quorum). Multiples of 60 up to 3600 are accepted.
+ *
+ * The seed vault's cadence comes from `deploy/targets/<TARGET>.json` and
+ * bypasses this path; the shell script is the operator's own knob.
+ */
 function cronField(input: Record<string, unknown>, issues: string[]): number {
-  const seconds = intField(input, "cronSeconds", 5, 3600, issues);
-  if (seconds >= 60 && seconds % 60 !== 0) issues.push("cronSeconds of 60 or more must be a multiple of 60");
+  const seconds = intField(input, "cronSeconds", 60, 3600, issues);
+  if (seconds % 60 !== 0) issues.push("cronSeconds must be a whole minute (60, 120, ..., 3600)");
   return seconds;
 }
 
@@ -169,6 +217,8 @@ export function validateLoopConfig(input: unknown): LoopConfig {
   // would produce a loop whose every cycle fails.
   const twapWindowSecs = intField(input, "twapWindowSecs", 300, 86400, issues);
   const inputsBlockLag = intField(input, "inputsBlockLag", 0, 100, issues);
+  const swapRouter = addressField(input, "swapRouter", issues);
+  const poolTickSpacing = intField(input, "poolTickSpacing", 1, 200_000, issues);
 
   // strategyParams is optional at the stored/internal boundary too, so old
   // configs that predate the composer still validate.
@@ -180,6 +230,12 @@ export function validateLoopConfig(input: unknown): LoopConfig {
       for (const [k, v] of Object.entries(input.strategyParams)) {
         if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(k)) {
           issues.push(`strategyParams key "${k}" must match /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/`);
+          continue;
+        }
+        if (REFUSED_STRATEGY_PARAMS[k] === true && isMeaningfullySet(v)) {
+          issues.push(
+            `strategyParams key "${k}" is refused by the vault-nav component (see refuse_unimplemented in components/vault-nav/src/lib.rs); remove the knob or publish against a component that honors it`,
+          );
           continue;
         }
         strategyParams[k] = typeof v === "string" ? v : String(v);
@@ -204,6 +260,8 @@ export function validateLoopConfig(input: unknown): LoopConfig {
     poolAddress,
     twapWindowSecs,
     inputsBlockLag,
+    swapRouter,
+    poolTickSpacing,
     strategyParams,
   };
 }
@@ -248,6 +306,12 @@ export function resolveLoopConfig(input: unknown): LoopConfig {
           issues.push(`strategyParams key "${k}" must match /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/`);
           continue;
         }
+        if (REFUSED_STRATEGY_PARAMS[k] === true && isMeaningfullySet(v)) {
+          issues.push(
+            `strategyParams key "${k}" is refused by the vault-nav component (see refuse_unimplemented in components/vault-nav/src/lib.rs); remove the knob or publish against a component that honors it`,
+          );
+          continue;
+        }
         strategyParams[k] = typeof v === "string" ? v : String(v);
       }
     }
@@ -270,15 +334,24 @@ export function resolveLoopConfig(input: unknown): LoopConfig {
     poolAddress: market.poolAddress,
     twapWindowSecs: market.twapWindowSecs,
     inputsBlockLag: market.inputsBlockLag,
+    swapRouter: market.swapRouter,
+    poolTickSpacing: market.poolTickSpacing,
     strategyParams,
   };
 }
 
-/** Six-field cron expression (seconds granularity) for a cadence in seconds. */
+/**
+ * Six-field cron expression (seconds granularity) for a cadence in seconds.
+ * Whole minutes only (60..3600); sub-minute cadences are refused for the
+ * same reason `cronField` refuses them at validation time.
+ */
 export function cronFromSeconds(seconds: number): string {
-  if (!Number.isInteger(seconds) || seconds < 5 || seconds > 3600) throw new ValidationError([`unsupported cron cadence: ${seconds}`]);
-  if (seconds < 60) return `*/${seconds} * * * * *`;
-  if (seconds % 60 !== 0) throw new ValidationError([`cadence of 60s or more must be a whole minute: ${seconds}`]);
+  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 3600) {
+    throw new ValidationError([`unsupported cron cadence: ${seconds}`]);
+  }
+  if (seconds % 60 !== 0) {
+    throw new ValidationError([`cadence must be a whole minute: ${seconds}`]);
+  }
   if (seconds === 3600) return "0 0 * * * *";
   return `0 */${seconds / 60} * * * *`;
 }
@@ -305,5 +378,11 @@ export function componentConfigFor(
     pool_address: cfg.poolAddress,
     twap_window_secs: String(cfg.twapWindowSecs),
     inputs_block_lag: String(cfg.inputsBlockLag),
+    // Required by vault-nav to compose Aerodrome swap calldata every strike
+    // (`build_action_plan` in `components/vault-nav/src/lib.rs`); absent -> the
+    // WASM emits an empty plan every cycle. Vault constructor also reads these
+    // via `deployHandler`, so the two sides stay pinned to the same catalog row.
+    swap_router: cfg.swapRouter,
+    pool_tick_spacing: String(cfg.poolTickSpacing),
   };
 }

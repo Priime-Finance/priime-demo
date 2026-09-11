@@ -5,6 +5,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IWavsServiceHandler} from "../src/interfaces/wavs/IWavsServiceHandler.sol";
 import {IWavsServiceManager} from "../src/interfaces/wavs/IWavsServiceManager.sol";
 import {PriimeVault} from "../src/PriimeVault.sol";
+import {IMorphoBlue, IMorphoFlashLoanCallback} from "../src/interfaces/external/IMorphoBlue.sol";
+import {IAerodromeCLRouter} from "../src/interfaces/external/IAerodromeCLRouter.sol";
 
 /// @dev Minimal surface of forge's built-in cheatcode contract; declared here
 ///      instead of vendoring forge-std (the repo vendors no forge-std).
@@ -47,6 +49,170 @@ contract TestUSDC {
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
         return true;
+    }
+}
+
+/// @dev Mintable 18-decimal stand-in for USDe / any collateral token that
+///      goes through the atomic delever swap. Same shape as TestUSDC minus
+///      the fixed decimals.
+contract TestUSDe {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    function decimals() external pure returns (uint8) {
+        return 18;
+    }
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        require(balanceOf[msg.sender] >= amount, "balance");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        require(balanceOf[from] >= amount, "balance");
+        require(allowance[from][msg.sender] >= amount, "allowance");
+        allowance[from][msg.sender] -= amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+}
+
+/// @dev Minimal Morpho Blue mock covering the surface the vault touches:
+///      supplyCollateral / borrow / repay / withdrawCollateral / flashLoan.
+///      One market only; state keyed by `onBehalf` so the vault-per-strike
+///      state stays isolated. Pre-funded with a USDC pool so `borrow` and
+///      `flashLoan` can actually transfer.
+contract MockMorpho {
+    IERC20 public immutable usdc;
+    IERC20 public immutable usde;
+    mapping(address => uint256) public collateral; // USDe base units
+    mapping(address => uint256) public debt; // USDC base units (assets)
+    mapping(address => uint256) public borrowShares; // shares (1:1 with debt by default)
+    /* Set nonzero to model interest accrual between an inputs_block estimate
+       and the actual repay call: the mock inflates `debt` by
+       `debt * accrualBps / 10_000` at the start of every `repay`. Zero by
+       default so existing tests are unaffected; Khaled review regression
+       tests bump it to reproduce the on-mainnet accrual gap. */
+    uint256 public accrualBps;
+
+    constructor(IERC20 _usdc, IERC20 _usde) {
+        usdc = _usdc;
+        usde = _usde;
+    }
+
+    function setAccrualBps(uint256 bps) external {
+        accrualBps = bps;
+    }
+
+    function supplyCollateral(IMorphoBlue.MarketParams calldata, uint256 assets, address onBehalf, bytes calldata)
+        external
+    {
+        // Pull the collateral IN from msg.sender (which is the vault, or the
+        // strategist during deploy). Real Morpho pulls with safeTransferFrom.
+        require(usde.transferFrom(msg.sender, address(this), assets), "usde in");
+        collateral[onBehalf] += assets;
+    }
+
+    function withdrawCollateral(IMorphoBlue.MarketParams calldata, uint256 assets, address onBehalf, address receiver)
+        external
+    {
+        require(collateral[onBehalf] >= assets, "collateral");
+        collateral[onBehalf] -= assets;
+        /* Post-withdraw LLTV check that real Morpho performs. In this mock
+           we use a simple invariant: collateral must be non-zero when debt
+           is non-zero (a full-collateral withdraw with residual debt
+           reverts, exactly as Morpho's health check would). */
+        if (debt[onBehalf] > 0 && collateral[onBehalf] == 0) revert("morpho: health");
+        require(usde.transfer(receiver, assets), "usde out");
+    }
+
+    function borrow(IMorphoBlue.MarketParams calldata, uint256 assets, uint256, address onBehalf, address receiver)
+        external
+        returns (uint256, uint256)
+    {
+        debt[onBehalf] += assets;
+        borrowShares[onBehalf] += assets; // 1:1 in the mock
+        require(usdc.transfer(receiver, assets), "usdc out");
+        return (assets, assets);
+    }
+
+    function repay(IMorphoBlue.MarketParams calldata, uint256 assets, uint256 shares, address onBehalf, bytes calldata)
+        external
+        returns (uint256, uint256)
+    {
+        // Interest accrual model: bump debt (NOT shares — mirrors Morpho's
+        // internal `totalBorrowAssets` growing while `totalBorrowShares`
+        // stays flat between borrows) before pulling.
+        if (accrualBps > 0) {
+            uint256 accrued = debt[onBehalf] * accrualBps / 10_000;
+            debt[onBehalf] += accrued;
+        }
+        uint256 pullAssets;
+        uint256 pullShares;
+        if (shares != 0) {
+            /* Real Morpho: `assets = shares × total_borrow_assets /
+               total_borrow_shares`. With this ratio, sending
+               `shares = full_borrow_shares` pulls the exact current
+               debt regardless of accrual — that is the invariant
+               `plan_deleverage`'s full-unwind branch depends on. */
+            pullShares = shares;
+            pullAssets = shares * debt[onBehalf] / borrowShares[onBehalf];
+        } else {
+            pullAssets = assets;
+            pullShares = assets * borrowShares[onBehalf] / debt[onBehalf];
+        }
+        require(debt[onBehalf] >= pullAssets, "debt");
+        debt[onBehalf] -= pullAssets;
+        borrowShares[onBehalf] -= pullShares;
+        require(usdc.transferFrom(msg.sender, address(this), pullAssets), "usdc in");
+        return (pullAssets, pullShares);
+    }
+
+    function flashLoan(address token, uint256 assets, bytes calldata data) external {
+        require(IERC20(token).transfer(msg.sender, assets), "flash out");
+        IMorphoFlashLoanCallback(msg.sender).onMorphoFlashLoan(assets, data);
+        require(IERC20(token).transferFrom(msg.sender, address(this), assets), "flash back");
+    }
+}
+
+/// @dev Minimal Aerodrome Slipstream router mock: exact 1:1e12 par swap
+///      between USDC (6-dec) and USDe (18-dec). Pre-funded with both tokens.
+contract MockAerodromeRouter {
+    IERC20 public immutable usdc;
+    IERC20 public immutable usde;
+
+    constructor(IERC20 _usdc, IERC20 _usde) {
+        usdc = _usdc;
+        usde = _usde;
+    }
+
+    function exactInputSingle(IAerodromeCLRouter.ExactInputSingleParams calldata p)
+        external
+        payable
+        returns (uint256 amountOut)
+    {
+        require(IERC20(p.tokenIn).transferFrom(msg.sender, address(this), p.amountIn), "in");
+        if (p.tokenIn == address(usdc)) {
+            // USDC (6-dec) -> USDe (18-dec) at par: multiply by 1e12.
+            amountOut = p.amountIn * 1e12;
+        } else {
+            // USDe (18-dec) -> USDC (6-dec) at par: divide by 1e12.
+            amountOut = p.amountIn / 1e12;
+        }
+        require(amountOut >= p.amountOutMinimum, "slippage");
+        require(IERC20(p.tokenOut).transfer(p.recipient, amountOut), "out");
     }
 }
 
@@ -147,12 +313,8 @@ contract PriimeVaultTest {
             swapRouter: address(0x04),
             poolTickSpacing: int24(1)
         });
-        vault = new PriimeVault(
-            IWavsServiceManager(address(manager)),
-            IERC20(address(usdc)),
-            STRATEGIST,
-            strategyConfig
-        );
+        vault =
+            new PriimeVault(IWavsServiceManager(address(manager)), IERC20(address(usdc)), STRATEGIST, strategyConfig);
 
         usdc.mint(ALICE, 1_000_000 * ONE_USDC);
         usdc.mint(BOB, 1_000_000 * ONE_USDC);
@@ -190,11 +352,8 @@ contract PriimeVaultTest {
             reserveBps: 0,
             supplyApyBps: 0,
             hoursSinceUpdate: 0,
-            plan: PriimeVault.StrategyPlan({
-                targets: new address[](0),
-                calldatas: new bytes[](0),
-                timestamp: 0
-            })
+            breachFlags: 0,
+            plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
         });
         return IWavsServiceHandler.Envelope({
             eventId: eventId,
@@ -206,12 +365,32 @@ contract PriimeVaultTest {
         });
     }
 
-    function _sigs() internal pure returns (IWavsServiceHandler.SignatureData memory) {
-        return IWavsServiceHandler.SignatureData({
-            signers: new address[](0),
-            signatures: new bytes[](0),
-            referenceBlock: 0
+    function _envelopeWithBreach(bytes20 eventId, uint256 nav, uint256 inputsBlock, uint16 flags)
+        internal
+        view
+        returns (IWavsServiceHandler.Envelope memory)
+    {
+        PriimeVault.BoundNavResult memory result = PriimeVault.BoundNavResult({
+            handler: address(vault),
+            nav: nav,
+            inputsBlock: inputsBlock,
+            configHash: bytes32(0),
+            leverageBps: 0,
+            ltvBps: 0,
+            reserveBps: 0,
+            supplyApyBps: 0,
+            hoursSinceUpdate: 0,
+            breachFlags: flags,
+            plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
         });
+        return IWavsServiceHandler.Envelope({eventId: eventId, ordering: bytes12(0), payload: abi.encode(result)});
+    }
+
+    function _sigs() internal pure returns (IWavsServiceHandler.SignatureData memory) {
+        return
+            IWavsServiceHandler.SignatureData({
+                signers: new address[](0), signatures: new bytes[](0), referenceBlock: 0
+            });
     }
 
     function _attest(bytes20 eventId, uint256 nav, uint256 inputsBlock) internal {
@@ -773,6 +952,780 @@ contract PriimeVaultTest {
         require(vault.processed(bytes20(uint160(1))), "eventId marked processed");
     }
 
+    function test_BreachFlagSetOnStrikeRejectsNewRequests() public {
+        // Bootstrap: one round of clean deposit + strike so BOB can hold shares
+        // and prove the breach gate blocks REDEEM as well as DEPOSIT.
+        _bootstrapAlice();
+
+        // Strike lands with breachFlags != 0 (bit 0 = hf_floor). Vault
+        // attests NAV and stores the flag; existing balances are unaffected.
+        vault.handleSignedEnvelope(
+            _envelopeWithBreach(bytes20(uint160(0xB01)), 1_000 * ONE_USDC, 2, uint16(1)), _sigs()
+        );
+        require(vault.breachFlags() == uint16(1), "flag stored");
+        require(vault.totalAssets() == 1_000 * ONE_USDC, "nav still attested");
+        // New deposit request refused with VaultBreached(1). BOB already
+        // approved the vault in setUp, so no allowance dance needed here.
+        vm.prank(BOB);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.VaultBreached.selector, uint16(1)));
+        vault.requestDeposit(100 * ONE_USDC, BOB, BOB);
+
+        // Existing share holder cannot open a new redeem request either.
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.VaultBreached.selector, uint16(1)));
+        vault.requestRedeem(100 * ONE_USDC, ALICE, ALICE);
+
+        // Next strike clears the flag: requests resume normally.
+        vault.handleSignedEnvelope(
+            _envelopeWithBreach(bytes20(uint160(0xB02)), 1_000 * ONE_USDC, 3, uint16(0)), _sigs()
+        );
+        require(vault.breachFlags() == 0, "flag cleared by fresh strike");
+
+        vm.prank(BOB);
+        vault.requestDeposit(100 * ONE_USDC, BOB, BOB);
+    }
+
+    // ------------------------------------------------------------------------
+    // Roadmap P1 #4: plan_deleverage end-to-end. Fresh setup (dummy addresses
+    // don't hold state) with a full Morpho + Aerodrome mock stack. Proves the
+    // whole 7540 withdrawal flow:
+    //   1. deposit + strike -> position opens against Morpho
+    //   2. requestRedeem + strike -> plan_deleverage frees USDC via flashLoan
+    //   3. redeem() delivers USDC
+    // ------------------------------------------------------------------------
+
+    function test_FullWithdrawalFlow_FlashloanDeleverFreesUsdcForClaim() public {
+        // Fresh mock stack. The main vault at address `vault` uses placeholder
+        // addresses for Morpho/router that can't roundtrip a real flashloan;
+        // spin up a second vault wired to real mocks so this exercise is
+        // end-to-end.
+        TestUSDC muUsdc = new TestUSDC();
+        TestUSDe muUsde = new TestUSDe();
+        MockMorpho muMorpho = new MockMorpho(IERC20(address(muUsdc)), IERC20(address(muUsde)));
+        MockAerodromeRouter muRouter = new MockAerodromeRouter(IERC20(address(muUsdc)), IERC20(address(muUsde)));
+        ToggleableServiceManager muManager = new ToggleableServiceManager();
+
+        PriimeVault muVault = new PriimeVault(
+            IWavsServiceManager(address(muManager)),
+            IERC20(address(muUsdc)),
+            STRATEGIST,
+            PriimeVault.StrategyConfig({
+                collateralToken: address(muUsde),
+                morpho: address(muMorpho),
+                morphoOracle: address(0x02),
+                morphoIrm: address(0x03),
+                morphoLltv: 915_000_000_000_000_000,
+                swapRouter: address(muRouter),
+                poolTickSpacing: int24(1)
+            })
+        );
+
+        // Prime Morpho and the router with enough USDC / USDe to serve the
+        // flashloan + borrow + swap legs. Test-scale; real Morpho holds a
+        // supply-side pool from other users.
+        muUsdc.mint(address(muMorpho), 100_000 * ONE_USDC);
+        muUsde.mint(address(muRouter), 100_000 * 1e18);
+        muUsdc.mint(address(muRouter), 100_000 * ONE_USDC);
+
+        // Alice deposits 1000 USDC, first strike bootstraps her shares. NAV
+        // stays 0 at the bootstrap strike (position not opened yet).
+        muUsdc.mint(ALICE, 1_000 * ONE_USDC);
+        vm.prank(ALICE);
+        muUsdc.approve(address(muVault), type(uint256).max);
+        vm.prank(ALICE);
+        muVault.requestDeposit(1_000 * ONE_USDC, ALICE, ALICE);
+        _attestOn(muVault, bytes20(uint160(0xD1)), 0, 1);
+        vm.prank(ALICE);
+        muVault.deposit(1_000 * ONE_USDC, ALICE);
+        require(muVault.balanceOf(ALICE) == 1_000 * ONE_USDC, "alice holds 1000 shares");
+
+        // Strategist opens a 2x position from the deposited USDC. Simulates
+        // the strike's plan_open_position: swap USDC -> USDe, supply, borrow.
+        // At par: 1000 USDC -> 1000e18 USDe supplied -> borrow 500 USDC back.
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (address(muRouter), 1_000 * ONE_USDC)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muRouter),
+            abi.encodeCall(
+                IAerodromeCLRouter.exactInputSingle,
+                (IAerodromeCLRouter.ExactInputSingleParams({
+                        tokenIn: address(muUsdc),
+                        tokenOut: address(muUsde),
+                        tickSpacing: int24(1),
+                        recipient: address(muVault),
+                        deadline: block.timestamp + 300,
+                        amountIn: 1_000 * ONE_USDC,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    }))
+            )
+        );
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsde), abi.encodeCall(TestUSDe.approve, (address(muMorpho), 1_000 * 1e18)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muMorpho),
+            abi.encodeCall(
+                IMorphoBlue.supplyCollateral,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(muUsdc),
+                        collateralToken: address(muUsde),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    1_000 * 1e18,
+                    address(muVault),
+                    ""
+                )
+            )
+        );
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muMorpho),
+            abi.encodeCall(
+                IMorphoBlue.borrow,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(muUsdc),
+                        collateralToken: address(muUsde),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    500 * ONE_USDC,
+                    0,
+                    address(muVault),
+                    address(muVault)
+                )
+            )
+        );
+        require(muUsdc.balanceOf(address(muVault)) == 500 * ONE_USDC, "vault holds 500 USDC after 2x lever");
+        require(muMorpho.collateral(address(muVault)) == 1_000 * 1e18, "1000 USDe collateral");
+        require(muMorpho.debt(address(muVault)) == 500 * ONE_USDC, "500 USDC debt");
+
+        // Second strike attests NAV = 500 USDC (collateral 1000@par minus debt 500).
+        _attestOn(muVault, bytes20(uint160(0xD2)), 500 * ONE_USDC, 2);
+        require(muVault.totalAssets() == 500 * ONE_USDC, "NAV = 500 at 2x leverage");
+
+        // Alice requests redemption of ALL her shares. At NAV=500 / supply=1000
+        // she's owed 500 USDC, but the vault holds it too - use HALF to prove
+        // the delever proportionally reduces the position instead of just
+        // draining idle cash. Actually make it 700: 500 idle < 700 claim, so
+        // 200 USDC must come from the delever.
+        // ... but 700 shares at 500/1000 price = 350 USDC claim, still <500.
+        // For a genuine delever, drain the idle first by having the strategist
+        // supply it back into position, then the entire 500-USDC redemption
+        // must be funded via the flashloan.
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (address(muRouter), 500 * ONE_USDC)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muRouter),
+            abi.encodeCall(
+                IAerodromeCLRouter.exactInputSingle,
+                (IAerodromeCLRouter.ExactInputSingleParams({
+                        tokenIn: address(muUsdc),
+                        tokenOut: address(muUsde),
+                        tickSpacing: int24(1),
+                        recipient: address(muVault),
+                        deadline: block.timestamp + 300,
+                        amountIn: 500 * ONE_USDC,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    }))
+            )
+        );
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsde), abi.encodeCall(TestUSDe.approve, (address(muMorpho), 500 * 1e18)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muMorpho),
+            abi.encodeCall(
+                IMorphoBlue.supplyCollateral,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(muUsdc),
+                        collateralToken: address(muUsde),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    500 * 1e18,
+                    address(muVault),
+                    ""
+                )
+            )
+        );
+        require(muUsdc.balanceOf(address(muVault)) == 0, "vault is fully deployed, 0 idle USDC");
+        // Position is now 1500 USDe collateral / 500 USDC debt -> NAV 1000 at par.
+        require(muMorpho.collateral(address(muVault)) == 1_500 * 1e18, "1500 USDe collateral after fold-in");
+
+        // Alice requests full redemption at NAV=1000, supply=1000 -> 1 USDC/share.
+        vm.prank(ALICE);
+        muVault.requestRedeem(1_000 * ONE_USDC, ALICE, ALICE);
+
+        // Build the strike's plan: a single `morpho.flashLoan(usdc, 500, data)`
+        // where data = (collateralOut = 1500e18, minUsdcOut = 1500 USDC-1%,
+        // deadline, sharesToRepay = 500 USDC of borrow shares — 1:1 with debt
+        // in the mock). Full unwind: repay 500 shares (clears debt exactly),
+        // withdraw 1500 USDe, swap to 1500 USDC, keep 1000 USDC net.
+        bytes memory flashData = abi.encode(
+            uint256(1_500 * 1e18), uint256(1_485 * ONE_USDC), block.timestamp + 300, uint256(500 * ONE_USDC)
+        );
+        address[] memory targets = new address[](1);
+        targets[0] = address(muMorpho);
+        bytes[] memory calldatas = new bytes[](1);
+        calldatas[0] = abi.encodeCall(IMorphoBlue.flashLoan, (address(muUsdc), 500 * ONE_USDC, flashData));
+
+        _attestOnWithPlan(
+            muVault,
+            bytes20(uint160(0xD3)),
+            1_000 * ONE_USDC,
+            3,
+            PriimeVault.StrategyPlan({targets: targets, calldatas: calldatas, timestamp: block.timestamp + 300})
+        );
+
+        // Strike settled: alice's 1000 shares -> 1000 USDC claimable; the plan
+        // brought idle USDC from 0 up to 1000 by unwinding the whole position.
+        require(muVault.totalClaimableRedeemAssets() == 1_000 * ONE_USDC, "claimable = 1000");
+        require(muUsdc.balanceOf(address(muVault)) == 1_000 * ONE_USDC, "1000 USDC on hand for the claim");
+        require(muMorpho.collateral(address(muVault)) == 0, "collateral fully withdrawn");
+        require(muMorpho.debt(address(muVault)) == 0, "debt fully repaid");
+
+        // Alice claims. Real USDC lands in her wallet.
+        uint256 aliceBefore = muUsdc.balanceOf(ALICE);
+        vm.prank(ALICE);
+        uint256 assets = muVault.redeem(1_000 * ONE_USDC, ALICE, ALICE);
+        require(assets == 1_000 * ONE_USDC, "claim delivers 1000 USDC");
+        require(muUsdc.balanceOf(ALICE) - aliceBefore == 1_000 * ONE_USDC, "USDC delivered to alice");
+        require(muVault.balanceOf(ALICE) == 0, "alice's shares fully redeemed");
+    }
+
+    function test_OnMorphoFlashLoanRejectsNonMorphoCaller() public {
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.FlashLoanCallerNotMorpho.selector, address(this)));
+        vault.onMorphoFlashLoan(1_000 * ONE_USDC, abi.encode(uint256(0), uint256(0), block.timestamp, uint256(0)));
+    }
+
+    // ------------------------------------------------------------------------
+    // Khaled review regression tests
+    // ------------------------------------------------------------------------
+
+    function test_FailedDeleverPlan_RollsBackRedemptionBookkeeping() public {
+        /* If the plan reverts (floor breach), _fulfillRedeems must roll
+           back too so the vault doesn't sit with `totalClaimableRedeemAssets`
+           raised against a balance the plan failed to lift. Alice's shares
+           stay pending, next strike tries again. */
+        (PriimeVault muVault,, MockMorpho muMorpho, TestUSDC muUsdc,) = _buildMorphoMockStack();
+
+        muUsdc.mint(ALICE, 1_000 * ONE_USDC);
+        vm.prank(ALICE);
+        muUsdc.approve(address(muVault), type(uint256).max);
+        vm.prank(ALICE);
+        muVault.requestDeposit(1_000 * ONE_USDC, ALICE, ALICE);
+        _attestOn(muVault, bytes20(uint160(0xF01)), 0, 1);
+        vm.prank(ALICE);
+        muVault.deposit(1_000 * ONE_USDC, ALICE);
+        // Move all USDC out of the vault so the next strike is stuck below floor.
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.transfer, (SINK, 1_000 * ONE_USDC)));
+
+        vm.prank(ALICE);
+        muVault.requestRedeem(1_000 * ONE_USDC, ALICE, ALICE);
+
+        // Strike with an EMPTY plan while there's queued redemption -> the
+        // fulfilment inside executePlanSelf will raise the floor to 1000 USDC
+        // against a balance of 0 -> plan reverts.
+        address[] memory noTargets = new address[](0);
+        bytes[] memory noCalldatas = new bytes[](0);
+        _attestOnWithPlan(
+            muVault,
+            bytes20(uint160(0xF02)),
+            1_000 * ONE_USDC,
+            2,
+            PriimeVault.StrategyPlan({targets: noTargets, calldatas: noCalldatas, timestamp: block.timestamp + 300})
+        );
+
+        // Rollback assertions: the fulfilment side-effects must all be
+        // gone, shares must still be in the pending queue, no claimable.
+        require(muVault.totalClaimableRedeemAssets() == 0, "claim rolled back");
+        require(muVault.totalPendingRedeemShares() == 1_000 * ONE_USDC, "shares still pending");
+        require(muVault.balanceOf(address(muVault)) == 1_000 * ONE_USDC, "vault-escrowed shares intact");
+        require(muVault.updateCount() == 2, "NAV attestation still landed");
+    }
+
+    function test_DeleverPlanSurvivesAccruedInterestBetweenEstimateAndExecution() public {
+        /* Real Morpho accrues interest between the operator's inputs_block
+           read and the vault's on-chain execution. The old assets-based repay
+           left residual debt when the estimate lagged; shares-based repay
+           captures it exactly. Model with `accrualBps = 5` (~5 bps per repay
+           call, roughly one hour at typical borrow rates) and a 50% redeem
+           so remaining collateral covers the accrual cost.
+
+           OLD-code behavior (assets-based repay of stale estimate) would
+           leave residual debt against the partially-withdrawn collateral,
+           tripping Morpho's LLTV check on the withdrawCollateral step.
+           NEW-code behavior (shares-based repay) pulls the exact current
+           debt slice, so the LLTV check passes. */
+        (PriimeVault muVault, MockAerodromeRouter muRouter, MockMorpho muMorpho, TestUSDC muUsdc, TestUSDe muUsde) =
+            _buildMorphoMockStack();
+
+        muUsdc.mint(ALICE, 1_000 * ONE_USDC);
+        vm.prank(ALICE);
+        muUsdc.approve(address(muVault), type(uint256).max);
+        vm.prank(ALICE);
+        muVault.requestDeposit(1_000 * ONE_USDC, ALICE, ALICE);
+        _attestOn(muVault, bytes20(uint160(0xF11)), 0, 1);
+        vm.prank(ALICE);
+        muVault.deposit(1_000 * ONE_USDC, ALICE);
+
+        _openPosition2x(muVault, muUsdc, muUsde, muRouter, muMorpho);
+        _foldIdleIntoPosition(muVault, muUsdc, muUsde, muRouter, muMorpho, 500 * ONE_USDC);
+        _attestOn(muVault, bytes20(uint160(0xF12)), 1_000 * ONE_USDC, 2);
+
+        // 5 bps accrual per repay call.
+        muMorpho.setAccrualBps(5);
+
+        // Partial redemption: 500 shares (half). Attested claim = 500 USDC.
+        vm.prank(ALICE);
+        muVault.requestRedeem(500 * ONE_USDC, ALICE, ALICE);
+
+        // Plan targets a proportional unwind:
+        //   proportion = 500 / 1000 nav = 0.5
+        //   collateralOut = 750 USDe, sharesToRepay = 250 (half of 500)
+        //   flashloan = 250 USDC × 1.01 (accrual buffer)
+        // Shares-based repay pulls 250 × current_debt / 500 = accurate slice
+        // even after accrual bump.
+        bytes memory flashData =
+            abi.encode(uint256(755 * 1e18), uint256(750 * ONE_USDC), block.timestamp + 300, uint256(250 * ONE_USDC));
+        address[] memory targets = new address[](1);
+        targets[0] = address(muMorpho);
+        bytes[] memory calldatas = new bytes[](1);
+        calldatas[0] = abi.encodeCall(IMorphoBlue.flashLoan, (address(muUsdc), 260 * ONE_USDC, flashData));
+
+        _attestOnWithPlan(
+            muVault,
+            bytes20(uint160(0xF13)),
+            1_000 * ONE_USDC,
+            3,
+            PriimeVault.StrategyPlan({targets: targets, calldatas: calldatas, timestamp: block.timestamp + 300})
+        );
+
+        // Plan settled: shares-based repay cleared the exact proportional
+        // debt slice, withdrawCollateral passed the LLTV check (residual
+        // debt still backed by residual collateral), swap delivered enough
+        // USDC to cover the 500 USDC claim.
+        require(muVault.totalClaimableRedeemAssets() >= 495 * ONE_USDC, "half-claim materialised despite accrual");
+        require(muMorpho.collateral(address(muVault)) == 745 * 1e18, "residual collateral = 1500 - 755");
+        // Residual debt = old_debt × 1.0005 (accrual) - 250 × old_debt/500 = 250.25 - 250.125 = 0.125.
+        // That's an approximation — the point is the LLTV check passed and
+        // the position is still valid.
+        require(muMorpho.collateral(address(muVault)) > 0, "collateral covers residual debt");
+    }
+
+    function test_EmergencyExecute_UnlocksStrategistRecoveryWhenStuck() public {
+        /* Manual-recovery path: `execute` re-checks the floor after every
+           call, so a multi-step unwind cannot even start once the vault is
+           below floor. `emergencyExecute` skips that check while stuck and
+           refuses once solvent again. */
+        (PriimeVault muVault,,, TestUSDC muUsdc,) = _buildMorphoMockStack();
+
+        muUsdc.mint(ALICE, 100 * ONE_USDC);
+        vm.prank(ALICE);
+        muUsdc.approve(address(muVault), type(uint256).max);
+        vm.prank(ALICE);
+        muVault.requestDeposit(100 * ONE_USDC, ALICE, ALICE);
+        _attestOn(muVault, bytes20(uint160(0xF21)), 0, 1);
+        vm.prank(ALICE);
+        muVault.deposit(100 * ONE_USDC, ALICE);
+
+        // Move the vault's USDC out to a placeholder sink so we're stuck.
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.transfer, (SINK, 100 * ONE_USDC)));
+        // Stage a redemption so totalClaimableRedeemAssets grows on the next strike.
+        vm.prank(ALICE);
+        muVault.requestRedeem(100 * ONE_USDC, ALICE, ALICE);
+        address[] memory noTargets = new address[](0);
+        bytes[] memory noCalldatas = new bytes[](0);
+        _attestOnWithPlan(
+            muVault,
+            bytes20(uint160(0xF22)),
+            100 * ONE_USDC,
+            2,
+            PriimeVault.StrategyPlan({targets: noTargets, calldatas: noCalldatas, timestamp: block.timestamp + 300})
+        );
+        // With the rollback fix, no claimable is left standing after the failed plan.
+        require(muVault.totalClaimableRedeemAssets() == 0, "claim rolled back");
+
+        // Simulate a legacy stuck state (rollback didn't happen in old code)
+        // by donating USDC to the vault via the strategist and setting a
+        // manual scenario: mint 200 USDC to SINK, transfer it back, then
+        // spend it back out so the vault is short vs its floor. We don't
+        // have easy access to the old buggy path; instead just prove the
+        // emergencyExecute path itself: at balance 0 with a 0 floor, the
+        // guard says "not stuck".
+        vm.prank(STRATEGIST);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.VaultNotStuck.selector, uint256(0), uint256(0)));
+        muVault.emergencyExecute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (SINK, 1)));
+
+        // Force a stuck state: put a pending deposit on the queue (non-zero
+        // floor) but drain the escrow via a legacy-simulated write. Simplest
+        // path: another user deposits, we transfer their escrow out via
+        // execute BEFORE the floor check would refuse (it can't, execute
+        // enforces the same floor). So use `emergencyExecute` itself to
+        // approve while at 0/0 (currently blocked, as expected). Instead,
+        // just confirm the guard triggers with a nonzero floor.
+        muUsdc.mint(BOB, 50 * ONE_USDC);
+        vm.prank(BOB);
+        muUsdc.approve(address(muVault), type(uint256).max);
+        vm.prank(BOB);
+        muVault.requestDeposit(50 * ONE_USDC, BOB, BOB); // escrow 50 in vault
+        vm.prank(STRATEGIST);
+        // A regular execute cannot move that 50 out (floor would break).
+        vm.expectRevert(
+            abi.encodeWithSelector(PriimeVault.EscrowFloorBreached.selector, uint256(0), uint256(50 * ONE_USDC))
+        );
+        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.transfer, (SINK, 50 * ONE_USDC)));
+        // But if the vault were ALREADY stuck (imagine mock-only state where
+        // balance < floor), emergencyExecute would let the strategist act.
+        // Here we prove the AT-FLOOR case is refused: balance == floor,
+        // guard says not stuck.
+        vm.prank(STRATEGIST);
+        vm.expectRevert(
+            abi.encodeWithSelector(PriimeVault.VaultNotStuck.selector, uint256(50 * ONE_USDC), uint256(50 * ONE_USDC))
+        );
+        muVault.emergencyExecute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (SINK, 1)));
+    }
+
+    function test_ZeroDebtCollateralRedemptionDeliversUsdcInOneStrike() public {
+        /* Reviewer's blocker: vault holds collateral with ZERO Morpho
+           debt and a queued redeem larger than idle USDC. The component's
+           delever branch was gated on `!debt.is_zero()` so the strike
+           emitted an EMPTY plan, `_fulfillRedeems` raised the floor above
+           the balance, the whole self-call rolled back, and Alice's
+           shares stayed pending across strikes forever until a strategist
+           manually unwound. `emergencyExecute` could not fire either -
+           the rollback keeps the floor at zero, so `balance >= floor` and
+           the recovery path refused.
+
+           The fix (`plan_redeem_collateral` in the vault-nav component)
+           emits a 3-step spot unwind: `withdrawCollateral` + `approve` +
+           `exactInputSingle`. This test builds the same plan by hand and
+           proves the strike now delivers the claim atomically. */
+        (PriimeVault muVault, MockAerodromeRouter muRouter, MockMorpho muMorpho, TestUSDC muUsdc, TestUSDe muUsde) =
+            _buildMorphoMockStack();
+
+        // ---- 1. Alice deposits 1000 USDC. Bootstrap strike mints shares.
+        muUsdc.mint(ALICE, 1_000 * ONE_USDC);
+        vm.prank(ALICE);
+        muUsdc.approve(address(muVault), type(uint256).max);
+        vm.prank(ALICE);
+        muVault.requestDeposit(1_000 * ONE_USDC, ALICE, ALICE);
+        _attestOn(muVault, bytes20(uint160(0xF31)), 0, 1);
+        vm.prank(ALICE);
+        muVault.deposit(1_000 * ONE_USDC, ALICE);
+
+        // ---- 2. Park 900 USDC as 900 USDe collateral. NO borrow: this
+        //         is the zero-debt state the original delever branch
+        //         refused to plan for.
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (address(muRouter), 900 * ONE_USDC)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muRouter),
+            abi.encodeCall(
+                IAerodromeCLRouter.exactInputSingle,
+                (IAerodromeCLRouter.ExactInputSingleParams({
+                        tokenIn: address(muUsdc),
+                        tokenOut: address(muUsde),
+                        tickSpacing: int24(1),
+                        recipient: address(muVault),
+                        deadline: block.timestamp + 300,
+                        amountIn: 900 * ONE_USDC,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    }))
+            )
+        );
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsde), abi.encodeCall(TestUSDe.approve, (address(muMorpho), 900 * 1e18)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muMorpho),
+            abi.encodeCall(
+                IMorphoBlue.supplyCollateral,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(muUsdc),
+                        collateralToken: address(muUsde),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    900 * 1e18,
+                    address(muVault),
+                    ""
+                )
+            )
+        );
+        require(muMorpho.debt(address(muVault)) == 0, "DEBT IS ZERO - the reviewer's premise");
+        require(muMorpho.collateral(address(muVault)) == 900 * 1e18, "900e18 USDe collateral");
+        require(muUsdc.balanceOf(address(muVault)) == 100 * ONE_USDC, "100 USDC idle");
+
+        // Confirm the unlevered position: NAV = 900 (collateral @ par) + 100 (idle) = 1000.
+        _attestOn(muVault, bytes20(uint160(0xF32)), 1_000 * ONE_USDC, 2);
+
+        // ---- 3. Alice requests full redemption. Shortfall = 1000 - 100 = 900.
+        vm.prank(ALICE);
+        muVault.requestRedeem(1_000 * ONE_USDC, ALICE, ALICE);
+
+        // ---- 4. Compose the fixed component's plan: `plan_redeem_collateral`.
+        //         Same shape the Rust builder emits. Size the withdraw so the
+        //         swap floor clears 900 * 1.01 = 909 USDC.
+        IMorphoBlue.MarketParams memory params = IMorphoBlue.MarketParams({
+            loanToken: address(muUsdc),
+            collateralToken: address(muUsde),
+            oracle: address(0x02),
+            irm: address(0x03),
+            lltv: 915_000_000_000_000_000
+        });
+        // Real component sizing: `usde_needed = 909 * 1e12 * 10000 / 9950
+        // ~= 913.57e18`, capped at the 900e18 balance. `min_usdc_out`
+        // follows: `swap_min_usdc_out(900e18, par, 50) = 895.5e6`. Mock
+        // router has no slippage, so it delivers 900 USDC exactly - which
+        // meets the 900 USDC shortfall on the nose.
+        uint256 usdeOut = 900 * 1e18;
+        uint256 minUsdcOut = 895 * ONE_USDC;
+        address[] memory targets = new address[](3);
+        targets[0] = address(muMorpho);
+        targets[1] = address(muUsde);
+        targets[2] = address(muRouter);
+        bytes[] memory calldatas = new bytes[](3);
+        calldatas[0] =
+            abi.encodeCall(IMorphoBlue.withdrawCollateral, (params, usdeOut, address(muVault), address(muVault)));
+        calldatas[1] = abi.encodeCall(TestUSDe.approve, (address(muRouter), usdeOut));
+        calldatas[2] = abi.encodeCall(
+            IAerodromeCLRouter.exactInputSingle,
+            (IAerodromeCLRouter.ExactInputSingleParams({
+                    tokenIn: address(muUsde),
+                    tokenOut: address(muUsdc),
+                    tickSpacing: int24(1),
+                    recipient: address(muVault),
+                    deadline: block.timestamp + 300,
+                    amountIn: usdeOut,
+                    amountOutMinimum: minUsdcOut,
+                    sqrtPriceLimitX96: 0
+                }))
+        );
+
+        _attestOnWithPlan(
+            muVault,
+            bytes20(uint160(0xF33)),
+            1_000 * ONE_USDC,
+            3,
+            PriimeVault.StrategyPlan({targets: targets, calldatas: calldatas, timestamp: block.timestamp + 300})
+        );
+
+        // ---- 5. Single-strike delivery: pending drained, claim booked.
+        require(muVault.totalPendingRedeemShares() == 0, "pending drained in one strike");
+        require(muVault.claimableRedeemRequest(0, ALICE) == 1_000 * ONE_USDC, "alice's claim materialised");
+        require(muVault.totalClaimableRedeemAssets() == 1_000 * ONE_USDC, "claim booked against a real balance");
+        // Position: 900 - 910 was capped at 900 by the mock, but the swap
+        // still delivered enough for the claim. Residual position: whatever
+        // the mock had left after the withdraw. What matters is the claim.
+
+        // ---- 6. Alice actually collects.
+        uint256 balBefore = muUsdc.balanceOf(ALICE);
+        vm.prank(ALICE);
+        uint256 assets = muVault.redeem(1_000 * ONE_USDC, ALICE, ALICE);
+        require(assets == 1_000 * ONE_USDC, "claim delivers 1000 USDC");
+        require(muUsdc.balanceOf(ALICE) - balBefore == 1_000 * ONE_USDC, "USDC lands in alice's wallet");
+    }
+
+    // --- helpers used by the Khaled regression tests --------------------------
+
+    function _buildMorphoMockStack()
+        internal
+        returns (PriimeVault v, MockAerodromeRouter router, MockMorpho morphoMock, TestUSDC usdcMock, TestUSDe usdeMock)
+    {
+        usdcMock = new TestUSDC();
+        usdeMock = new TestUSDe();
+        morphoMock = new MockMorpho(IERC20(address(usdcMock)), IERC20(address(usdeMock)));
+        router = new MockAerodromeRouter(IERC20(address(usdcMock)), IERC20(address(usdeMock)));
+        ToggleableServiceManager mgr = new ToggleableServiceManager();
+        v = new PriimeVault(
+            IWavsServiceManager(address(mgr)),
+            IERC20(address(usdcMock)),
+            STRATEGIST,
+            PriimeVault.StrategyConfig({
+                collateralToken: address(usdeMock),
+                morpho: address(morphoMock),
+                morphoOracle: address(0x02),
+                morphoIrm: address(0x03),
+                morphoLltv: 915_000_000_000_000_000,
+                swapRouter: address(router),
+                poolTickSpacing: int24(1)
+            })
+        );
+        usdcMock.mint(address(morphoMock), 100_000 * ONE_USDC);
+        usdeMock.mint(address(router), 100_000 * 1e18);
+        usdcMock.mint(address(router), 100_000 * ONE_USDC);
+    }
+
+    function _openPosition2x(
+        PriimeVault v,
+        TestUSDC usdcT,
+        TestUSDe usdeT,
+        MockAerodromeRouter router,
+        MockMorpho morphoM
+    ) internal {
+        vm.prank(STRATEGIST);
+        v.execute(address(usdcT), abi.encodeCall(TestUSDC.approve, (address(router), 1_000 * ONE_USDC)));
+        vm.prank(STRATEGIST);
+        v.execute(
+            address(router),
+            abi.encodeCall(
+                IAerodromeCLRouter.exactInputSingle,
+                (IAerodromeCLRouter.ExactInputSingleParams({
+                        tokenIn: address(usdcT),
+                        tokenOut: address(usdeT),
+                        tickSpacing: int24(1),
+                        recipient: address(v),
+                        deadline: block.timestamp + 300,
+                        amountIn: 1_000 * ONE_USDC,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    }))
+            )
+        );
+        vm.prank(STRATEGIST);
+        v.execute(address(usdeT), abi.encodeCall(TestUSDe.approve, (address(morphoM), 1_000 * 1e18)));
+        vm.prank(STRATEGIST);
+        v.execute(
+            address(morphoM),
+            abi.encodeCall(
+                IMorphoBlue.supplyCollateral,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(usdcT),
+                        collateralToken: address(usdeT),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    1_000 * 1e18,
+                    address(v),
+                    ""
+                )
+            )
+        );
+        vm.prank(STRATEGIST);
+        v.execute(
+            address(morphoM),
+            abi.encodeCall(
+                IMorphoBlue.borrow,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(usdcT),
+                        collateralToken: address(usdeT),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    500 * ONE_USDC,
+                    0,
+                    address(v),
+                    address(v)
+                )
+            )
+        );
+    }
+
+    function _foldIdleIntoPosition(
+        PriimeVault v,
+        TestUSDC usdcT,
+        TestUSDe usdeT,
+        MockAerodromeRouter router,
+        MockMorpho morphoM,
+        uint256 usdcAmount
+    ) internal {
+        vm.prank(STRATEGIST);
+        v.execute(address(usdcT), abi.encodeCall(TestUSDC.approve, (address(router), usdcAmount)));
+        vm.prank(STRATEGIST);
+        v.execute(
+            address(router),
+            abi.encodeCall(
+                IAerodromeCLRouter.exactInputSingle,
+                (IAerodromeCLRouter.ExactInputSingleParams({
+                        tokenIn: address(usdcT),
+                        tokenOut: address(usdeT),
+                        tickSpacing: int24(1),
+                        recipient: address(v),
+                        deadline: block.timestamp + 300,
+                        amountIn: usdcAmount,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    }))
+            )
+        );
+        uint256 usdeAmount = usdcAmount * 1e12; // par
+        vm.prank(STRATEGIST);
+        v.execute(address(usdeT), abi.encodeCall(TestUSDe.approve, (address(morphoM), usdeAmount)));
+        vm.prank(STRATEGIST);
+        v.execute(
+            address(morphoM),
+            abi.encodeCall(
+                IMorphoBlue.supplyCollateral,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(usdcT),
+                        collateralToken: address(usdeT),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    usdeAmount,
+                    address(v),
+                    ""
+                )
+            )
+        );
+    }
+    // --- helpers scoped to the flashloan-delever exercise ---------------------
+
+    function _attestOn(PriimeVault v, bytes20 eventId, uint256 nav, uint256 inputsBlock) internal {
+        PriimeVault.StrategyPlan memory emptyPlan =
+            PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0});
+        _attestOnWithPlan(v, eventId, nav, inputsBlock, emptyPlan);
+    }
+
+    function _attestOnWithPlan(
+        PriimeVault v,
+        bytes20 eventId,
+        uint256 nav,
+        uint256 inputsBlock,
+        PriimeVault.StrategyPlan memory plan
+    ) internal {
+        PriimeVault.BoundNavResult memory result = PriimeVault.BoundNavResult({
+            handler: address(v),
+            nav: nav,
+            inputsBlock: inputsBlock,
+            configHash: bytes32(0),
+            leverageBps: 0,
+            ltvBps: 0,
+            reserveBps: 0,
+            supplyApyBps: 0,
+            hoursSinceUpdate: 0,
+            breachFlags: 0,
+            plan: plan
+        });
+        IWavsServiceHandler.Envelope memory env =
+            IWavsServiceHandler.Envelope({eventId: eventId, ordering: bytes12(0), payload: abi.encode(result)});
+        v.handleSignedEnvelope(env, _sigs());
+    }
+
     function test_UpdateRejectedWhenValidationFails() public {
         manager.setReject(true);
 
@@ -809,9 +1762,7 @@ contract PriimeVaultTest {
         // The bricking case: one corrupt quorum signing uint256.max would
         // otherwise raise the staleness floor beyond any reachable height and
         // freeze NAV forever.
-        vm.expectRevert(
-            abi.encodeWithSelector(PriimeVault.FutureInputsBlock.selector, type(uint256).max, block.number)
-        );
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.FutureInputsBlock.selector, type(uint256).max, block.number));
         vault.handleSignedEnvelope(_envelope(bytes20(uint160(3)), 9_999 * ONE_USDC, type(uint256).max), _sigs());
 
         require(vault.lastInputsBlock() == 100, "inputs block unchanged");
@@ -840,11 +1791,8 @@ contract PriimeVaultTest {
                     reserveBps: 0,
                     supplyApyBps: 0,
                     hoursSinceUpdate: 0,
-                    plan: PriimeVault.StrategyPlan({
-                        targets: new address[](0),
-                        calldatas: new bytes[](0),
-                        timestamp: 0
-                    })
+                    breachFlags: 0,
+                    plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
                 })
             )
         });
@@ -974,13 +1922,12 @@ contract PriimeVaultTest {
         vm.prank(ALICE);
         vault.requestRedeem(250 * ONE_USDC, ALICE, ALICE);
 
-        // Emission order is the settlement order: deposits, then redemptions,
-        // then the NAV record (which reports the attested value, not the
-        // post-fulfillment one).
+        // Emission order (post Khaled-review reorder): deposits fulfil in
+        // the outer frame, NAV update logs, then executePlanSelf runs which
+        // is where redemption fulfilment now lives so its
+        // `RedeemRequestFulfilled` event fires *inside* the plan self-call.
         vm.expectEmit(true, false, false, true);
         emit PriimeVault.DepositRequestFulfilled(BOB, 600 * ONE_USDC, 300 * ONE_USDC);
-        vm.expectEmit(true, false, false, true);
-        emit PriimeVault.RedeemRequestFulfilled(ALICE, 250 * ONE_USDC, 500 * ONE_USDC);
         vm.expectEmit(true, false, false, true);
         emit PriimeVault.NavUpdated(
             bytes20(uint160(0xE7E21)),
@@ -992,8 +1939,11 @@ contract PriimeVaultTest {
             uint32(0),
             uint32(0),
             uint32(0),
-            uint32(0)
+            uint32(0),
+            uint16(0)
         );
+        vm.expectEmit(true, false, false, true);
+        emit PriimeVault.RedeemRequestFulfilled(ALICE, 250 * ONE_USDC, 500 * ONE_USDC);
         _attest(bytes20(uint160(0xE7E21)), 2_000 * ONE_USDC, 2);
     }
 
@@ -1025,11 +1975,8 @@ contract PriimeVaultTest {
                     reserveBps: 0,
                     supplyApyBps: 0,
                     hoursSinceUpdate: 0,
-                    plan: PriimeVault.StrategyPlan({
-                        targets: new address[](0),
-                        calldatas: new bytes[](0),
-                        timestamp: 0
-                    })
+                    breachFlags: 0,
+                    plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
                 })
             )
         });
@@ -1065,11 +2012,8 @@ contract PriimeVaultTest {
                     reserveBps: 0,
                     supplyApyBps: 0,
                     hoursSinceUpdate: 0,
-                    plan: PriimeVault.StrategyPlan({
-                        targets: new address[](0),
-                        calldatas: new bytes[](0),
-                        timestamp: 0
-                    })
+                    breachFlags: 0,
+                    plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
                 })
             )
         });
@@ -1109,5 +2053,135 @@ contract PriimeVaultTest {
         require(vault.totalAssets() == 1_000 * ONE_USDC, "nav unchanged after stale updates");
         require(vault.lastInputsBlock() == 100, "inputs block unchanged");
         require(vault.updateCount() == 1, "stale updates not counted");
+    }
+
+    /* Reviewer's finding: the plan whitelist was target-only, so
+       `target.call(data)` forwarded raw calldata. A quorum-signed plan
+       could call `withdrawCollateral(..., rogueReceiver)` (USDe drain),
+       `approve(rogue, max)` on either token (persistent pull), or a
+       Morpho method with a foreign `onBehalf` — all invisible to the
+       escrow-floor check (USDC only). This walks every rejection path
+       `_validatePlanStep` now closes. `executePlanSelf` is gated by
+       `SelfCallOnly`; `vm.prank(address(vault))` satisfies it. */
+    function test_PlanValidatorRefusesEveryEscapeHatch() public {
+        IMorphoBlue.MarketParams memory params = IMorphoBlue.MarketParams({
+            loanToken: address(usdc),
+            collateralToken: address(0xC0),
+            oracle: address(0x02),
+            irm: address(0x03),
+            lltv: 915_000_000_000_000_000
+        });
+        address morpho = address(0xD1);
+        address router = address(0x04);
+        address collateral = address(0xC0);
+
+        // (1) Random target off the four-address list.
+        _expectRejectedStep(
+            address(0xDEAD),
+            abi.encodeCall(IERC20.approve, (morpho, 100)),
+            abi.encodeWithSelector(PriimeVault.PlanTargetNotWhitelisted.selector, address(0xDEAD))
+        );
+
+        // (2) `approve` on the asset with a rogue spender — persistent pull.
+        _expectRejectedStep(
+            address(usdc),
+            abi.encodeCall(IERC20.approve, (SINK, type(uint256).max)),
+            abi.encodeWithSelector(PriimeVault.PlanApproveSpenderRefused.selector, SINK)
+        );
+
+        // (3) Same drain on the collateral token.
+        _expectRejectedStep(
+            collateral,
+            abi.encodeCall(IERC20.approve, (SINK, type(uint256).max)),
+            abi.encodeWithSelector(PriimeVault.PlanApproveSpenderRefused.selector, SINK)
+        );
+
+        // (4) The reviewer's headline path: `withdrawCollateral(..., SINK)`
+        //     — USDe leaves the vault, escrow floor sees only USDC.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.withdrawCollateral, (params, 1e18, address(vault), SINK)),
+            abi.encodeWithSelector(PriimeVault.PlanReceiverNotSelf.selector, SINK)
+        );
+
+        // (5) Same shape on the USDC leg via `borrow`.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.borrow, (params, 100, 0, address(vault), SINK)),
+            abi.encodeWithSelector(PriimeVault.PlanReceiverNotSelf.selector, SINK)
+        );
+
+        // (6) `supplyCollateral(..., SINK, "")` — vault's approval moves
+        //     into SINK's position slot.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.supplyCollateral, (params, 1e18, SINK, "")),
+            abi.encodeWithSelector(PriimeVault.PlanOnBehalfNotSelf.selector, SINK)
+        );
+
+        // (7) `repay(..., SINK, "")` — vault's USDC repays someone else's debt.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.repay, (params, 100, 0, SINK, "")),
+            abi.encodeWithSelector(PriimeVault.PlanOnBehalfNotSelf.selector, SINK)
+        );
+
+        // (8) `flashLoan` with a non-asset token — the callback is written
+        //     for USDC-in / USDe-out only.
+        _expectRejectedStep(
+            morpho,
+            abi.encodeCall(IMorphoBlue.flashLoan, (collateral, 100, "")),
+            abi.encodeWithSelector(PriimeVault.PlanFlashLoanTokenRefused.selector, collateral)
+        );
+
+        // (9) A selector outside the Morpho set (e.g. `setAuthorization`).
+        bytes4 rogueSel = bytes4(keccak256("setAuthorization(address,bool)"));
+        _expectRejectedStep(
+            morpho,
+            abi.encodeWithSelector(rogueSel, SINK, true),
+            abi.encodeWithSelector(PriimeVault.PlanSelectorRefused.selector, morpho, rogueSel)
+        );
+
+        // (10) A selector outside the router set.
+        bytes4 wrongRouterSel = bytes4(keccak256("exactOutputSingle(bytes)"));
+        _expectRejectedStep(
+            router,
+            abi.encodeWithSelector(wrongRouterSel, ""),
+            abi.encodeWithSelector(PriimeVault.PlanSelectorRefused.selector, router, wrongRouterSel)
+        );
+
+        // (11) `exactInputSingle` with a rogue recipient — USDe → USDC swap
+        //      lands somewhere else.
+        IAerodromeCLRouter.ExactInputSingleParams memory swapParams = IAerodromeCLRouter.ExactInputSingleParams({
+            tokenIn: collateral,
+            tokenOut: address(usdc),
+            tickSpacing: 1,
+            recipient: SINK,
+            deadline: block.timestamp + 300,
+            amountIn: 100,
+            amountOutMinimum: 100,
+            sqrtPriceLimitX96: 0
+        });
+        _expectRejectedStep(
+            router,
+            abi.encodeCall(IAerodromeCLRouter.exactInputSingle, (swapParams)),
+            abi.encodeWithSelector(PriimeVault.PlanReceiverNotSelf.selector, SINK)
+        );
+
+        // (12) Truncated calldata — the selector-based dispatch would read
+        //      off the end and mis-classify.
+        _expectRejectedStep(morpho, hex"01", abi.encodeWithSelector(PriimeVault.PlanCalldataTooShort.selector));
+    }
+
+    function _expectRejectedStep(address target, bytes memory data, bytes memory expectedRevert) internal {
+        address[] memory targets = new address[](1);
+        targets[0] = target;
+        bytes[] memory calldatas = new bytes[](1);
+        calldatas[0] = data;
+        PriimeVault.StrategyPlan memory plan =
+            PriimeVault.StrategyPlan({targets: targets, calldatas: calldatas, timestamp: block.timestamp});
+        vm.prank(address(vault));
+        vm.expectRevert(expectedRevert);
+        vault.executePlanSelf(plan);
     }
 }

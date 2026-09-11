@@ -14,11 +14,13 @@ import { createLoop, LoopValidationError, type CreateLoopInput } from "./live-so
 /**
  * Strike cadence for the loop, seconds.
  *
- * Kept server-adjacent because the composer only exposes an auto-compound
- * cadence today (a rebalance interval, not a strike interval). When the
- * canvas grows a strike-cadence dial, this constant moves onto the draft.
+ * 60 is the floor loop-server enforces (`cronField` + `cronFromSeconds` in
+ * `packages/loop-deploy/src/config.ts`). The composer only exposes an
+ * auto-compound cadence today (a rebalance interval, not a strike
+ * interval); when the canvas grows a strike-cadence dial, this constant
+ * moves onto the draft.
  */
-const DEMO_CRON_SECONDS = 10;
+const DEFAULT_CRON_SECONDS = 60;
 
 export interface PublishInput {
   /** User-picked vault name from the Review card. */
@@ -51,7 +53,7 @@ export async function publishLoopToServer(input: PublishInput): Promise<PublishR
   const body: CreateLoopInput = {
     name: input.name,
     strategist: input.strategist,
-    cronSeconds: DEMO_CRON_SECONDS,
+    cronSeconds: DEFAULT_CRON_SECONDS,
     candidateId: input.candidateId,
     targetLeverage: input.targetLeverage,
     strategyParams: input.strategyParams ?? {},

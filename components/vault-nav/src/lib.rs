@@ -258,16 +258,28 @@ mod component {
             Some(s) => nav::RiskPreset::parse(&s)?,
             None => nav::RiskPreset::Standard,
         };
-        let hf_floor_bps: u16 = match cfg_opt("hf_floor_bps") {
+        let hf_floor_bps: u32 = match cfg_opt("hf_floor_bps") {
             Some(s) => s
+                .trim()
                 .parse()
                 .map_err(|e| format!("bad hf_floor_bps in config: {e}"))?,
             None => 0,
         };
-
-        nav::check_hf_floor(s.collateral_1e18, debt, hf_floor_bps, lltv)?;
-
+        // Preset-adjusted collateral valuation MUST be computed first: the
+        // hf_floor guard and the leverage/LTV observations all use the same
+        // price the attested NAV does, or a depeg silently misaligns the
+        // three surfaces (roadmap P00 #11).
         let price = nav::preset_collateral_price_1e24(twap_price, preset);
+
+        // hf_floor breach no longer aborts the strike: we attest with the
+        // BREACH_HF_FLOOR bit set (roadmap P00 #13) so the vault contract
+        // can stop taking new deposit / redeem requests instead of the
+        // whole cycle silently disappearing. `?` still bubbles a config
+        // error (hf_floor_bps below HF 1.0), which is not a runtime state.
+        let mut breach_flags: u16 = 0;
+        if nav::check_hf_floor(s.collateral_1e18, price, debt, hf_floor_bps, lltv)? {
+            breach_flags |= nav::BREACH_HF_FLOOR;
+        }
 
         let value = nav::nav_usdc(
             s.collateral_1e18,
@@ -277,6 +289,16 @@ mod component {
             s.total_pending_deposit,
             s.total_claimable_redeem,
         )?;
+        // Equity-level preset haircut (roadmap P00 #12). Applied to the
+        // attested NAV, sized in the same units it protects, so a 100 bps
+        // Conservative buffer is 100 bps regardless of the leverage on the
+        // collateral leg. Zero for Standard/Aggressive.
+        let haircut_bps = nav::preset_equity_haircut_bps(preset);
+        let value = if haircut_bps == 0 {
+            value
+        } else {
+            value * U256::from(10_000 - haircut_bps) / U256::from(10_000u16)
+        };
 
         // Per-strike observations. Each maps to a composer knob the strategist
         // set at publish; downstream verifiers compare configured vs measured
@@ -291,12 +313,15 @@ mod component {
         // Every value is deterministic from chain state at `inputs_block`, so
         // two operators running the same config produce identical bytes.
         let utilization_bps = nav::utilization_bps(s.total_borrow_assets, s.total_supply_assets);
-        let obs = nav::Observations {
-            leverage_bps: nav::measured_leverage_bps(s.collateral_1e18, debt),
-            ltv_bps: nav::measured_ltv_bps(s.collateral_1e18, debt),
+        let mut obs = nav::Observations {
+            leverage_bps: nav::measured_leverage_bps(s.collateral_1e18, price, debt),
+            ltv_bps: nav::measured_ltv_bps(s.collateral_1e18, price, debt),
             reserve_bps: nav::measured_reserve_bps(s.vault_usdc_balance, value),
             supply_apy_bps: nav::measured_supply_apy_bps(s.borrow_rate_wad, utilization_bps),
             hours_since_update: nav::hours_between(s.market_last_update, s.block_timestamp),
+            /* Rewritten below once every check has run so callers see one
+            finalised bag, not a partially-filled snapshot. */
+            breach_flags: 0,
         };
 
         // Read the strategist's per-knob invariants and fail the cycle when
@@ -315,7 +340,9 @@ mod component {
                 .trim()
                 .parse()
                 .map_err(|e| format!("bad hf_deleverage_bps in config: {e}"))?;
-            nav::check_deleverage_threshold(obs.ltv_bps, deleverage_bps, debt)?;
+            if nav::check_deleverage_threshold(obs.ltv_bps, deleverage_bps, debt, lltv)? {
+                breach_flags |= nav::BREACH_DELEVERAGE;
+            }
         }
         if let Some(raw) = cfg_opt("reserve_fraction") {
             let floor_bps = nav::parse_decimal_bps(&raw)?;
@@ -331,14 +358,23 @@ mod component {
             nav::check_compound_cadence(obs.hours_since_update, cadence_hours, 6)?;
         }
 
+        // Fold every guard's verdict into the observations bag so the vault
+        // contract can decode `breachFlags != 0` and stop taking new
+        // deposit / redeem requests (roadmap P00 #13). Non-fatal: the strike
+        // still attests, downstream verifiers still see every reading.
+        obs.breach_flags = breach_flags;
+
         // Compose the on-chain action plan the vault will dispatch after
-        // NAV settlement. The recursive USDe/USDC loop only ships an
-        // OpenPosition step today: swap idle USDC into USDe via the pinned
-        // Aerodrome pool, supply as Morpho collateral, and borrow the exact
-        // amount that lands the position at `applied_leverage`. Everything
-        // else (deleverage, compound, unwind) is a NoOp for now — the vault
-        // sits at target and NAV keeps attesting.
-        let plan = build_action_plan(&s, debt, value, twap_price)?;
+        // NAV settlement. On breach we force an empty plan: the position
+        // has drifted past what the strategist configured, and continuing
+        // to lever up (or emit any other loop action) against a live guard
+        // would be a lie of omission. Plan-deleverage lands in P1 #4 and
+        // will replace the empty plan with an unwind step.
+        let plan = if breach_flags != 0 {
+            nav::PlanBuild::empty(s.block_timestamp)
+        } else {
+            build_action_plan(&s, debt, value, twap_price, price)?
+        };
 
         Ok(nav::encode_payload(
             vault,
@@ -359,6 +395,7 @@ mod component {
         debt: U256,
         nav_value: U256,
         twap_price_1e24: U256,
+        priced_collateral_1e24: U256,
     ) -> Result<nav::PlanBuild, String> {
         let vault = cfg_address("vault_address")?;
         let usdc = cfg_address("usdc_address")?;
@@ -366,8 +403,7 @@ mod component {
         let morpho = cfg_address("morpho_address")?;
 
         // Swap route: composer publishes address + tick spacing. Missing
-        // either -> no plan (the vault has no way to swap). This is not a
-        // cycle-fail: the strike still attests NAV; the action stays empty.
+        // either -> no plan (the vault has no way to swap).
         let swap_router = match cfg_opt("swap_router") {
             Some(v) => match v.trim().parse::<alloy_primitives::Address>() {
                 Ok(a) => a,
@@ -383,6 +419,161 @@ mod component {
             None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
         };
 
+        // Redemption shortfall: how much USDC the plan must free so the
+        // vault sits at or above the escrow floor after `_fulfillRedeems`
+        // carves this strike's redemption claims out of `nav`. Mirrors the
+        // vault's own bootstrap-price math so the two sides can't drift.
+        let redeem_assets_out = if s.share_supply == 0 || s.total_pending_redeem_shares == 0 {
+            U256::ZERO
+        } else {
+            // Fresh deposits are folded into NAV BEFORE redeems fulfill on
+            // chain, so the effective NAV redeems price against is
+            // `attested_nav + total_pending_deposit`. Using the pre-strike
+            // share supply here overestimates by the deposit-minted shares —
+            // conservative (frees a little more USDC than strictly needed),
+            // so a small over-cushion is fine.
+            let effective_nav = nav_value + U256::from(s.total_pending_deposit);
+            U256::from(s.total_pending_redeem_shares) * effective_nav / U256::from(s.share_supply)
+        };
+        let post_strike_claimable = U256::from(s.total_claimable_redeem) + redeem_assets_out;
+        let vault_balance = U256::from(s.vault_usdc_balance);
+        let shortfall = if post_strike_claimable > vault_balance {
+            post_strike_claimable - vault_balance
+        } else {
+            U256::ZERO
+        };
+
+        // Delever branch (roadmap P1 #4): shortfall > 0 means the strike
+        // will breach the escrow floor unless the plan frees enough USDC.
+        // Emit `plan_deleverage` — a single Morpho flashLoan step whose
+        // callback repays + withdraws + swaps atomically. See
+        // `contracts/src/PriimeVault.sol::onMorphoFlashLoan`.
+        if !shortfall.is_zero() && !debt.is_zero() {
+            let priced_collateral =
+                nav::priced_collateral_usdc(s.collateral_1e18, priced_collateral_1e24);
+            let equity = if priced_collateral > debt {
+                priced_collateral - debt
+            } else {
+                // Debt already exceeds priced collateral: floor check should
+                // have flagged this. Empty plan attests and lets the guard
+                // surface it.
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            };
+            if equity.is_zero() {
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            }
+            /* Cushion scales with leverage. Swap slippage tolerated by
+            `swap_min_usdc_out` is 50 bps of the GROSS collateral leg
+            (`collateral_out_usde × price`), and that leg equals
+            `proportion × priced_collateral ≈ target_free × L`. A flat
+            1% cushion undershoots at L > ~2 (Khaled review, roadmap
+            follow-up). Formula: 100 bps floor + 60 bps per unit of
+            leverage. Landings: L=2.5 -> 250 bps, L=5 -> 400 bps,
+            L=10 -> 700 bps. Bounded to u32 in leverage_bps ceiling. */
+            let leverage_bps_u256 = priced_collateral * U256::from(10_000u16) / equity;
+            let leverage_bps = u32::try_from(leverage_bps_u256).unwrap_or(u32::MAX);
+            let cushion_bps = U256::from(100u64 + 60u64 * u64::from(leverage_bps) / 10_000u64);
+            let target_free_usdc = shortfall + shortfall * cushion_bps / U256::from(10_000u16);
+            let one_wad = U256::from(1_000_000_000_000_000_000u64);
+            // proportion_wad = min(target_free / equity, 1.0).
+            let proportion_wad = (target_free_usdc * one_wad / equity).min(one_wad);
+            let collateral_out_usde = U256::from(s.collateral_1e18) * proportion_wad / one_wad;
+            /* SHARES, not assets, on the repay leg. Morpho computes the
+            exact assets pulled from `shares × total_borrow_assets /
+            total_borrow_shares` at execution time, so interest that
+            accrued between our inputs_block estimate and the vault's
+            execution block is captured cleanly. Full unwind
+            (proportion_wad = 1e18) sends the vault's entire
+            `borrow_shares`, which zeroes debt exactly and lets
+            `withdrawCollateral(full)` pass Morpho's LLTV check.
+            Flashloan principal (`debt_repay_usdc`) covers the
+            stale-estimate repay amount + a 20 bps cushion for accrual
+            so `morpho.repay`'s allowance pull cannot underflow. */
+            let shares_to_repay = U256::from(s.borrow_shares) * proportion_wad / one_wad;
+            let debt_repay_usdc = debt * proportion_wad / one_wad
+                + debt * proportion_wad / one_wad / U256::from(5_000u16); // + 20 bps
+                                                                          // 50 bps against TWAP — same convention plan_open_position uses.
+            let min_usdc_out = nav::swap_min_usdc_out(collateral_out_usde, twap_price_1e24, 50);
+            let _ = (vault, usde, tick_spacing, swap_router); // reserved for future lever-up branch parity
+            return Ok(nav::plan_deleverage(
+                usdc,
+                morpho,
+                debt_repay_usdc,
+                shares_to_repay,
+                collateral_out_usde,
+                min_usdc_out,
+                s.block_timestamp + 300,
+            ));
+        }
+
+        // Zero-debt redeem-from-collateral branch (Khaled review, roadmap
+        // follow-up): the delever branch above requires `!debt.is_zero()`
+        // because Morpho `flashLoan` has no debt to help repay when the
+        // vault is unlevered. Falling through to `plan_open_position`
+        // below would be worse: it would spend the last idle USDC into
+        // MORE collateral when `applied_leverage > 1x`, ratcheting the
+        // stall deeper. Empty-plan fall-through (when `applied_leverage
+        // <= 1x`) stalls redemptions across strikes and `emergencyExecute`
+        // cannot fire because the rollback keeps the floor at zero.
+        //
+        // Instead: `plan_redeem_collateral` — spot unwind, no flashloan.
+        // Withdraw the freed USDe out of Morpho, approve the router,
+        // swap to USDC. Sized so `min_usdc_out >= shortfall * 1.01` after
+        // the router's 50 bps slippage floor.
+        if !shortfall.is_zero() && debt.is_zero() && !U256::from(s.collateral_1e18).is_zero() {
+            if twap_price_1e24.is_zero() {
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            }
+            // target_free_usdc = shortfall * (1 + cushion). 100 bps flat -
+            // no leverage to amplify slippage, so the tight cushion suffices.
+            let cushion_bps = U256::from(100u16);
+            let target_free_usdc = shortfall + shortfall * cushion_bps / U256::from(10_000u16);
+            // Reverse `swap_min_usdc_out(usde, twap, slippage_bps)`:
+            //   min_out = usde * twap / 1e36 * (10_000 - slippage) / 10_000.
+            // Solve for usde so min_out >= target_free_usdc. Same 50 bps
+            // convention `plan_open_position` uses.
+            let swap_slippage_bps = 50u32;
+            let scale = U256::from(10u8).pow(U256::from(36u8));
+            let keep_bps = U256::from(10_000u32 - swap_slippage_bps);
+            let usde_needed =
+                target_free_usdc * scale * U256::from(10_000u16) / (twap_price_1e24 * keep_bps);
+            // Cap at the actual collateral balance. If the cap bites, the
+            // swap will deliver less than the shortfall and the on-chain
+            // floor check will revert — same failure mode as an
+            // over-redemption against an insufficient position, cleanly
+            // surfaced instead of silently stalling.
+            let usde_out = usde_needed.min(U256::from(s.collateral_1e18));
+            if usde_out.is_zero() {
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            }
+            let min_usdc_out = nav::swap_min_usdc_out(usde_out, twap_price_1e24, swap_slippage_bps);
+            let market_params_tuple: (
+                alloy_primitives::Address,
+                alloy_primitives::Address,
+                alloy_primitives::Address,
+                alloy_primitives::Address,
+                U256,
+            ) = (
+                usdc,
+                usde,
+                cfg_address("oracle_address")?,
+                cfg_address("irm_address")?,
+                cfg("lltv")?.parse().map_err(|e| format!("bad lltv: {e}"))?,
+            );
+            return Ok(nav::plan_redeem_collateral(
+                vault,
+                usdc,
+                usde,
+                morpho,
+                swap_router,
+                tick_spacing,
+                market_params_tuple,
+                usde_out,
+                min_usdc_out,
+                s.block_timestamp + 300,
+            ));
+        }
+
         let configured_leverage_bps = match cfg_opt("applied_leverage") {
             Some(v) => nav::parse_decimal_bps(&v)?,
             None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
@@ -395,7 +586,8 @@ mod component {
         // within 15% of target. Rebalancing (increase/deleverage) is a
         // follow-up plan shape we can add without changing the payload.
         if !debt.is_zero() {
-            let measured = nav::measured_leverage_bps(s.collateral_1e18, debt);
+            let measured =
+                nav::measured_leverage_bps(s.collateral_1e18, priced_collateral_1e24, debt);
             let lo = configured_leverage_bps.saturating_sub(configured_leverage_bps / 7);
             let hi = configured_leverage_bps.saturating_add(configured_leverage_bps / 7);
             if measured >= lo && measured <= hi {

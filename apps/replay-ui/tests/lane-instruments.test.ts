@@ -97,9 +97,13 @@ describe("publishedModelRecord votes only the lanes a quantity is a fact about",
     // The compounder is the loop lane's, the one lane that seats it.
     expect(rec.compoundCadenceHours).toBe(24);
     expect(rec.thresholdUsd).toBe(155);
-    // The exit is the floor lane's, the one lane that seats it.
-    expect(rec.exitRouteId).toBe("instant-usdc");
-    expect(rec.exitSettlementDays).toBe(0);
+    /* Roadmap P2 #6: hero-shape records (any loop lane present) publish
+       null exit, because `redemption-route` seats only on the treasury
+       family and lifting the treasury lane's exit onto the deployed
+       loop-vault record used to ship `exit_route_id=instant-usdc` and
+       break the WASM component's refuse guard on the first cycle. */
+    expect(rec.exitRouteId).toBeNull();
+    expect(rec.exitSettlementDays).toBeNull();
     // Both lanes settle on Base, so the chain is still agreed by all.
     expect(rec.chainId).toBe(8453);
   });

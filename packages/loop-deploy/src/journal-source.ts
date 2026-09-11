@@ -26,7 +26,7 @@ import { buildJournal, type JournalBuildInput } from "./journal.ts";
 /** Minimal handler ABI: NavUpdated, PlanExecuted, PlanRejected + the two
  *  vault functions the reader decodes calldata for. */
 const HANDLER_ABI = parseAbi([
-  "event NavUpdated(bytes20 indexed eventId, uint256 nav, uint256 inputsBlock, uint256 updateCount, bytes32 configHash, uint32 leverageBps, uint32 ltvBps, uint32 reserveBps, uint32 supplyApyBps, uint32 hoursSinceUpdate)",
+  "event NavUpdated(bytes20 indexed eventId, uint256 nav, uint256 inputsBlock, uint256 updateCount, bytes32 configHash, uint32 leverageBps, uint32 ltvBps, uint32 reserveBps, uint32 supplyApyBps, uint32 hoursSinceUpdate, uint16 breachFlags)",
   "event PlanExecuted(bytes32 indexed planHash, uint256 stepCount)",
   "event PlanRejected(bytes32 indexed planHash, bytes reason)",
   "function handleSignedEnvelope((bytes20 eventId, bytes12 ordering, bytes payload) envelope, (address[] signers, bytes[] signatures, uint32 referenceBlock) signatureData) external",
@@ -74,6 +74,14 @@ export interface Observations {
   reserveBps: number;
   supplyApyBps: number;
   hoursSinceUpdate: number;
+  /**
+   * Bit set OR-composed from `BREACH_HF_FLOOR` (1 << 0) and
+   * `BREACH_DELEVERAGE` (1 << 1) in the vault-nav component. Non-zero
+   * means at least one strategist-configured guard fired on this strike
+   * and the vault contract refuses new deposit / redeem requests until a
+   * subsequent clean strike clears the flag.
+   */
+  breachFlags: number;
 }
 /**
  * One step in the quorum-signed StrategyPlan, labelled for display. `label`
@@ -143,6 +151,7 @@ const PAYLOAD_TUPLE = [
       { type: "uint32", name: "reserveBps" },
       { type: "uint32", name: "supplyApyBps" },
       { type: "uint32", name: "hoursSinceUpdate" },
+      { type: "uint16", name: "breachFlags" },
       {
         type: "tuple",
         name: "plan",
@@ -256,6 +265,7 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           reserveBps,
           supplyApyBps,
           hoursSinceUpdate,
+          breachFlags,
         } = result;
         if (payloadHandler.toLowerCase() !== vault) continue;
         if (payloadInputsBlock !== args.inputsBlock) {
@@ -297,6 +307,7 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           reserveBps,
           supplyApyBps,
           hoursSinceUpdate,
+          breachFlags,
         };
 
         const plan = buildAttestedPlan({

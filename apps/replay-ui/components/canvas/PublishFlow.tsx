@@ -64,6 +64,7 @@ import type { PublishInput } from "@/lib/vaults/store";
    re-exports loop-server's own validation error; `live-id` owns where a
    deployed loop is read. This file spells neither the route nor the path. */
 import { LoopValidationError, publishLoopToServer } from "@/lib/vaults/publish-loop";
+import { friendlyErrorMessage } from "@/lib/errors";
 import { liveLoopHref } from "@/lib/vaults/live-id";
 import { fmtCapacityUsd } from "@/lib/canvas/capacity";
 // R5 grep: the published APY is the single most consequential number this
@@ -389,24 +390,39 @@ export default function PublishFlow({
           if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") return;
           sp[k] = String(v);
         };
-        // Composer's HF fields are HF-ratio-in-bps (10_000 = 1.0x HF); the
-        // vault-nav component reads `hf_floor_bps` as "bps below LLTV" and
-        // errors on any value >10_000. Convention drift; strip the HF
-        // triplet from the wire until the two sides are reconciled.
-        // Position invariants stay covered by `applied_leverage` below.
+        /* Both sides now agree that hf_*_bps is HF-ratio-in-bps (10_000 = HF 1.0):
+           the vault-nav component derives `allowed_ltv_bps = lltv_bps * 10_000 /
+           hf_ratio_bps` in `check_hf_floor` / `check_deleverage_threshold`
+           (components/vault-nav/src/nav.rs). Values below 10_000 sit at or past
+           liquidation and the component refuses them. */
+        emit("hf_target_bps", draft.hfTargetBps);
+        emit("hf_deleverage_bps", draft.hfDeleverageBps);
+        emit("hf_floor_bps", draft.hfFloorBps);
+        /* The vault-nav component reads this to pick collateral valuation
+           (see `preset_collateral_price_1e24` in components/vault-nav/src/nav.rs)
+           AND to feed `config_hash`, so two loops on the same market with
+           different presets attest divergent NAVs. Machine-facing only. */
+        emit("risk_preset", draft.riskPreset);
         emit("applied_leverage", draft.appliedLeverage);
         emit("compound_cadence_hours", draft.compoundCadenceHours);
         emit("compound_threshold_usd", draft.thresholdUsd);
-        emit("hedge_leverage", draft.hedgeLeverage);
         emit("reserve_fraction", draft.reserveFraction);
-        emit("delta_band_pct", draft.deltaBandPct);
-        emit("margin_trim_pct", draft.marginTrimPct);
-        emit("margin_restore_pct", draft.marginRestorePct);
-        emit("funding_floor_apr", draft.fundingFloorApr);
         emit("collateral_yield_apy", draft.collateralYieldApy);
-        emit("exit_route_id", draft.exitRouteId);
-        emit("exit_settlement_days", draft.exitSettlementDays);
-        emit("hl_coin", draft.hlCoin);
+        /* REFUSE LIST — the eight knobs `components/vault-nav/src/lib.rs`'s
+           `refuse_unimplemented` errors on when present. Stripped at the wire
+           so a hero composition (loop + treasury floor lane) does not ship
+           `exit_route_id=instant-usdc` and die on its first cycle (roadmap
+           P2 #6). Loop-server also rejects them at validation for belt +
+           suspenders. Add the emit back the same commit a component honors
+           the knob. */
+        // emit("hedge_leverage", draft.hedgeLeverage);
+        // emit("delta_band_pct", draft.deltaBandPct);
+        // emit("margin_trim_pct", draft.marginTrimPct);
+        // emit("margin_restore_pct", draft.marginRestorePct);
+        // emit("funding_floor_apr", draft.fundingFloorApr);
+        // emit("hl_coin", draft.hlCoin);
+        // emit("exit_route_id", draft.exitRouteId);
+        // emit("exit_settlement_days", draft.exitSettlementDays);
         emit("capacity_binding", draft.capacityBinding);
         const { loopId, handler } = await publishLoopToServer({
           name: finalName,
@@ -433,7 +449,7 @@ export default function PublishFlow({
           setFailure({ message: "loop-server rejected this composition.", issues: err.issues });
         } else {
           setFailure({
-            message: err instanceof Error ? err.message : String(err),
+            message: friendlyErrorMessage(err),
             issues: [],
           });
         }

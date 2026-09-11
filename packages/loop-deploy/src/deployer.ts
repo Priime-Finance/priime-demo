@@ -120,7 +120,23 @@ export class LoopDeployer {
   private async runPipeline(id: string): Promise<LoopRecord> {
     try {
       let record = this.requireLoop(id);
-      const config: LoopConfig = validateLoopConfig(JSON.parse(record.configJson));
+      /* Legacy configJson written before the router+tickSpacing became first-
+         class fields on LoopConfig (roadmap P00 #9). Backfill from the catalog
+         so `validateLoopConfig` stays strict for new configs while old records
+         still resume cleanly. The catalog is the source of truth for both
+         values either way (see `resolveLoopConfig`). */
+      const raw = JSON.parse(record.configJson) as Record<string, unknown>;
+      if (raw !== null && typeof raw === "object") {
+        if (raw.swapRouter === undefined || raw.poolTickSpacing === undefined) {
+          const cid = typeof raw.candidateId === "string" ? raw.candidateId : "";
+          const market = lookupMarket(cid);
+          if (market !== null) {
+            if (raw.swapRouter === undefined) raw.swapRouter = market.swapRouter;
+            if (raw.poolTickSpacing === undefined) raw.poolTickSpacing = market.poolTickSpacing;
+          }
+        }
+      }
+      const config: LoopConfig = validateLoopConfig(raw);
 
       if (record.handlerAddress === null) {
         const market = lookupMarket(config.candidateId);

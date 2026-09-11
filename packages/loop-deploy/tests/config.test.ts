@@ -48,7 +48,19 @@ describe("validateLoopConfig", () => {
   it("rejects non-whole-minute cadences at 60s or more", () => {
     const input = validLoopInput();
     input.cronSeconds = 90;
-    expect(() => validateLoopConfig(input)).toThrow(/multiple of 60/);
+    expect(() => validateLoopConfig(input)).toThrow(/whole minute/);
+  });
+
+  it("rejects sub-60s cadences (roadmap P0 #2)", () => {
+    /* User-published loops run on the operator quorum; anything faster than
+       60 seconds hammers Base RPC and gives MEV bots more of a window than
+       the operators have to sign. Seed vaults bypass this via the shell
+       script, which is the operator's own knob. */
+    for (const bad of [5, 10, 30, 59]) {
+      const input = validLoopInput();
+      input.cronSeconds = bad;
+      expect(() => validateLoopConfig(input)).toThrow(/cronSeconds/);
+    }
   });
 
   it("rejects lltv of zero and above 1e18", () => {
@@ -75,7 +87,12 @@ describe("resolveLoopConfig", () => {
     expect(cfg.marketId).toBe("0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354");
     expect(cfg.usdeAddress).toBe("0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34");
     expect(cfg.targetLeverage).toBe(5);
-    expect(cfg.cronSeconds).toBe(30);
+    expect(cfg.cronSeconds).toBe(60);
+    /* Regression pin: resolveLoopConfig must source the router and tick
+       spacing from the catalog, not the user input, so a composer-published
+       loop can actually compose swap calldata every strike. */
+    expect(cfg.swapRouter).toBe("0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5");
+    expect(cfg.poolTickSpacing).toBe(1);
   });
 
   it("rejects an unknown candidate id with a catalog-shaped error", () => {
@@ -109,6 +126,47 @@ describe("resolveLoopConfig", () => {
     }
   });
 
+  it("rejects strategyParams keys the vault-nav component refuses (roadmap P2 #6)", () => {
+    /* One test per refused key. Each landing in the composer's wire used
+       to deploy a workflow that died on its first cycle with
+       `redemption venue routing not implemented` (and the seven siblings);
+       loop-server now rejects at validation so no bad config ever reaches
+       the operator quorum. */
+    const refused: Record<string, string> = {
+      hedge_leverage: "2",
+      delta_band_pct: "0.5",
+      margin_trim_pct: "0.1",
+      margin_restore_pct: "0.15",
+      funding_floor_apr: "0.02",
+      hl_coin: "ETH",
+      exit_route_id: "instant-usdc",
+      exit_settlement_days: "5",
+    };
+    for (const [key, value] of Object.entries(refused)) {
+      const input = validLoopResolveInput();
+      input.strategyParams = { [key]: value };
+      try {
+        resolveLoopConfig(input);
+        expect.unreachable(`must reject ${key}`);
+      } catch (err) {
+        if (!(err instanceof ValidationError)) throw err;
+        expect(err.issues.some((i) => i.includes(key) && i.includes("refused"))).toBe(true);
+      }
+    }
+  });
+
+  it("still accepts the refused key when its value is meaningless (empty/zero)", () => {
+    /* The composer strips these but a paranoid CLI author might still send
+       `hl_coin: ""` or `exit_settlement_days: "0"`; treat these as unset
+       and pass through, matching the component's `is_meaningfully_set`
+       predicate so the two sides refuse the same input. */
+    for (const empty of ["", "0", "0.0", "0.00"]) {
+      const input = validLoopResolveInput();
+      input.strategyParams = { exit_route_id: empty, hl_coin: empty };
+      expect(() => resolveLoopConfig(input)).not.toThrow();
+    }
+  });
+
   it("rejects an out-of-range target leverage", () => {
     for (const bad of [0, 0.5, 11, Number.NaN, Number.POSITIVE_INFINITY]) {
       const input = validLoopResolveInput();
@@ -124,18 +182,20 @@ describe("resolveLoopConfig", () => {
 });
 
 describe("cronFromSeconds", () => {
-  it("uses the seconds field below one minute", () => {
-    expect(cronFromSeconds(10)).toBe("*/10 * * * * *");
-    expect(cronFromSeconds(59)).toBe("*/59 * * * * *");
-  });
-
   it("uses the minutes field for whole minutes", () => {
     expect(cronFromSeconds(60)).toBe("0 */1 * * * *");
+    expect(cronFromSeconds(120)).toBe("0 */2 * * * *");
     expect(cronFromSeconds(600)).toBe("0 */10 * * * *");
   });
 
   it("uses the hour form at 3600", () => {
     expect(cronFromSeconds(3600)).toBe("0 0 * * * *");
+  });
+
+  it("rejects sub-minute cadences (roadmap P0 #2)", () => {
+    expect(() => cronFromSeconds(10)).toThrow(ValidationError);
+    expect(() => cronFromSeconds(30)).toThrow(ValidationError);
+    expect(() => cronFromSeconds(59)).toThrow(ValidationError);
   });
 
   it("rejects out-of-range and ragged cadences", () => {
@@ -162,6 +222,8 @@ describe("componentConfigFor", () => {
       "morpho_address",
       "oracle_address",
       "pool_address",
+      "pool_tick_spacing",
+      "swap_router",
       "twap_window_secs",
       "usdc_address",
       "usde_address",
@@ -170,5 +232,9 @@ describe("componentConfigFor", () => {
     expect(out.vault_address).toBe("0xdddddddddddddddddddddddddddddddddddddddd");
     expect(out.twap_window_secs).toBe("1800");
     expect(out.inputs_block_lag).toBe("2");
+    // Composer-published loops die on missing router/tickSpacing (vault-nav
+    // returns PlanBuild::empty on either read failing); pin both.
+    expect(out.swap_router).toBe("0xbe6d8f0d05cc4be24d5167a3ef062215be6d18a5");
+    expect(out.pool_tick_spacing).toBe("1");
   });
 });

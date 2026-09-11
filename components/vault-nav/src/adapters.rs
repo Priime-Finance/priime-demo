@@ -53,6 +53,8 @@ sol! {
     function balanceOf(address account) external view returns (uint256);
     function totalPendingDepositAssets() external view returns (uint256);
     function totalClaimableRedeemAssets() external view returns (uint256);
+    function totalPendingRedeemShares() external view returns (uint256);
+    function totalSupply() external view returns (uint256);
 }
 
 /// Everything the NAV computation needs, read at one block.
@@ -82,6 +84,14 @@ pub struct ChainState {
     pub vault_usdc_balance: u128,
     pub total_pending_deposit: u128,
     pub total_claimable_redeem: u128,
+    /// Shares queued in `_redeemQueue` awaiting fulfillment at this strike.
+    /// Multiplied by `new_nav / share_supply` on-chain in `_fulfillRedeems`
+    /// to derive the USDC that lands in `totalClaimableRedeemAssets`; the
+    /// component mirrors that math to size a `plan_deleverage` unwind.
+    pub total_pending_redeem_shares: u128,
+    /// Outstanding share supply at `inputs_block`. Denominator for the
+    /// per-strike price used in the pending-redeem math above.
+    pub share_supply: u128,
 }
 
 /// Addresses and parameters from workflow config.
@@ -291,6 +301,15 @@ pub fn fetch_state(
         let claimable = totalClaimableRedeemAssetsCall::abi_decode_returns(&claim_raw)
             .map_err(|e| format!("decode totalClaimableRedeemAssets failed: {e}"))?;
 
+        let pending_shares_raw =
+            call(t.vault, totalPendingRedeemSharesCall {}.abi_encode()).await?;
+        let pending_shares = totalPendingRedeemSharesCall::abi_decode_returns(&pending_shares_raw)
+            .map_err(|e| format!("decode totalPendingRedeemShares failed: {e}"))?;
+
+        let supply_raw = call(t.vault, totalSupplyCall {}.abi_encode()).await?;
+        let supply = totalSupplyCall::abi_decode_returns(&supply_raw)
+            .map_err(|e| format!("decode totalSupply failed: {e}"))?;
+
         Ok(ChainState {
             inputs_block,
             block_timestamp,
@@ -310,6 +329,8 @@ pub fn fetch_state(
             vault_usdc_balance: u128_of(bal, "vault USDC balance")?,
             total_pending_deposit: u128_of(pending, "totalPendingDepositAssets")?,
             total_claimable_redeem: u128_of(claimable, "totalClaimableRedeemAssets")?,
+            total_pending_redeem_shares: u128_of(pending_shares, "totalPendingRedeemShares")?,
+            share_supply: u128_of(supply, "totalSupply")?,
         })
     })
 }

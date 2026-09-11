@@ -2441,6 +2441,11 @@ export default function RackCanvas({ templateId }: { templateId?: string } = {})
          Deploy state, not record state: the publish writes no record. */
       candidateId: deployLane?.p.candidateId ?? "",
       targetLeverage: deployLane?.p.targetLeverage ?? 0,
+      /* MACHINE-FACING METADATA, from the same lane the candidateId comes
+         from, so a two-preset publish onto one market attests two different
+         `config_hash`es on the operator side (see the field's doc in
+         `PublishInput`). Multi-lane / no-deploy-lane -> null. */
+      riskPreset: deployLane?.p.riskPreset ?? null,
       undeployedLanes,
       /* ── THE TWO-LANE RECORD (router lane plan R5, seam 1) ─────────────
          The router instrument on the vault page reads the lanes and the

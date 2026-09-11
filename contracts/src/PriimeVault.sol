@@ -7,7 +7,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IWavsServiceHandler} from "./interfaces/wavs/IWavsServiceHandler.sol";
 import {IWavsServiceManager} from "./interfaces/wavs/IWavsServiceManager.sol";
-import {IMorphoBlue} from "./interfaces/external/IMorphoBlue.sol";
+import {IMorphoBlue, IMorphoFlashLoanCallback} from "./interfaces/external/IMorphoBlue.sol";
+import {IAerodromeCLRouter} from "./interfaces/external/IAerodromeCLRouter.sol";
 
 /// @title PriimeVault
 /// @notice ERC-7540 fully asynchronous vault (async deposits AND async
@@ -69,7 +70,7 @@ import {IMorphoBlue} from "./interfaces/external/IMorphoBlue.sol";
 ///      revert. Partial claims use floor division, and the claim that empties
 ///      either side of a bucket settles the whole bucket, so rounding dust
 ///      goes to the final claimer rather than stranding in the vault.
-contract PriimeVault is ERC4626, IWavsServiceHandler {
+contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
     using SafeERC20 for IERC20;
 
     /// @notice Fungible request model: every request is requestId 0.
@@ -144,6 +145,17 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     /// @notice USDC reserved for claimable redemptions; NOT part of NAV.
     uint256 public totalClaimableRedeemAssets;
 
+    /// @notice Non-zero when the last accepted NAV strike raised at least
+    ///         one strategist-configured guard (LTV above the hf_floor, or
+    ///         drift past the deleverage trigger). While set, the vault
+    ///         refuses new `requestDeposit` / `requestRedeem`; existing
+    ///         claims fulfill normally. Cleared automatically the next
+    ///         strike whose payload attests clean flags. Bit layout:
+    ///           bit 0 = hf_floor breached
+    ///           bit 1 = deleverage trigger crossed
+    ///         Mirrors `components/vault-nav/src/nav.rs::BREACH_*`.
+    uint16 public breachFlags;
+
     // ERC-7540 events.
     event DepositRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address sender, uint256 assets
@@ -181,7 +193,8 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         uint32 ltvBps,
         uint32 reserveBps,
         uint32 supplyApyBps,
-        uint32 hoursSinceUpdate
+        uint32 hoursSinceUpdate,
+        uint16 breachFlags
     );
     event DepositRequestFulfilled(address indexed controller, uint256 assets, uint256 shares);
     event RedeemRequestFulfilled(address indexed controller, uint256 shares, uint256 assets);
@@ -210,6 +223,12 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     error NotStrategist();
     error SelfCallForbidden();
     error EscrowFloorBreached(uint256 balance, uint256 floor);
+    /// @notice `emergencyExecute` was called while the vault is at or above
+    ///         its escrow floor. The manual-recovery path is intentionally
+    ///         only unlocked while the vault is stuck; once the floor is
+    ///         restored, ordinary `execute` handles subsequent moves and
+    ///         re-enforces the invariant.
+    error VaultNotStuck(uint256 balance, uint256 floor);
     error ZeroAmount();
     error HandlerMismatch(address handler);
     error AlreadyProcessed(bytes20 eventId);
@@ -219,6 +238,11 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     error NotControllerOrOperator();
     error ExceedsClaimable(uint256 requested, uint256 claimable);
     error QueueFull();
+    /// @notice `requestDeposit` / `requestRedeem` while the vault is under a
+    ///         breach flag. Existing claims are unaffected; only NEW
+    ///         requests are refused, until the next strike clears the flag.
+    error VaultBreached(uint16 flags);
+
     /// @notice Batch of on-chain steps the operator quorum computed for
     ///         THIS strike. `targets[i]` is called with `calldatas[i]` under
     ///         the vault's own escrow-floor guard, once the NAV attestation
@@ -242,8 +266,10 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         uint32 reserveBps;
         uint32 supplyApyBps;
         uint32 hoursSinceUpdate;
+        uint16 breachFlags;
         StrategyPlan plan;
     }
+
     ///         computing block for downstream verifiers.
     struct StrategyPlan {
         address[] targets;
@@ -253,8 +279,57 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
 
     error PlanArrayMismatch();
     error PlanTargetNotWhitelisted(address target);
+    /// @notice A plan step's calldata was shorter than a 4-byte selector.
+    error PlanCalldataTooShort();
+    /// @notice A plan step targeted a whitelisted contract but called a
+    ///         function outside the tight per-target selector set. The
+    ///         plan whitelist is `(target, selector)` pairs, not targets
+    ///         alone: raw `target.call(data)` would let a quorum-signed
+    ///         plan invoke arbitrary methods on the token / Morpho /
+    ///         router (e.g. `withdrawCollateral` with a rogue receiver,
+    ///         or `approve(rogue, max)`) and drain the collateral leg
+    ///         behind the escrow-floor check, which only reads USDC.
+    error PlanSelectorRefused(address target, bytes4 selector);
+    /// @notice A Morpho step's `onBehalf` argument was not this vault.
+    ///         Every position mutation the vault plans must be against
+    ///         its own market slot; a foreign `onBehalf` would move the
+    ///         vault's approval / balance into someone else's account.
+    error PlanOnBehalfNotSelf(address onBehalf);
+    /// @notice A step that pulls value out (`withdrawCollateral`, `borrow`,
+    ///         router `exactInputSingle`) named a receiver that is not
+    ///         this vault. Freed collateral / borrowed USDC / swap output
+    ///         must land on the vault itself; a rogue receiver is the
+    ///         direct drain path the target-only whitelist left open.
+    error PlanReceiverNotSelf(address receiver);
+    /// @notice An ERC-20 `approve` step named a spender outside the
+    ///         `{morpho, swapRouter}` pair the recursive loop needs.
+    ///         Any other spender would carry a persistent pull allowance
+    ///         out of the vault via `safeTransferFrom`.
+    error PlanApproveSpenderRefused(address spender);
+    /// @notice A `flashLoan` step named a token other than the vault's
+    ///         asset (USDC). The `onMorphoFlashLoan` callback is written
+    ///         to repay Morpho debt in USDC and swap USDe back to USDC;
+    ///         any other flashloan denomination would leave the callback
+    ///         approving / swapping the wrong balances.
+    error PlanFlashLoanTokenRefused(address token);
     error SelfCallOnly();
     error AsyncFlowOnly();
+    /// @notice `onMorphoFlashLoan` was invoked by a caller other than the
+    ///         pinned Morpho instance. Prevents any attacker from tricking
+    ///         the callback into repaying + withdrawing collateral outside a
+    ///         real flashLoan context.
+    error FlashLoanCallerNotMorpho(address caller);
+    /// @notice The USDe -> USDC swap inside `onMorphoFlashLoan` returned fewer
+    ///         USDC than the operator quorum's `minUsdcOut` floor. Bubbled up
+    ///         from the router with our own selector so `PlanRejected` decodes
+    ///         cleanly on the frontend.
+    error DeleverageSlippage(uint256 usdcOut, uint256 minUsdcOut);
+    /// @notice The strike's `plan_deleverage` step freed enough USDC to
+    ///         cover this strike's fresh redemption claims. `flashAssets`
+    ///         is the flashloan principal, `collateralOut` the USDe pulled
+    ///         from Morpho, `usdcOut` the swap output.
+    event Deleveraged(uint256 flashAssets, uint256 collateralOut, uint256 usdcOut);
+
     /// @dev Groups the recursive-loop strategy parameters into one calldata
     ///      struct so the constructor stays readable; every field lands as
     ///      an immutable on the contract.
@@ -281,8 +356,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         if (
             _strategy.collateralToken == address(0) || _strategy.morpho == address(0)
                 || _strategy.morphoOracle == address(0) || _strategy.morphoIrm == address(0)
-                || _strategy.morphoLltv == 0 || _strategy.swapRouter == address(0)
-                || _strategy.poolTickSpacing == 0
+                || _strategy.morphoLltv == 0 || _strategy.swapRouter == address(0) || _strategy.poolTickSpacing == 0
         ) revert ZeroStrategyConfigField();
         serviceManager = _serviceManager;
         strategist = _strategist;
@@ -299,24 +373,72 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      the strategy immutables so callers never restate them.
     function _marketParams() internal view returns (IMorphoBlue.MarketParams memory) {
         return IMorphoBlue.MarketParams({
-            loanToken: asset(),
-            collateralToken: collateralToken,
-            oracle: morphoOracle,
-            irm: morphoIrm,
-            lltv: morphoLltv
+            loanToken: asset(), collateralToken: collateralToken, oracle: morphoOracle, irm: morphoIrm, lltv: morphoLltv
         });
     }
 
-    /// @dev The set of contracts the operator quorum may call through a
-    ///      StrategyPlan. Kept narrow to the two protocols the recursive
-    ///      loop touches (Morpho Blue for supply/borrow/repay/withdraw, the
-    ///      swap router for USDC<->USDe) plus the two ERC-20s the vault
-    ///      needs to approve. `execute`'s `SelfCallForbidden` covers
-    ///      reentry into this vault; anything else outside the whitelist
-    ///      would let a compromised operator drain funds to a rogue target.
-    function _isPlanTarget(address target) internal view returns (bool) {
-        return target == asset() || target == collateralToken || target == address(morpho)
-            || target == swapRouter;
+    /// @dev Validate a single quorum-signed step. The plan whitelist is
+    ///      `(target, selector)` pairs, not targets: `target.call(data)`
+    ///      forwards the calldata raw, so a target-only check would let
+    ///      the operator quorum call `withdrawCollateral` with a rogue
+    ///      `receiver`, `approve(rogue, max)` on either token, or a
+    ///      Morpho method that moves the vault's position onto someone
+    ///      else's `onBehalf` slot — all invisible to the escrow floor
+    ///      guard, which only reads USDC. Reverts with a precise error
+    ///      so `PlanRejected` decodes cleanly on the frontend.
+    ///
+    ///      The allowed set is exactly the recursive-loop surface:
+    ///        - `morpho.{supplyCollateral, borrow, repay, withdrawCollateral, flashLoan}`
+    ///          with every address argument (`onBehalf`, `receiver`,
+    ///          flashloan `token`) pinned to `address(this)` / `asset()`.
+    ///        - `swapRouter.exactInputSingle` with `recipient == address(this)`.
+    ///        - `asset() / collateralToken` `.approve` only, and only to
+    ///          `morpho` or `swapRouter` — the two spenders the loop and
+    ///          the flashLoan callback need.
+    ///
+    ///      Follow-up (not landed): a tail USDe-balance guard would add
+    ///      belt-and-suspenders against unforeseen paths that spend
+    ///      collateral inside the plan; the plan builder would need to
+    ///      declare `collateralOut` to make it enforceable.
+    function _validatePlanStep(address target, bytes calldata data) internal view {
+        if (data.length < 4) revert PlanCalldataTooShort();
+        bytes4 sel = bytes4(data[0:4]);
+
+        if (target == address(morpho)) {
+            if (sel == IMorphoBlue.supplyCollateral.selector) {
+                (,, address onBehalf) = abi.decode(data[4:], (IMorphoBlue.MarketParams, uint256, address));
+                if (onBehalf != address(this)) revert PlanOnBehalfNotSelf(onBehalf);
+            } else if (sel == IMorphoBlue.borrow.selector) {
+                (,,, address onBehalf, address receiver) =
+                    abi.decode(data[4:], (IMorphoBlue.MarketParams, uint256, uint256, address, address));
+                if (onBehalf != address(this)) revert PlanOnBehalfNotSelf(onBehalf);
+                if (receiver != address(this)) revert PlanReceiverNotSelf(receiver);
+            } else if (sel == IMorphoBlue.repay.selector) {
+                (,,, address onBehalf) = abi.decode(data[4:], (IMorphoBlue.MarketParams, uint256, uint256, address));
+                if (onBehalf != address(this)) revert PlanOnBehalfNotSelf(onBehalf);
+            } else if (sel == IMorphoBlue.withdrawCollateral.selector) {
+                (,, address onBehalf, address receiver) =
+                    abi.decode(data[4:], (IMorphoBlue.MarketParams, uint256, address, address));
+                if (onBehalf != address(this)) revert PlanOnBehalfNotSelf(onBehalf);
+                if (receiver != address(this)) revert PlanReceiverNotSelf(receiver);
+            } else if (sel == IMorphoBlue.flashLoan.selector) {
+                (address token,,) = abi.decode(data[4:], (address, uint256, bytes));
+                if (token != asset()) revert PlanFlashLoanTokenRefused(token);
+            } else {
+                revert PlanSelectorRefused(target, sel);
+            }
+        } else if (target == swapRouter) {
+            if (sel != IAerodromeCLRouter.exactInputSingle.selector) revert PlanSelectorRefused(target, sel);
+            IAerodromeCLRouter.ExactInputSingleParams memory p =
+                abi.decode(data[4:], (IAerodromeCLRouter.ExactInputSingleParams));
+            if (p.recipient != address(this)) revert PlanReceiverNotSelf(p.recipient);
+        } else if (target == asset() || target == collateralToken) {
+            if (sel != IERC20.approve.selector) revert PlanSelectorRefused(target, sel);
+            (address spender,) = abi.decode(data[4:], (address, uint256));
+            if (spender != address(morpho) && spender != swapRouter) revert PlanApproveSpenderRefused(spender);
+        } else {
+            revert PlanTargetNotWhitelisted(target);
+        }
     }
 
     /// @notice Execute a quorum-signed StrategyPlan inside a self-call so
@@ -324,9 +446,17 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///         from `handleSignedEnvelope` (msg.sender == address(this)); the
     ///         try/catch wrapper there keeps NAV settlement independent of
     ///         plan success.
-    /// @dev Each step must target a whitelisted contract. Reverts bubble the
-    ///      failing step's raw revert data. At the tail, the vault must sit
-    ///      at or above its escrow floor, same guard `execute` enforces.
+    /// @dev Each step must pass `_validatePlanStep`: target inside the
+    ///      recursive-loop surface, selector inside the tight per-target
+    ///      set, every address argument pinned to `address(this)` or the
+    ///      configured spender. Reverts bubble the failing step's raw
+    ///      revert data. At the tail:
+    ///        1. `_fulfillRedeems()` books this strike's redemption claims —
+    ///           INSIDE the self-call so a plan revert rolls back the claim
+    ///           bookkeeping too, and the vault never sits with
+    ///           `totalClaimableRedeemAssets` raised against a balance the
+    ///           plan failed to free (Khaled review, roadmap follow-up).
+    ///        2. Escrow floor check, same guard `execute` enforces.
     /// @param plan The batch (targets, calldatas, timestamp) the quorum signed.
     /// @return planHash keccak256(abi.encode(plan)) — logged by the caller.
     function executePlanSelf(StrategyPlan calldata plan) external returns (bytes32 planHash) {
@@ -334,18 +464,105 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         if (plan.targets.length != plan.calldatas.length) revert PlanArrayMismatch();
         planHash = keccak256(abi.encode(plan.targets, plan.calldatas, plan.timestamp));
         for (uint256 i = 0; i < plan.targets.length; i++) {
-            address target = plan.targets[i];
-            if (!_isPlanTarget(target)) revert PlanTargetNotWhitelisted(target);
-            (bool success, bytes memory ret) = target.call(plan.calldatas[i]);
+            _validatePlanStep(plan.targets[i], plan.calldatas[i]);
+            (bool success, bytes memory ret) = plan.targets[i].call(plan.calldatas[i]);
             if (!success) {
                 assembly ("memory-safe") {
                     revert(add(ret, 0x20), mload(ret))
                 }
             }
         }
+        // Book redemption claims AFTER the plan brought USDC in. If the
+        // floor check below fails, `_fulfillRedeems` rolls back with the
+        // rest of this self-call and shares stay in `_pendingRedeemShares`
+        // for the next strike to try again.
+        _fulfillRedeems();
         uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
         uint256 balance = IERC20(asset()).balanceOf(address(this));
         if (balance < floor) revert EscrowFloorBreached(balance, floor);
+    }
+
+    // ------------------------------------------------------------------------
+    // Morpho flashLoan callback: atomic proportional delever
+    // ------------------------------------------------------------------------
+
+    /// @notice Morpho Blue's flashLoan callback: the vault's own atomic
+    ///         proportional-unwind primitive. The operator quorum's plan
+    ///         emits one step, `morpho.flashLoan(USDC, debtRepay, data)`;
+    ///         Morpho transfers `debtRepay` USDC to the vault, calls back
+    ///         here, and pulls the same `debtRepay` back at the end. Inside
+    ///         the callback we (1) repay `assets` of Morpho debt, (2) pull
+    ///         `collateralOut` USDe of freed collateral, (3) swap it back to
+    ///         USDC through the pinned Aerodrome pool, (4) re-approve the
+    ///         flashloan repayment. Net inflow to the vault is
+    ///         `usdcOut - assets` = `proportion * nav - slippage`, which is
+    ///         exactly what a proportional redemption needs to satisfy the
+    ///         escrow floor after `_fulfillRedeems`. Priime-pools's
+    ///         `RebalanceOpsLib.unwindPositions` does the same thing
+    ///         synchronously; we do it on the quorum-signed cadence.
+    /// @dev Not exposed for user calls. `msg.sender` must be the pinned
+    ///      Morpho instance (checked at entry); Morpho only invokes this
+    ///      inside its own `flashLoan`, so a caller other than Morpho
+    ///      cannot force the repay+withdraw sequence. Approvals are exact
+    ///      per step; the trailing `approve(morpho, assets)` grants Morpho
+    ///      permission to pull the flashloan back via `safeTransferFrom`.
+    /// @param assets The flashloan principal in USDC base units. Also the
+    ///        amount of Morpho debt this callback repays (they are the same
+    ///        by construction of `plan_deleverage`).
+    /// @param data ABI-encoded `(uint256 collateralOut, uint256 minUsdcOut,
+    ///        uint256 deadline)`. `collateralOut` is the USDe amount pulled
+    ///        from Morpho after the repay; `minUsdcOut` is the operator
+    ///        quorum's slippage floor on the USDe -> USDC swap; `deadline`
+    ///        gates the Aerodrome call the same way the open-position swap
+    ///        does.
+    function onMorphoFlashLoan(uint256 assets, bytes calldata data) external override {
+        if (msg.sender != address(morpho)) revert FlashLoanCallerNotMorpho(msg.sender);
+        (uint256 collateralOut, uint256 minUsdcOut, uint256 deadline, uint256 sharesToRepay) =
+            abi.decode(data, (uint256, uint256, uint256, uint256));
+
+        // 1. Repay Morpho debt by SHARES so accrued interest between the
+        //    component's inputs_block estimate and this call is captured
+        //    exactly (Khaled review). `assets = 0` tells Morpho to compute
+        //    the pull amount from `shares × total_borrow_assets /
+        //    total_borrow_shares` at the current rate. Full-unwind
+        //    (`sharesToRepay == vault's borrow_shares`) zeroes debt, so the
+        //    subsequent `withdrawCollateral(full)` passes the LLTV check.
+        //    Approval is `assets` (the flashloan principal we hold, which
+        //    is sized to cover the actual repay + 20 bps of accrual buffer),
+        //    so a small over-allowance stays inside the vault as surplus.
+        IERC20(asset()).forceApprove(address(morpho), assets);
+        morpho.repay(_marketParams(), 0, sharesToRepay, address(this), "");
+
+        // 2. Withdraw the freed collateral (USDe). Morpho enforces the new
+        //    HF against the post-repay debt, so this can never leave the
+        //    position undercollateralised.
+        morpho.withdrawCollateral(_marketParams(), collateralOut, address(this), address(this));
+
+        // 3. Swap USDe -> USDC through the pinned Aerodrome pool. `minUsdcOut`
+        //    is the operator quorum's slippage floor, computed off the same
+        //    TWAP the strike attests; the swap reverts if the pool has moved
+        //    outside that window between the operator's read and this call.
+        IERC20(collateralToken).forceApprove(swapRouter, collateralOut);
+        uint256 usdcOut = IAerodromeCLRouter(swapRouter)
+            .exactInputSingle(
+                IAerodromeCLRouter.ExactInputSingleParams({
+                    tokenIn: collateralToken,
+                    tokenOut: asset(),
+                    tickSpacing: poolTickSpacing,
+                    recipient: address(this),
+                    deadline: deadline,
+                    amountIn: collateralOut,
+                    amountOutMinimum: minUsdcOut,
+                    sqrtPriceLimitX96: 0
+                })
+            );
+        if (usdcOut < minUsdcOut) revert DeleverageSlippage(usdcOut, minUsdcOut);
+
+        // 4. Grant Morpho the allowance it needs to pull the flashloan back.
+        //    `safeTransferFrom` inside `flashLoan` consumes it exactly.
+        IERC20(asset()).forceApprove(address(morpho), assets);
+
+        emit Deleveraged(assets, collateralOut, usdcOut);
     }
 
     // ------------------------------------------------------------------------
@@ -394,6 +611,42 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         emit Executed(target, data);
     }
 
+    /// @notice Strategist-only recovery path that skips the escrow-floor
+    ///         check. Only unlocks when the vault is ALREADY stuck (balance
+    ///         < floor); once ordinary strategy actions restore the floor
+    ///         it refuses to run, so ordinary `execute` reasserts the
+    ///         invariant.
+    /// @dev Same shape as `execute` minus the post-call floor guard.
+    ///      Motivation: when a plan_deleverage revert leaves
+    ///      `totalClaimableRedeemAssets` raised against an idle balance
+    ///      that never materialised, the standard `execute` path refuses
+    ///      every intermediate step of a manual unwind (repay is
+    ///      floor-under-water, withdraw is floor-under-water). This path
+    ///      lets the strategist walk out of that state (repay, withdraw,
+    ///      swap, back to solvent) without every step reasserting a floor
+    ///      the sequence is trying to restore. The pre-check makes it
+    ///      strictly a recovery tool: at any point above floor it reverts.
+    ///      `msg.sender == strategist` + no self-call keeps the trust
+    ///      surface identical to `execute`.
+    function emergencyExecute(address target, bytes calldata data) external returns (bytes memory result) {
+        if (msg.sender != strategist) revert NotStrategist();
+        if (target == address(this)) revert SelfCallForbidden();
+
+        uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
+        uint256 balance = IERC20(asset()).balanceOf(address(this));
+        if (balance >= floor) revert VaultNotStuck(balance, floor);
+
+        bool success;
+        (success, result) = target.call(data);
+        if (!success) {
+            assembly ("memory-safe") {
+                revert(add(result, 0x20), mload(result))
+            }
+        }
+
+        emit Executed(target, data);
+    }
+
     // ------------------------------------------------------------------------
     // ERC-7540 request flow: deposits
     // ------------------------------------------------------------------------
@@ -404,6 +657,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      and the deposit queue holds `MAX_QUEUE_LENGTH` controllers.
     function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256) {
         if (assets == 0) revert ZeroAmount();
+        if (breachFlags != 0) revert VaultBreached(breachFlags);
         if (msg.sender != owner && !_operators[owner][msg.sender]) revert NotOwnerOrOperator();
 
         IERC20(asset()).safeTransferFrom(owner, address(this), assets);
@@ -441,6 +695,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
     ///      and the redeem queue holds `MAX_QUEUE_LENGTH` controllers.
     function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256) {
         if (shares == 0) revert ZeroAmount();
+        if (breachFlags != 0) revert VaultBreached(breachFlags);
         if (msg.sender != owner && !_operators[owner][msg.sender]) {
             _spendAllowance(owner, msg.sender, shares);
         }
@@ -727,9 +982,18 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
         lastInputsBlock = inputsBlock;
         updateCount += 1;
         lastConfigHash = configHash;
+        /* Mirror the operator quorum's breach verdict so `requestDeposit` /
+           `requestRedeem` refuse new capital while a strategist-configured
+           guard is live. Existing pending claims fulfill above regardless
+           because a breach is exactly when redeemers most need to exit. */
+        breachFlags = result.breachFlags;
 
         _fulfillDeposits();
-        _fulfillRedeems();
+        // NOTE: `_fulfillRedeems` now runs INSIDE `executePlanSelf` (Khaled
+        // review). If the plan can't free enough USDC to cover the fresh
+        // claims, the whole self-call reverts and the fulfilment rolls
+        // back with it, so `totalClaimableRedeemAssets` never sits raised
+        // against a balance the plan failed to lift.
 
         emit NavUpdated(
             envelope.eventId,
@@ -741,17 +1005,17 @@ contract PriimeVault is ERC4626, IWavsServiceHandler {
             result.ltvBps,
             result.reserveBps,
             result.supplyApyBps,
-            result.hoursSinceUpdate
+            result.hoursSinceUpdate,
+            result.breachFlags
         );
 
-        // Plan dispatch is best-effort: NAV settlement and fulfillments have
-        // already committed above. A step reverting on stale slippage or a
-        // market that moved out of the operator's snapshot window rolls back
-        // only the plan's own writes, not the NAV. `executePlanSelf` runs
-        // via an external self-call so its guard trips on any non-vault
-        // caller and its atomicity comes from Solidity try/catch.
-        bytes32 planHash =
-            keccak256(abi.encode(result.plan.targets, result.plan.calldatas, result.plan.timestamp));
+        /* Plan + redemption fulfilment run atomically inside `executePlanSelf`.
+           NAV settlement and DEPOSIT fulfilment above already committed; if
+           the plan or its downstream fulfilment reverts, only the plan's own
+           writes AND the redemption bookkeeping roll back. Shares stay in
+           `_pendingRedeemShares` for the next strike to try again. The
+           try/catch here keeps NAV settlement independent of plan success. */
+        bytes32 planHash = keccak256(abi.encode(result.plan.targets, result.plan.calldatas, result.plan.timestamp));
         try this.executePlanSelf(result.plan) {
             emit PlanExecuted(planHash, result.plan.targets.length);
         } catch (bytes memory reason) {

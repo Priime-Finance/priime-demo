@@ -47,6 +47,7 @@ import {
   parseAssetAmount,
   useDepositReading,
 } from "@/lib/vaults/deposit";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface DepositCardProps {
   handlerAddress: Address;
@@ -183,7 +184,8 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
 
   const overWallet = parsedAmount !== null && reading.walletAssets !== null && parsedAmount > reading.walletAssets;
   const inputInvalid = rawAmount !== "" && parsedAmount === null;
-  const disableInputActions = pendingWrite !== null || receipt.isLoading;
+  const isBreached = (reading.breachFlags ?? 0) !== 0;
+  const disableInputActions = pendingWrite !== null || receipt.isLoading || isBreached;
 
   // Shared for the panel body: the banner. Also handles the "the receipt
   // failed" case so a reverted tx does not appear as a permanent spinner.
@@ -195,7 +197,7 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
         if (receipt.isError) {
           return (
             <p className="vxd-dep-banner vxd-dep-banner--err">
-              Transaction failed: {receipt.error?.message ?? "unknown reason"}
+              Transaction failed: {friendlyErrorMessage(receipt.error)}
             </p>
           );
         }
@@ -333,14 +335,52 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
       ) : overWallet ? (
         <p className="vxd-dep-err">Amount exceeds your wallet balance.</p>
       ) : null}
-      <button
-        type="button"
-        className="vxd-dep-cta"
-        onClick={phase.needsApproval ? onApprove : onDeposit}
-        disabled={disableInputActions || parsedAmount === null || parsedAmount === 0n || overWallet}
-      >
-        {phase.needsApproval ? `Approve ${symbol}` : "Deposit"}
-      </button>
+      {isBreached ? (
+        <p className="vxd-dep-err">
+          Vault is under a strategist-configured breach (flags {reading.breachFlags}) — new
+          deposits are blocked until the next clean strike. Existing claims are unaffected.
+        </p>
+      ) : null}
+      {/*
+        Two-step flow surfaced as two buttons instead of one morphing label so
+        the user sees BOTH signatures coming (approve, then deposit) before
+        they start. Enablement follows `phase.needsApproval`: the button that
+        will actually fire lights up, the other greys. Same disable rules as
+        the single-button version so nothing lets the user tap through when
+        the input is invalid, the wallet is short, or the vault is breached.
+       */}
+      <div className="vxd-dep-cta-row">
+        <button
+          type="button"
+          className="vxd-dep-cta"
+          onClick={onApprove}
+          disabled={
+            disableInputActions
+            || !phase.needsApproval
+            || parsedAmount === null
+            || parsedAmount === 0n
+            || overWallet
+          }
+          title="Grant the vault permission to move USDC on your behalf (one-time per amount)."
+        >
+          1. Approve {symbol}
+        </button>
+        <button
+          type="button"
+          className="vxd-dep-cta"
+          onClick={onDeposit}
+          disabled={
+            disableInputActions
+            || phase.needsApproval
+            || parsedAmount === null
+            || parsedAmount === 0n
+            || overWallet
+          }
+          title="Escrow the approved USDC and queue a deposit request. Fulfilled on the next attested strike."
+        >
+          2. Deposit
+        </button>
+      </div>
     </div>
   );
 }

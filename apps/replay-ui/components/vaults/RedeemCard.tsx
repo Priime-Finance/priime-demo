@@ -26,6 +26,7 @@ import {
   useDepositReading,
   VAULT_ABI,
 } from "@/lib/vaults/deposit";
+import { friendlyErrorMessage } from "@/lib/errors";
 
 interface RedeemCardProps {
   handlerAddress: Address;
@@ -85,7 +86,8 @@ export default function RedeemCard({ handlerAddress }: RedeemCardProps) {
 
   const overShares = parsedShares !== null && reading.walletShares !== null && parsedShares > reading.walletShares;
   const inputInvalid = rawShares !== "" && parsedShares === null;
-  const disableInputActions = pendingWrite !== null || receipt.isLoading;
+  const isBreached = (reading.breachFlags ?? 0) !== 0;
+  const disableInputActions = pendingWrite !== null || receipt.isLoading || isBreached;
 
   const onRequest = useCallback(() => {
     if (parsedShares === null || user === undefined) return;
@@ -128,7 +130,7 @@ export default function RedeemCard({ handlerAddress }: RedeemCardProps) {
         </p>
       );
     }
-    if (write.error) return <p className="vxd-dep-banner vxd-dep-banner--err">{write.error.message}</p>;
+    if (write.error) return <p className="vxd-dep-banner vxd-dep-banner--err">{friendlyErrorMessage(write.error)}</p>;
     return null;
   }, [write.isPending, write.data, write.error, receipt.isLoading, pendingWrite?.kind]);
 
@@ -228,6 +230,13 @@ export default function RedeemCard({ handlerAddress }: RedeemCardProps) {
         </p>
       ) : overShares ? (
         <p className="vxd-dep-err">Amount exceeds your share balance.</p>
+      ) : null}
+      {isBreached ? (
+        <p className="vxd-dep-err">
+          Vault is under a strategist-configured breach (flags {reading.breachFlags}) — new
+          redemption requests are blocked until the next clean strike. Existing claims and
+          share balances are unaffected.
+        </p>
       ) : null}
       <button
         type="button"
