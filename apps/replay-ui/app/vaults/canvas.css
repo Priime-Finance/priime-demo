@@ -230,7 +230,9 @@
    re-tokenised onto the vault page's own variables. One block per captured
    NAV strike, the per-operator submissions underneath; the mismatched hash
    sits in the alarm register. 6dp inside this panel, the journal's own. */
-.vx-ledger .vp-rows { border: 1px solid var(--vx-line); border-radius: 14px; background: var(--vx-card); overflow: hidden; }
+.vx-ledger .vp-rows { border: 1px solid var(--vx-line); border-radius: 14px; background: var(--vx-card); max-height: 640px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--vx-line) transparent; }
+.vx-ledger .vp-rows::-webkit-scrollbar { width: 8px; }
+.vx-ledger .vp-rows::-webkit-scrollbar-thumb { background: var(--vx-line); border-radius: 8px; }
 .vx-ledger .vchip {
   display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
   border: 1px solid rgba(38, 126, 80, 0.28); background: rgba(38, 126, 80, 0.07); color: var(--vx-green);

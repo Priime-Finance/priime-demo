@@ -14,7 +14,8 @@
  * captured run, and this UI does not pretend otherwise.
  */
 
-import { formatUtcTime, truncateHash } from "@/lib/format";
+import { formatUtcTime } from "@/lib/format";
+import { Hex } from "./Hex";
 import { formatAttestedNav, type StrikeRow } from "@/lib/vaults/attested";
 
 export function StrikeLedger({ strikes }: { strikes: readonly StrikeRow[] }) {
@@ -39,7 +40,7 @@ export function StrikeLedger({ strikes }: { strikes: readonly StrikeRow[] }) {
             {s.operators.map((op) => (
               <div className={`strk-op${op.accepted ? "" : " bad"}`} key={op.id}>
                 <span className="strk-op-id">{op.shortId}</span>
-                <span className="strk-op-hash">{truncateHash(op.resultHash, 10, 6)}</span>
+                <span className="strk-op-hash"><Hex full={op.resultHash} lead={10} tail={6} /></span>
                 <span className="strk-op-tag">
                   {op.accepted ? "accepted" : "rejected, hash mismatch"}
                 </span>

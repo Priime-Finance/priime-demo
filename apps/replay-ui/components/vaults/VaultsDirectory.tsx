@@ -28,7 +28,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { LoopRecord } from "@priime-demo/loop-deploy";
-import { truncateAddress } from "@/lib/format";
+import { Hex } from "./Hex";
 import { fetchLoops } from "@/lib/vaults/live-source";
 import { cadenceText, marketWords, readLoopConfig } from "./live-loop";
 import { SEED_VAULTS } from "@/lib/vaults/seeds";
@@ -423,7 +423,7 @@ function DeployedLoopCard({ loop, i }: { loop: LoopRecord; i: number }) {
         </span>
         <span className="vx-cell">
           <i>Handler</i>
-          <b>{loop.handlerAddress === null ? "pending" : truncateAddress(loop.handlerAddress)}</b>
+          <b>{loop.handlerAddress === null ? "pending" : <Hex full={loop.handlerAddress} />}</b>
         </span>
         <span className="vx-cell">
           <i>Status</i>
@@ -432,7 +432,7 @@ function DeployedLoopCard({ loop, i }: { loop: LoopRecord; i: number }) {
       </div>
       <div className="vx-card-cur">
         <span>
-          Strategist <b>{truncateAddress(loop.strategist)}</b>
+          Strategist <b><Hex full={loop.strategist} /></b>
         </span>
         {/* The green heartbeat is granted to `active` only. A deploy still
             walking its steps, or one that failed, says which in the neutral

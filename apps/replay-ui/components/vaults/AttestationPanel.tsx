@@ -13,6 +13,7 @@
  */
 
 import { truncateAddress, truncateHash } from "@/lib/format";
+import { Hex } from "./Hex";
 import { formatAttestedNav, type StrikeRow } from "@/lib/vaults/attested";
 import { paramKind } from "@/lib/vaults/param-kind";
 import { captureJournal } from "@/lib/vaults/pipeline";
@@ -21,6 +22,9 @@ import { heroStrikes } from "@/lib/vaults/rows";
 export interface AttestationRow {
   label: string;
   value: string;
+  /** Full hex string when `value` is a truncated address / hash. When
+   *  set, the renderer swaps in a copyable Hex control. */
+  full?: string;
 }
 
 /** `one rejection` / `2 rejections`, from the operator rows of one strike. */
@@ -51,9 +55,9 @@ export function attestationRows(strikes: readonly StrikeRow[] = heroStrikes()): 
         )
         .join(" · "),
     },
-    { label: "Component digest", value: journal.component_digest },
-    { label: "Service id", value: truncateAddress(journal.service_id) },
-    { label: "Vault", value: truncateAddress(journal.vault.address) },
+    { label: "Component digest", value: journal.component_digest, full: journal.component_digest },
+    { label: "Service id", value: truncateAddress(journal.service_id), full: journal.service_id },
+    { label: "Vault", value: truncateAddress(journal.vault.address), full: journal.vault.address },
     { label: "Chain id", value: String(journal.vault.chain_id) },
     { label: "Operators registered", value: String(newest.quorum.total) },
     // The operator set itself, folded in here rather than given a panel of
@@ -62,6 +66,7 @@ export function attestationRows(strikes: readonly StrikeRow[] = heroStrikes()): 
     ...journal.operators.map((op, index) => ({
       label: `Operator ${String(index + 1)}`,
       value: truncateAddress(op.id),
+      full: op.id,
     })),
     {
       label: "NAV unit",
@@ -73,6 +78,7 @@ export function attestationRows(strikes: readonly StrikeRow[] = heroStrikes()): 
       // The journal's own field. Reading it off an operator row would quote a
       // submission, which on a sabotage strike need not be the winning one.
       value: newest.quorum.winningHash === null ? "no quorum formed" : truncateHash(newest.quorum.winningHash, 10, 6),
+      full: newest.quorum.winningHash ?? undefined,
     },
     {
       label: "Latest attested NAV",
@@ -105,7 +111,9 @@ export function AttestationPanel({ strikes }: { strikes: readonly StrikeRow[] })
         return (
           <div key={r.label} className={`vx-kv${kind === "prose" ? " vx-kv--prose" : ""}`}>
             <span>{r.label}</span>
-            <b data-kind={kind}>{r.value}</b>
+            <b data-kind={kind}>
+              {r.full === undefined ? r.value : <Hex full={r.full} display={r.value} />}
+            </b>
           </div>
         );
       })}

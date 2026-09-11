@@ -311,6 +311,10 @@ function digestText(componentDigest: string): string {
 export interface LoopFact {
   label: string;
   value: string;
+  /** Full hex string when `value` is a truncated address / hash. When
+   *  set, the renderer swaps the value for a copyable Hex control so
+   *  the user has a path to the datum the display hides. */
+  full?: string;
 }
 
 /** Rendered in place of a server field that has not been filled in yet. */
@@ -323,10 +327,11 @@ export function loopFacts(
 ): LoopFact[] {
   const rows: LoopFact[] = [];
   rows.push({ label: "Loop id", value: loop.id });
-  rows.push({ label: "Strategist", value: truncateAddress(loop.strategist) });
+  rows.push({ label: "Strategist", value: truncateAddress(loop.strategist), full: loop.strategist });
   rows.push({
     label: "Handler",
     value: loop.handlerAddress === null ? PENDING_LABEL : truncateAddress(loop.handlerAddress),
+    full: loop.handlerAddress ?? undefined,
   });
   rows.push({ label: "Workflow", value: loop.workflowId });
   if (config !== null) {
@@ -351,7 +356,7 @@ export function loopFacts(
   const newest = [...journals].sort((a, b) => b.inputs_block - a.inputs_block)[0] ?? null;
   if (newest !== null) {
     rows.push({ label: "Chain", value: journalChainLabel(newest) });
-    rows.push({ label: "Vault", value: truncateAddress(newest.vault.address) });
+    rows.push({ label: "Vault", value: truncateAddress(newest.vault.address), full: newest.vault.address });
   }
   if (config !== null) {
     if (config.twapWindowSecs !== null) {
@@ -394,13 +399,14 @@ export function liveAttestationRows(journals: readonly Journal[]): LoopFact[] {
         .join(" · "),
     },
     { label: "Component digest", value: digestText(newest.component_digest) },
-    { label: "Service id", value: truncateAddress(newest.service_id) },
-    { label: "Vault", value: truncateAddress(newest.vault.address) },
+    { label: "Service id", value: truncateAddress(newest.service_id), full: newest.service_id },
+    { label: "Vault", value: truncateAddress(newest.vault.address), full: newest.vault.address },
     { label: "Chain id", value: String(newest.vault.chain_id) },
     { label: "Operators registered", value: String(quorum.total) },
     ...newest.operators.map((op, index) => ({
       label: `Operator ${String(index + 1)}`,
       value: truncateAddress(op.id),
+      full: op.id,
     })),
     {
       label: "NAV unit",
@@ -413,6 +419,7 @@ export function liveAttestationRows(journals: readonly Journal[]): LoopFact[] {
         newest.quorum.winning_result_hash === null
           ? "no quorum formed"
           : truncateHash(newest.quorum.winning_result_hash, 10, 6),
+      full: newest.quorum.winning_result_hash ?? undefined,
     },
     {
       label: "Latest attested NAV",
