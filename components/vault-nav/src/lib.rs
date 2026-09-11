@@ -506,6 +506,74 @@ mod component {
             ));
         }
 
+        // Zero-debt redeem-from-collateral branch (Khaled review, roadmap
+        // follow-up): the delever branch above requires `!debt.is_zero()`
+        // because Morpho `flashLoan` has no debt to help repay when the
+        // vault is unlevered. Falling through to `plan_open_position`
+        // below would be worse: it would spend the last idle USDC into
+        // MORE collateral when `applied_leverage > 1x`, ratcheting the
+        // stall deeper. Empty-plan fall-through (when `applied_leverage
+        // <= 1x`) stalls redemptions across strikes and `emergencyExecute`
+        // cannot fire because the rollback keeps the floor at zero.
+        //
+        // Instead: `plan_redeem_collateral` — spot unwind, no flashloan.
+        // Withdraw the freed USDe out of Morpho, approve the router,
+        // swap to USDC. Sized so `min_usdc_out >= shortfall * 1.01` after
+        // the router's 50 bps slippage floor.
+        if !shortfall.is_zero() && debt.is_zero() && !U256::from(s.collateral_1e18).is_zero() {
+            if twap_price_1e24.is_zero() {
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            }
+            // target_free_usdc = shortfall * (1 + cushion). 100 bps flat -
+            // no leverage to amplify slippage, so the tight cushion suffices.
+            let cushion_bps = U256::from(100u16);
+            let target_free_usdc = shortfall + shortfall * cushion_bps / U256::from(10_000u16);
+            // Reverse `swap_min_usdc_out(usde, twap, slippage_bps)`:
+            //   min_out = usde * twap / 1e36 * (10_000 - slippage) / 10_000.
+            // Solve for usde so min_out >= target_free_usdc. Same 50 bps
+            // convention `plan_open_position` uses.
+            let swap_slippage_bps = 50u32;
+            let scale = U256::from(10u8).pow(U256::from(36u8));
+            let keep_bps = U256::from(10_000u32 - swap_slippage_bps);
+            let usde_needed =
+                target_free_usdc * scale * U256::from(10_000u16) / (twap_price_1e24 * keep_bps);
+            // Cap at the actual collateral balance. If the cap bites, the
+            // swap will deliver less than the shortfall and the on-chain
+            // floor check will revert — same failure mode as an
+            // over-redemption against an insufficient position, cleanly
+            // surfaced instead of silently stalling.
+            let usde_out = usde_needed.min(U256::from(s.collateral_1e18));
+            if usde_out.is_zero() {
+                return Ok(nav::PlanBuild::empty(s.block_timestamp));
+            }
+            let min_usdc_out = nav::swap_min_usdc_out(usde_out, twap_price_1e24, swap_slippage_bps);
+            let market_params_tuple: (
+                alloy_primitives::Address,
+                alloy_primitives::Address,
+                alloy_primitives::Address,
+                alloy_primitives::Address,
+                U256,
+            ) = (
+                usdc,
+                usde,
+                cfg_address("oracle_address")?,
+                cfg_address("irm_address")?,
+                cfg("lltv")?.parse().map_err(|e| format!("bad lltv: {e}"))?,
+            );
+            return Ok(nav::plan_redeem_collateral(
+                vault,
+                usdc,
+                usde,
+                morpho,
+                swap_router,
+                tick_spacing,
+                market_params_tuple,
+                usde_out,
+                min_usdc_out,
+                s.block_timestamp + 300,
+            ));
+        }
+
         let configured_leverage_bps = match cfg_opt("applied_leverage") {
             Some(v) => nav::parse_decimal_bps(&v)?,
             None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),

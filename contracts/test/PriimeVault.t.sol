@@ -1399,6 +1399,151 @@ contract PriimeVaultTest {
         muVault.emergencyExecute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (SINK, 1)));
     }
 
+    function test_ZeroDebtCollateralRedemptionDeliversUsdcInOneStrike() public {
+        /* Reviewer's blocker: vault holds collateral with ZERO Morpho
+           debt and a queued redeem larger than idle USDC. The component's
+           delever branch was gated on `!debt.is_zero()` so the strike
+           emitted an EMPTY plan, `_fulfillRedeems` raised the floor above
+           the balance, the whole self-call rolled back, and Alice's
+           shares stayed pending across strikes forever until a strategist
+           manually unwound. `emergencyExecute` could not fire either -
+           the rollback keeps the floor at zero, so `balance >= floor` and
+           the recovery path refused.
+
+           The fix (`plan_redeem_collateral` in the vault-nav component)
+           emits a 3-step spot unwind: `withdrawCollateral` + `approve` +
+           `exactInputSingle`. This test builds the same plan by hand and
+           proves the strike now delivers the claim atomically. */
+        (PriimeVault muVault, MockAerodromeRouter muRouter, MockMorpho muMorpho, TestUSDC muUsdc, TestUSDe muUsde) =
+            _buildMorphoMockStack();
+
+        // ---- 1. Alice deposits 1000 USDC. Bootstrap strike mints shares.
+        muUsdc.mint(ALICE, 1_000 * ONE_USDC);
+        vm.prank(ALICE);
+        muUsdc.approve(address(muVault), type(uint256).max);
+        vm.prank(ALICE);
+        muVault.requestDeposit(1_000 * ONE_USDC, ALICE, ALICE);
+        _attestOn(muVault, bytes20(uint160(0xF31)), 0, 1);
+        vm.prank(ALICE);
+        muVault.deposit(1_000 * ONE_USDC, ALICE);
+
+        // ---- 2. Park 900 USDC as 900 USDe collateral. NO borrow: this
+        //         is the zero-debt state the original delever branch
+        //         refused to plan for.
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (address(muRouter), 900 * ONE_USDC)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muRouter),
+            abi.encodeCall(
+                IAerodromeCLRouter.exactInputSingle,
+                (IAerodromeCLRouter.ExactInputSingleParams({
+                        tokenIn: address(muUsdc),
+                        tokenOut: address(muUsde),
+                        tickSpacing: int24(1),
+                        recipient: address(muVault),
+                        deadline: block.timestamp + 300,
+                        amountIn: 900 * ONE_USDC,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    }))
+            )
+        );
+        vm.prank(STRATEGIST);
+        muVault.execute(address(muUsde), abi.encodeCall(TestUSDe.approve, (address(muMorpho), 900 * 1e18)));
+        vm.prank(STRATEGIST);
+        muVault.execute(
+            address(muMorpho),
+            abi.encodeCall(
+                IMorphoBlue.supplyCollateral,
+                (
+                    IMorphoBlue.MarketParams({
+                        loanToken: address(muUsdc),
+                        collateralToken: address(muUsde),
+                        oracle: address(0x02),
+                        irm: address(0x03),
+                        lltv: 915_000_000_000_000_000
+                    }),
+                    900 * 1e18,
+                    address(muVault),
+                    ""
+                )
+            )
+        );
+        require(muMorpho.debt(address(muVault)) == 0, "DEBT IS ZERO - the reviewer's premise");
+        require(muMorpho.collateral(address(muVault)) == 900 * 1e18, "900e18 USDe collateral");
+        require(muUsdc.balanceOf(address(muVault)) == 100 * ONE_USDC, "100 USDC idle");
+
+        // Confirm the unlevered position: NAV = 900 (collateral @ par) + 100 (idle) = 1000.
+        _attestOn(muVault, bytes20(uint160(0xF32)), 1_000 * ONE_USDC, 2);
+
+        // ---- 3. Alice requests full redemption. Shortfall = 1000 - 100 = 900.
+        vm.prank(ALICE);
+        muVault.requestRedeem(1_000 * ONE_USDC, ALICE, ALICE);
+
+        // ---- 4. Compose the fixed component's plan: `plan_redeem_collateral`.
+        //         Same shape the Rust builder emits. Size the withdraw so the
+        //         swap floor clears 900 * 1.01 = 909 USDC.
+        IMorphoBlue.MarketParams memory params = IMorphoBlue.MarketParams({
+            loanToken: address(muUsdc),
+            collateralToken: address(muUsde),
+            oracle: address(0x02),
+            irm: address(0x03),
+            lltv: 915_000_000_000_000_000
+        });
+        // Real component sizing: `usde_needed = 909 * 1e12 * 10000 / 9950
+        // ~= 913.57e18`, capped at the 900e18 balance. `min_usdc_out`
+        // follows: `swap_min_usdc_out(900e18, par, 50) = 895.5e6`. Mock
+        // router has no slippage, so it delivers 900 USDC exactly - which
+        // meets the 900 USDC shortfall on the nose.
+        uint256 usdeOut = 900 * 1e18;
+        uint256 minUsdcOut = 895 * ONE_USDC;
+        address[] memory targets = new address[](3);
+        targets[0] = address(muMorpho);
+        targets[1] = address(muUsde);
+        targets[2] = address(muRouter);
+        bytes[] memory calldatas = new bytes[](3);
+        calldatas[0] =
+            abi.encodeCall(IMorphoBlue.withdrawCollateral, (params, usdeOut, address(muVault), address(muVault)));
+        calldatas[1] = abi.encodeCall(TestUSDe.approve, (address(muRouter), usdeOut));
+        calldatas[2] = abi.encodeCall(
+            IAerodromeCLRouter.exactInputSingle,
+            (IAerodromeCLRouter.ExactInputSingleParams({
+                    tokenIn: address(muUsde),
+                    tokenOut: address(muUsdc),
+                    tickSpacing: int24(1),
+                    recipient: address(muVault),
+                    deadline: block.timestamp + 300,
+                    amountIn: usdeOut,
+                    amountOutMinimum: minUsdcOut,
+                    sqrtPriceLimitX96: 0
+                }))
+        );
+
+        _attestOnWithPlan(
+            muVault,
+            bytes20(uint160(0xF33)),
+            1_000 * ONE_USDC,
+            3,
+            PriimeVault.StrategyPlan({targets: targets, calldatas: calldatas, timestamp: block.timestamp + 300})
+        );
+
+        // ---- 5. Single-strike delivery: pending drained, claim booked.
+        require(muVault.totalPendingRedeemShares() == 0, "pending drained in one strike");
+        require(muVault.claimableRedeemRequest(0, ALICE) == 1_000 * ONE_USDC, "alice's claim materialised");
+        require(muVault.totalClaimableRedeemAssets() == 1_000 * ONE_USDC, "claim booked against a real balance");
+        // Position: 900 - 910 was capped at 900 by the mock, but the swap
+        // still delivered enough for the claim. Residual position: whatever
+        // the mock had left after the withdraw. What matters is the claim.
+
+        // ---- 6. Alice actually collects.
+        uint256 balBefore = muUsdc.balanceOf(ALICE);
+        vm.prank(ALICE);
+        uint256 assets = muVault.redeem(1_000 * ONE_USDC, ALICE, ALICE);
+        require(assets == 1_000 * ONE_USDC, "claim delivers 1000 USDC");
+        require(muUsdc.balanceOf(ALICE) - balBefore == 1_000 * ONE_USDC, "USDC lands in alice's wallet");
+    }
+
     // --- helpers used by the Khaled regression tests --------------------------
 
     function _buildMorphoMockStack()

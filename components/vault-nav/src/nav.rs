@@ -342,6 +342,94 @@ pub fn plan_deleverage(
     plan
 }
 
+/// Compose the plan for a redemption shortfall when the vault holds
+/// collateral but ZERO Morpho debt (unlevered position). The delever
+/// branch above requires `!debt.is_zero()` because Morpho's `flashLoan`
+/// makes no sense against a position it cannot help repay; without this
+/// branch, an unlevered vault with a queued redemption larger than idle
+/// USDC would emit an empty plan every strike, `_fulfillRedeems` would
+/// raise the floor above the balance, and the whole self-call would
+/// roll back — Alice's shares sit pending forever until a strategist
+/// manually unwinds (Khaled review, roadmap follow-up).
+///
+/// Since there is no debt, the plan is the three-step spot unwind:
+///   1. `morpho.withdrawCollateral(marketParams, usde_out, vault, vault)`
+///      — pull the freed USDe out of Morpho into the vault's own balance.
+///   2. `usde.approve(swap_router, usde_out)` — grant the router pull
+///      authority for the swap.
+///   3. `swap_router.exactInputSingle(USDe -> USDC, recipient=vault,
+///      amountOutMinimum=min_usdc_out)` — swap the freed collateral to
+///      USDC so the escrow floor sees it.
+///
+/// `usde_out` is sized upstream so the swap's `min_usdc_out` clears the
+/// shortfall plus a 1% cushion. Every plan-step whitelist check on the
+/// vault side (target, selector, receiver, spender) is satisfied by
+/// construction: `receiver = vault`, `spender ∈ {morpho, swap_router}`.
+#[allow(clippy::too_many_arguments)]
+pub fn plan_redeem_collateral(
+    vault: Address,
+    usdc: Address,
+    usde: Address,
+    morpho: Address,
+    swap_router: Address,
+    tick_spacing: i32,
+    market_params: (Address, Address, Address, Address, U256),
+    usde_out: U256,
+    min_usdc_out: U256,
+    deadline_secs: u64,
+) -> PlanBuild {
+    let (loan_token, collateral_token, oracle, irm, lltv) = market_params;
+    let m = MorphoMarketParams {
+        loanToken: loan_token,
+        collateralToken: collateral_token,
+        oracle,
+        irm,
+        lltv,
+    };
+
+    let mut plan = PlanBuild::empty(deadline_secs);
+
+    // 1. withdrawCollateral from Morpho into the vault.
+    plan.push(
+        morpho,
+        withdrawCollateralCall {
+            marketParams: m,
+            assets: usde_out,
+            onBehalf: vault,
+            receiver: vault,
+        }
+        .abi_encode(),
+    );
+    // 2. approve router to pull the freed USDe.
+    plan.push(
+        usde,
+        approveCall {
+            spender: swap_router,
+            amount: usde_out,
+        }
+        .abi_encode(),
+    );
+    // 3. swap USDe -> USDC into the vault.
+    plan.push(
+        swap_router,
+        exactInputSingleCall {
+            params: AerodromeExactInputSingleParams {
+                tokenIn: usde,
+                tokenOut: usdc,
+                tickSpacing: alloy_primitives::Signed::<24, 1>::try_from(tick_spacing)
+                    .unwrap_or_default(),
+                recipient: vault,
+                deadline: U256::from(deadline_secs),
+                amountIn: usde_out,
+                amountOutMinimum: min_usdc_out,
+                sqrtPriceLimitX96: alloy_primitives::Uint::<160, 3>::ZERO,
+            },
+        }
+        .abi_encode(),
+    );
+    plan
+}
+
 /// The bag of per-strike observations that ride in `BoundNavResult`. Kept as
 /// a plain struct so the encode/decode boundary is one flat call and every
 /// caller reads the same names as PriimeVault decodes.
@@ -1589,6 +1677,78 @@ mod tests {
         assert_eq!(mu, min_usdc_out);
         assert_eq!(dl, U256::from(deadline));
         assert_eq!(sh, shares_to_repay);
+    }
+
+    #[test]
+    fn plan_redeem_collateral_emits_withdraw_approve_swap_with_expected_arguments() {
+        // Reviewer scenario: 900 USDe collateral, zero debt, ~900 USDC
+        // shortfall. The builder wires a 3-step spot unwind - no
+        // flashloan, no repay, no supplyCollateral. Every address
+        // argument is pinned to the vault so the on-chain selector +
+        // receiver whitelist accepts it.
+        let vault = address!("0000000000000000000000000000000000000A11");
+        let usdc = address!("833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+        let usde = address!("5d3a1Ff2b6bab83b63cd9ad0787074081a52eF34");
+        let morpho = address!("BBBBBbbBBb9cC5e90e3b3AF64bdAF62C37EEFFCb");
+        let router = address!("BE6D8f0d05cC4be24d5167a3eF062215bE6D18a5");
+        let oracle = address!("0000000000000000000000000000000000000002");
+        let irm = address!("0000000000000000000000000000000000000003");
+        let lltv = U256::from(915_000_000_000_000_000u64);
+        let tick_spacing: i32 = 1;
+        let usde_out = U256::from(910u64) * U256::from(10u128.pow(18)); // 910 USDe
+        let min_usdc_out = U256::from(909u64 * 1_000_000u64); // 909 USDC
+        let deadline = 1_800_000_300u64;
+
+        let plan = plan_redeem_collateral(
+            vault,
+            usdc,
+            usde,
+            morpho,
+            router,
+            tick_spacing,
+            (usdc, usde, oracle, irm, lltv),
+            usde_out,
+            min_usdc_out,
+            deadline,
+        );
+
+        // Three steps, in order: Morpho withdrawCollateral, USDe approve, router swap.
+        assert_eq!(plan.targets.len(), 3);
+        assert_eq!(plan.targets[0], morpho);
+        assert_eq!(plan.targets[1], usde);
+        assert_eq!(plan.targets[2], router);
+
+        // Step 1: withdrawCollateral with receiver == vault, onBehalf == vault.
+        assert_eq!(
+            &plan.calldatas[0][0..4],
+            &withdrawCollateralCall::SELECTOR[..]
+        );
+        let w = withdrawCollateralCall::abi_decode(&plan.calldatas[0]).expect("withdraw decodes");
+        assert_eq!(w.assets, usde_out);
+        assert_eq!(w.onBehalf, vault);
+        assert_eq!(w.receiver, vault);
+        assert_eq!(w.marketParams.loanToken, usdc);
+        assert_eq!(w.marketParams.collateralToken, usde);
+
+        // Step 2: usde.approve(router, usde_out). Spender is the router
+        // (accepted by the vault's approve-spender whitelist).
+        assert_eq!(&plan.calldatas[1][0..4], &approveCall::SELECTOR[..]);
+        let a = approveCall::abi_decode(&plan.calldatas[1]).expect("approve decodes");
+        assert_eq!(a.spender, router);
+        assert_eq!(a.amount, usde_out);
+
+        // Step 3: exactInputSingle: USDe -> USDC, recipient == vault.
+        assert_eq!(
+            &plan.calldatas[2][0..4],
+            &exactInputSingleCall::SELECTOR[..]
+        );
+        let s = exactInputSingleCall::abi_decode(&plan.calldatas[2]).expect("swap decodes");
+        assert_eq!(s.params.tokenIn, usde);
+        assert_eq!(s.params.tokenOut, usdc);
+        assert_eq!(s.params.recipient, vault);
+        assert_eq!(s.params.amountIn, usde_out);
+        assert_eq!(s.params.amountOutMinimum, min_usdc_out);
+        assert_eq!(s.params.deadline, U256::from(deadline));
     }
 
     // --- knob invariants ----------------------------------------------------
