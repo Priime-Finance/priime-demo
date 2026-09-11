@@ -65,7 +65,7 @@ import {
   marketWords,
   readLoopConfig,
 } from "./live-loop";
-import { truncateAddress } from "@/lib/format";
+import { Hex } from "./Hex";
 import { AWAITING_LABEL, strikeRows } from "@/lib/vaults/attested";
 import { fetchLoop, fetchLoopJournals, pauseLoop } from "@/lib/vaults/live-source";
 import { withParamKinds } from "@/lib/vaults/param-kind";
@@ -238,13 +238,13 @@ export default function LiveLoopDetail({ id }: { id: string }) {
             </span>
           )}
           <span className="vx-dmeta-cur">
-            Strategist <b>{truncateAddress(loop.strategist)}</b>
+            Strategist <Hex full={loop.strategist} />
           </span>
         </div>
         {loop.status === "inactive" ? (
           <p className="vxd-note vxd-note--muted">
             Paused. Workflow removed from the service; operators no longer schedule strikes. On-chain vault (
-            {truncateAddress(loop.handlerAddress ?? "")}) still holds any deposited assets.
+            {loop.handlerAddress === null ? "pending" : <Hex full={loop.handlerAddress} />}) still holds any deposited assets.
           </p>
         ) : (
           <div className="vxd-actions">
@@ -333,7 +333,9 @@ export default function LiveLoopDetail({ id }: { id: string }) {
               {facts.map((f) => (
                 <div key={f.label} className={`vx-kv${f.kind === "prose" ? " vx-kv--prose" : ""}`}>
                   <span>{f.label}</span>
-                  <b data-kind={f.kind}>{f.value}</b>
+                  <b data-kind={f.kind}>
+                    {f.full === undefined ? f.value : <Hex full={f.full} display={f.value} />}
+                  </b>
                 </div>
               ))}
             </div>
@@ -386,26 +388,26 @@ export default function LiveLoopDetail({ id }: { id: string }) {
                   no action to take; rejected means the batch reverted on-chain (NAV attestation still
                   landed) and the reason is the failing step&apos;s revert bytes.
                 </p>
-                {journals
-                  .slice()
-                  .sort((a, b) => b.inputs_block - a.inputs_block)
-                  .slice(0, 6)
-                  .map((j) => (
-                    <div key={j.strike_id} className="vx-kv vx-kv--prose">
-                      <span>
-                        strike {j.inputs_block} ·{" "}
-                        <span data-kind="hex">{j.plan.status}</span>
-                        {j.plan.stepCount === 0 ? null : ` · ${j.plan.stepCount} steps`}
-                      </span>
-                      <b data-kind="phrase">
-                        {j.plan.status === "empty"
-                          ? "no action"
-                          : j.plan.status === "rejected"
-                          ? `rejected: ${j.plan.reason ?? "no reason bytes"}`
-                          : j.plan.steps.map((s) => s.label).join(" -> ")}
-                      </b>
-                    </div>
-                  ))}
+                <div className="vx-decisions">
+                  {journals
+                    .slice()
+                    .sort((a, b) => b.inputs_block - a.inputs_block)
+                    .map((j) => (
+                      <div key={j.strike_id} className="vx-kv vx-kv--prose">
+                        <span>
+                          strike {j.inputs_block} · <span data-kind="hex">{j.plan.status}</span>
+                          {j.plan.stepCount === 0 ? null : ` · ${j.plan.stepCount} steps`}
+                        </span>
+                        <b data-kind="phrase">
+                          {j.plan.status === "empty"
+                            ? "no action"
+                            : j.plan.status === "rejected"
+                              ? `rejected: ${j.plan.reason ?? "no reason bytes"}`
+                              : j.plan.steps.map((s) => s.label).join(" -> ")}
+                        </b>
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
             {observedKnobs.length === 0 ? null : (
@@ -436,7 +438,9 @@ export default function LiveLoopDetail({ id }: { id: string }) {
                 {attestation.map((r) => (
                   <div key={r.label} className={`vx-kv${r.kind === "prose" ? " vx-kv--prose" : ""}`}>
                     <span>{r.label}</span>
-                    <b data-kind={r.kind}>{r.value}</b>
+                    <b data-kind={r.kind}>
+                      {r.full === undefined ? r.value : <Hex full={r.full} display={r.value} />}
+                    </b>
                   </div>
                 ))}
               </div>

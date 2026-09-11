@@ -105,6 +105,35 @@
 .vx-mod b{font-size:13px;font-weight:600}
 .vx-mod span{font-size:12.5px;color:var(--vx-mut);line-height:1.5}
 
+/* ── Hex: a copyable middle-truncated hex string ──────────────────────
+     The truncated form is the display; the full string is the datum. A
+     button, so keyboard and screen readers land on it, styled inline so
+     the row's typography does not change when this component takes over
+     a value cell. `.vx-hex-badge` is the fleeting affordance: `copy`
+     until it fires, `copied` while the confirmation holds. Both are
+     one dp, one weight; the dashed underline says "this is not just a
+     string, click me" without hijacking the row's ink. */
+.vx-hex{font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit;background:transparent;border:0;padding:0;
+  display:inline-flex;align-items:baseline;gap:6px;cursor:pointer;text-align:inherit}
+.vx-hex .vx-hex-val{font-family:var(--vm,var(--font-mono,ui-monospace));font-variant-numeric:tabular-nums;
+  border-bottom:1px dashed var(--vx-line);letter-spacing:-.005em}
+.vx-hex:hover .vx-hex-val{border-bottom-color:var(--vx-blue);color:var(--vx-blue)}
+.vx-hex .vx-hex-badge{font-family:var(--vser,var(--font-body));font-style:italic;font-weight:400;font-size:10.5px;
+  color:var(--vx-mut);opacity:0;transition:opacity .12s}
+.vx-hex:hover .vx-hex-badge,.vx-hex:focus-visible .vx-hex-badge{opacity:1}
+.vx-hex--copied .vx-hex-badge{opacity:1;color:var(--vx-green,#267E50)}
+.vx-hex:focus-visible{outline:2px solid var(--vx-blue);outline-offset:2px;border-radius:4px}
+
+/* ── Scrollable "Operator decisions" panel ─────────────────────────────
+     Live deployments accumulate hundreds of strikes: the decisions list
+     used to hard-cap at six most-recent, which hid every earlier plan
+     from the reader. Now the full history renders inside a bounded
+     scroll (~9 rows visible at rest, scroll surfaces the tail), matching
+     the strike-ledger pattern in canvas.css. Thin native scrollbar. */
+.vx-decisions{max-height:320px;overflow-y:auto;padding-right:4px;scrollbar-width:thin;scrollbar-color:var(--vx-line) transparent}
+.vx-decisions::-webkit-scrollbar{width:8px}
+.vx-decisions::-webkit-scrollbar-thumb{background:var(--vx-line);border-radius:8px}
+
 /* deposit box */
 .vx-dep-row{display:flex;gap:10px;margin-bottom:10px}
 .vx-dep-input{flex:1;min-width:0;font-family:var(--font-mono,ui-monospace);font-size:16px;font-weight:600;
