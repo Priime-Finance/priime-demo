@@ -47,6 +47,7 @@ import {
   parseAssetAmount,
   useDepositReading,
 } from "@/lib/vaults/deposit";
+import { cadenceText } from "./live-loop";
 import { friendlyErrorMessage } from "@/lib/errors";
 
 interface DepositCardProps {
@@ -57,6 +58,13 @@ interface DepositCardProps {
    * unlocks with the first strike; the copy leans on that.
    */
   hasSettledStrike: boolean;
+  /**
+   * Strike cadence in seconds, from `loop-server`'s config. Used only for
+   * the "folded into NAV on the next strike (about every N s / min)" line
+   * above the input, so a reader knows roughly when their escrow settles.
+   * `null` on a loop with no cadence recorded yet.
+   */
+  cronSeconds: number | null;
 }
 
 /** Human-shaped states the card renders. */
@@ -78,7 +86,7 @@ function explorerTxUrl(chainId: number, txHash: string): string | null {
   }
 }
 
-export default function DepositCard({ handlerAddress, hasSettledStrike }: DepositCardProps) {
+export default function DepositCard({ handlerAddress, hasSettledStrike, cronSeconds }: DepositCardProps) {
   const { address: user, isConnected, chainId } = useAccount();
   const { openConnectModal } = useConnectModal();
 
@@ -183,7 +191,10 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
   }, [user, reading.claimableAssets, handlerAddress, write]);
 
   const overWallet = parsedAmount !== null && reading.walletAssets !== null && parsedAmount > reading.walletAssets;
-  const inputInvalid = rawAmount !== "" && parsedAmount === null;
+  // Gate on `decimals !== null`: while the batch is still loading it
+  // cannot possibly parse the amount, and rendering the "must be a
+  // decimal" hint on a perfectly legal `5` was the reported UX bug.
+  const inputInvalid = rawAmount !== "" && decimals !== null && parsedAmount === null;
   const isBreached = (reading.breachFlags ?? 0) !== 0;
   const disableInputActions = pendingWrite !== null || receipt.isLoading || isBreached;
 
@@ -287,7 +298,9 @@ export default function DepositCard({ handlerAddress, hasSettledStrike }: Deposi
       <div className="vx-panel-h">Deposit USDC</div>
       <p className="vxd-desc">
         {hasSettledStrike
-          ? "Your deposit escrows into the vault and is folded into NAV on the next attested strike (~ every 10 seconds on the fork)."
+          ? `Your deposit escrows into the vault and is folded into NAV on the next attested strike${
+              cronSeconds === null ? "." : ` (${cadenceText(cronSeconds)}).`
+            }`
           : "The vault has not settled a strike yet. Your deposit will escrow and fold into NAV as soon as the operator quorum lands its first attestation."}
       </p>
       <div className="vxd-dep-row">

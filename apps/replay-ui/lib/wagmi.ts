@@ -61,10 +61,15 @@ export const wagmiConfig = createConfig({
   connectors: [injected({ shimDisconnect: true })],
   transports: {
     [demoChain.id]: http(`/api/rpc/${String(CHAIN_ID)}`, {
-      // Wagmi batches reads through multicall3 above; the batcher below
-      // groups OTHER JSON-RPC methods (getBlockNumber, getGasPrice, etc.)
-      // into a single HTTP request when the tick window overlaps.
-      batch: true,
+      // Wagmi's http batcher wraps requests in a JSON-RPC batch array
+      // (`[{...}]`) which the same-origin proxy at
+      // `app/api/rpc/[chainId]/route.ts` refuses with -32600 "batch
+      // requests not supported". Multicall3 above already folds every
+      // read from `useReadContracts` into one `eth_call`, so the
+      // HTTP-level batch is redundant on top of it — turning it off
+      // keeps each request a plain single JSON-RPC envelope the proxy
+      // accepts.
+      batch: false,
     }),
   },
 });

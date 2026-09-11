@@ -355,6 +355,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
                 <DepositCard
                   handlerAddress={loop.handlerAddress as Address}
                   hasSettledStrike={settled > 0}
+                  cronSeconds={cronSeconds}
                 />
                 <RedeemCard handlerAddress={loop.handlerAddress as Address} />
               </>
