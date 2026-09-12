@@ -25,7 +25,7 @@ FORKDIR="$STATE_DIR"
 # component-config lookup and simulation. All three nodes use the same
 # service.json, so any of them would work.
 HOME_DIR="$FORKDIR/priime-vault-1"
-PRIIME_IMG="ghcr.io/priime-finance/priime:3.0.0"
+PRIIME_IMG="ghcr.io/priime-finance/priime:3.0.1"
 # Pause all three nodes so none can strike the vault mid-check.
 NODES=(priime-vault-1 priime-vault-2 priime-vault-3)
 

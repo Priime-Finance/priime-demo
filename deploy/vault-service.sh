@@ -39,7 +39,7 @@
 # Prereqs:
 #   deploy/fork.sh                                   # TARGET=fork only: pinned Base fork on :8545
 #   ipfs daemon                                      # api on :5001
-#   docker images: ghcr.io/priime-finance/priime:3.0.0, poa-middleware:1.0.1
+#   docker images: ghcr.io/priime-finance/priime:3.0.1, poa-middleware:1.0.1
 #   TARGET=mainnet: PRIIME_RPC_URL + the four role keys named in
 #                   deploy/targets/mainnet.json, and a treasury holding ETH.
 #
@@ -52,7 +52,7 @@ DEPLOY="$ROOT/deploy"
 source "$DEPLOY/target.sh"                        # TARGET, RPC, CHAIN, STATE_DIR, CRON_SCHEDULE, helpers
 FORKDIR="$STATE_DIR"
 HOME_BASE="$FORKDIR/priime-vault"                   # per-node home dirs: priime-vault-1, -2, -3
-PRIIME_IMG="ghcr.io/priime-finance/priime:3.0.0"
+PRIIME_IMG="ghcr.io/priime-finance/priime:3.0.1"
 POA_IMG="ghcr.io/lay3rlabs/poa-middleware:1.0.1"
 NODE_BASE="priime-vault"                            # per-node containers
 NODE_COUNT=3

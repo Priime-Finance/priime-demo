@@ -16,7 +16,7 @@
 # Prereqs (start these first):
 #   anvil --host 0.0.0.0 --block-time 1          # chainId 31337 on :8545
 #   ipfs daemon                                  # gateway on :8080, api on :5001
-#   docker images: ghcr.io/priime-finance/priime:3.0.0, poa-middleware:1.0.1
+#   docker images: ghcr.io/priime-finance/priime:3.0.1, poa-middleware:1.0.1
 #
 # Re-runnable: redeploys a fresh service manager + handler each run.
 set -euo pipefail
@@ -26,7 +26,7 @@ DEPLOY="$ROOT/deploy"
 source "$DEPLOY/target.sh"                        # TARGET, RPC, CHAIN, CRON_SCHEDULE, helpers
 require_mnemonic_target "deploy.sh"
 GATEWAY="http://127.0.0.1:8080/ipfs/"
-PRIIME_IMG="ghcr.io/priime-finance/priime:3.0.0"
+PRIIME_IMG="ghcr.io/priime-finance/priime:3.0.1"
 POA_IMG="ghcr.io/lay3rlabs/poa-middleware:1.0.1"
 NODE="priime-m1"
 MNEMONIC="$TARGET_MNEMONIC"                       # from the target (fork: the anvil default)
