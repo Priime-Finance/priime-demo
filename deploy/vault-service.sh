@@ -339,20 +339,25 @@ done
   || { echo "FATAL: factory $FACTORY still has no code after 60s"; exit 1; }
 
 say "deploy PriimeVault via factory"
-VAULT=$(cast send "$FACTORY" \
-  'deployVault(address,address,address,(address,address,address,address,uint256,address,uint24))(address)' \
+cast send "$FACTORY" \
+  'deployVault(address,address,address,(address,address,address,address,uint256,address,uint24))' \
   "$SM" "$USDC" "$STRATEGIST" "($USDE,$MORPHO,$ORACLE,$IRM,$LLTV,$ROUTER,$FEE)" \
-  --rpc-url "$RPC" --private-key "$K0" --json \
-  | jq -r '.logs[] | select(.topics[0] == "0x90ae3f42922cbde58f515026e99db64dd285292d682810cdbcb9e061b03a8f39") | .topics[1]' \
-  | head -1)
-# Fallback: use factory.vaults(vaultCount()-1) if event parsing missed.
-if [ -z "$VAULT" ] || [ "$VAULT" = "null" ]; then
-  COUNT=$(cast call "$FACTORY" 'vaultCount()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
-  VAULT=$(cast call "$FACTORY" 'vaults(uint256)(address)' "$((COUNT - 1))" --rpc-url "$RPC" | awk '{print $1}')
-else
-  # Strip 0x000...pad from an indexed-address topic.
-  VAULT="0x$(echo "$VAULT" | sed -E 's/^0x0{24}//')"
-fi
+  --rpc-url "$RPC" --private-key "$K0" >/dev/null
+# Deterministic: the vault we just deployed is factory.vaults(vaultCount()-1).
+# Cheaper than parsing VaultCreated out of the receipt, and stable across
+# cast-send output-shape drift between foundry versions. Retry the read
+# because Alchemy's load-balanced pool may not have propagated the send tx
+# to the read node yet.
+mine_or_wait
+COUNT=""
+for _ in $(seq 1 30); do
+  COUNT=$(cast call "$FACTORY" 'vaultCount()(uint256)' --rpc-url "$RPC" 2>/dev/null | awk '{print $1}')
+  [ -n "$COUNT" ] && [ "$COUNT" != "0" ] && break
+  sleep 2
+done
+[ -n "$COUNT" ] && [ "$COUNT" != "0" ] \
+  || { echo "FATAL: factory.vaultCount() stayed 0 after send"; exit 1; }
+VAULT=$(cast call "$FACTORY" 'vaults(uint256)(address)' "$((COUNT - 1))" --rpc-url "$RPC" | awk '{print $1}')
 echo "vault: $VAULT (strategist $STRATEGIST)"
 for _ in $(seq 1 30); do
   if [ "$(cast code "$VAULT" --rpc-url "$RPC")" != "0x" ]; then break; fi
