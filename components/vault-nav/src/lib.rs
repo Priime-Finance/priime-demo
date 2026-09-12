@@ -1,4 +1,4 @@
-//! WAVS operator component attesting PriimeVault's NAV (wavs:operator@2.7.0).
+//! Priime operator component attesting PriimeVault's NAV (priime:operator@3.0.0).
 //!
 //! Each cron cycle: derive `inputs_block` from the trigger's `trigger_time`
 //! (cron triggers carry no height, NAV-03; the shared trigger time is what
@@ -32,13 +32,13 @@ mod component {
 
     wit_bindgen::generate!({
         path: "wit",
-        world: "wavs-world",
+        world: "priime-world",
         generate_all,
         with: { "wasi:io/poll@0.2.0": wasip2::io::poll },
         features: ["tls"],
     });
 
-    use self::wavs::types::events::TriggerData;
+    use self::priime::types::events::TriggerData;
 
     struct Component;
 
@@ -143,7 +143,7 @@ mod component {
     /// with any tracked field produces a different one, its result hash
     /// diverges, and the quorum outvotes it.
     ///
-    /// The list is closed because WAVS gives us no config-enumeration API - we
+    /// The list is closed because Priime gives us no config-enumeration API - we
     /// name every key the deploy pipeline can emit. New composer knobs must
     /// land here at the same time they land in loop-server's componentConfig
     /// output, or the hash silently drops them (and the "cannot lie" property

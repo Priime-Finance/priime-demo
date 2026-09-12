@@ -16,7 +16,7 @@ use alloy_provider::Provider;
 use alloy_rpc_types::TransactionRequest;
 use alloy_sol_macro::sol;
 use alloy_sol_types::SolCall;
-use wavs_wasi_utils::evm::new_evm_provider;
+use priime_wasi_utils::evm::new_evm_provider;
 use wstd::runtime::block_on;
 
 pub type AdapterResult<T> = Result<T, String>;

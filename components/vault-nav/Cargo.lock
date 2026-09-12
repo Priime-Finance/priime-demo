@@ -2884,10 +2884,33 @@ dependencies = [
  "alloy-rpc-types",
  "alloy-sol-macro",
  "alloy-sol-types",
+ "priime-wasi-utils",
  "wasip2",
- "wavs-wasi-utils",
  "wit-bindgen 0.53.1",
  "wit-bindgen-rt",
+ "wstd",
+]
+
+[[package]]
+name = "priime-wasi-utils"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5d3b3c92f51727bf2b986d7c04ea7879d9764744006c5854136829d932a4a81"
+dependencies = [
+ "alloy-json-rpc",
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-rpc-client",
+ "alloy-sol-types",
+ "alloy-transport",
+ "alloy-transport-http",
+ "anyhow",
+ "cfg-if",
+ "futures-utils-wasm",
+ "http",
+ "serde",
+ "serde_json",
+ "tower-service",
  "wstd",
 ]
 
@@ -4308,29 +4331,6 @@ dependencies = [
  "pin-utils",
  "slab",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "wavs-wasi-utils"
-version = "2.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c215b46ed461ddf3f29286c8917f68e6b69e84137fa04adcf90dce85425b02b8"
-dependencies = [
- "alloy-json-rpc",
- "alloy-primitives",
- "alloy-provider",
- "alloy-rpc-client",
- "alloy-sol-types",
- "alloy-transport",
- "alloy-transport-http",
- "anyhow",
- "cfg-if",
- "futures-utils-wasm",
- "http",
- "serde",
- "serde_json",
- "tower-service",
- "wstd",
 ]
 
 [[package]]

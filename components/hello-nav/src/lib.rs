@@ -1,6 +1,6 @@
-//! Hello-world WAVS operator component for the verifiable-vaults demo.
+//! Hello-world Priime operator component for the verifiable-vaults demo.
 //!
-//! Implements the single `run` export of `wavs:operator@2.7.0`'s `wavs-world`:
+//! Implements the single `run` export of `priime:operator@3.0.0`'s `priime-world`:
 //! read a per-workflow config var, then return an abi-encoded NAV payload that
 //! the operators sign and the aggregator submits on-chain. This exists to
 //! retire M1's risk: authoring + building a component against the WIT world
@@ -11,13 +11,13 @@ use alloy_sol_types::{sol, SolValue};
 
 wit_bindgen::generate!({
     path: "wit",
-    world: "wavs-world",
+    world: "priime-world",
     generate_all,
     with: { "wasi:io/poll@0.2.0": wasip2::io::poll },
     features: ["tls"],
 });
 
-use crate::wavs::types::events::TriggerData;
+use crate::priime::types::events::TriggerData;
 
 sol! {
     /// The bytes every operator signs and the handler decodes on-chain.

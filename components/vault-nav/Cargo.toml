@@ -2,7 +2,7 @@
 name = "priime-vault-nav"
 version = "0.1.0"
 edition = "2021"
-description = "WAVS operator component attesting PriimeVault NAV from pinned Morpho Blue reads (wavs:operator@2.7.0)."
+description = "Priime operator component attesting PriimeVault NAV from pinned Morpho Blue reads (priime:operator@3.0.0)."
 license = "MIT"
 
 # Standalone workspace: this wasm32-wasip2 component is intentionally detached
@@ -24,7 +24,7 @@ alloy-sol-macro = "1.0.0"
 wit-bindgen = "0.53.1"
 wit-bindgen-rt = { version = "0.44.0", features = ["bitflags"] }
 wasip2 = "1.0.2"
-wavs-wasi-utils = "=2.8.0"
+priime-wasi-utils = "=3.0.0"
 wstd = "=0.6.5"
 alloy-provider = { version = "1.0.0", default-features = false, features = ["rpc-api"] }
 alloy-network = "1.0.0"

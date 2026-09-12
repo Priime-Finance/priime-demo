@@ -2,7 +2,7 @@
 name = "priime-hello-nav"
 version = "0.1.0"
 edition = "2021"
-description = "Hello-world WAVS operator component (wavs:operator@2.7.0) for the verifiable-vaults demo."
+description = "Hello-world Priime operator component (priime:operator@3.0.0) for the verifiable-vaults demo."
 license = "MIT"
 
 # Standalone workspace: this wasm32-wasip2 component is intentionally detached
