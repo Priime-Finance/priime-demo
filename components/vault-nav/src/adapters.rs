@@ -37,14 +37,15 @@ sol! {
     function observe(uint32[] secondsAgos) external view returns (
         int56[] tickCumulatives, uint160[] secondsPerLiquidityCumulativeX128s
     );
-    // Aerodrome Slipstream CLPool keeps Uniswap v3's observation layout, but
-    // its Slot0 drops v3's `feeProtocol` (protocol/unstaked fees live
-    // elsewhere), so this is six fields, not seven. Verified against the
-    // live pool: slot0() returns exactly six words.
+    // Uniswap V3 CLPool `slot0()` returns 7 words: sqrtPriceX96, tick,
+    // observationIndex, observationCardinality, observationCardinalityNext,
+    // feeProtocol (per-pool protocol fee split), unlocked. Aerodrome's
+    // Slipstream fork drops `feeProtocol` (protocol/unstaked fees live
+    // elsewhere in that codebase), which is why the old ABI here had 6.
     function slot0() external view returns (
         uint160 sqrtPriceX96, int24 tick, uint16 observationIndex,
         uint16 observationCardinality, uint16 observationCardinalityNext,
-        bool unlocked
+        uint8 feeProtocol, bool unlocked
     );
     function observations(uint256 index) external view returns (
         uint32 blockTimestamp, int56 tickCumulative,

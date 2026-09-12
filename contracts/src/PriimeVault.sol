@@ -8,7 +8,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IPriimeServiceHandler} from "./interfaces/priime/IPriimeServiceHandler.sol";
 import {IPriimeServiceManager} from "./interfaces/priime/IPriimeServiceManager.sol";
 import {IMorphoBlue, IMorphoFlashLoanCallback} from "./interfaces/external/IMorphoBlue.sol";
-import {IAerodromeCLRouter} from "./interfaces/external/IAerodromeCLRouter.sol";
+import {IUniswapV3SwapRouter02} from "./interfaces/external/IUniswapV3SwapRouter02.sol";
 
 /// @title PriimeVault
 /// @notice ERC-7540 fully asynchronous vault (async deposits AND async
@@ -105,7 +105,11 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     address public immutable morphoIrm;
     uint256 public immutable morphoLltv;
     address public immutable swapRouter;
-    int24 public immutable poolTickSpacing;
+    /// @notice Uniswap V3 pool fee tier (in 1e-6 units) the vault swaps
+    ///         through. Base's deepest USDe/USDC pool sits at fee 500
+    ///         (0.05%). Pinned at construction so a compromised operator
+    ///         cannot re-route the swap through a shallower pool.
+    uint24 public immutable poolFee;
 
     /// @notice Latest attested NAV in asset base units; what backs outstanding
     ///         shares. `totalAssets()` returns this.
@@ -340,7 +344,7 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
         address morphoIrm;
         uint256 morphoLltv;
         address swapRouter;
-        int24 poolTickSpacing;
+        uint24 poolFee;
     }
 
     error ZeroStrategyConfigField();
@@ -356,7 +360,7 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
         if (
             _strategy.collateralToken == address(0) || _strategy.morpho == address(0)
                 || _strategy.morphoOracle == address(0) || _strategy.morphoIrm == address(0)
-                || _strategy.morphoLltv == 0 || _strategy.swapRouter == address(0) || _strategy.poolTickSpacing == 0
+                || _strategy.morphoLltv == 0 || _strategy.swapRouter == address(0) || _strategy.poolFee == 0
         ) revert ZeroStrategyConfigField();
         serviceManager = _serviceManager;
         strategist = _strategist;
@@ -366,7 +370,7 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
         morphoIrm = _strategy.morphoIrm;
         morphoLltv = _strategy.morphoLltv;
         swapRouter = _strategy.swapRouter;
-        poolTickSpacing = _strategy.poolTickSpacing;
+        poolFee = _strategy.poolFee;
     }
 
     /// @dev The Morpho MarketParams tuple this vault is bound to. Built from
@@ -428,9 +432,9 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
                 revert PlanSelectorRefused(target, sel);
             }
         } else if (target == swapRouter) {
-            if (sel != IAerodromeCLRouter.exactInputSingle.selector) revert PlanSelectorRefused(target, sel);
-            IAerodromeCLRouter.ExactInputSingleParams memory p =
-                abi.decode(data[4:], (IAerodromeCLRouter.ExactInputSingleParams));
+            if (sel != IUniswapV3SwapRouter02.exactInputSingle.selector) revert PlanSelectorRefused(target, sel);
+            IUniswapV3SwapRouter02.ExactInputSingleParams memory p =
+                abi.decode(data[4:], (IUniswapV3SwapRouter02.ExactInputSingleParams));
             if (p.recipient != address(this)) revert PlanReceiverNotSelf(p.recipient);
         } else if (target == asset() || target == collateralToken) {
             if (sel != IERC20.approve.selector) revert PlanSelectorRefused(target, sel);
@@ -493,7 +497,7 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///         here, and pulls the same `debtRepay` back at the end. Inside
     ///         the callback we (1) repay `assets` of Morpho debt, (2) pull
     ///         `collateralOut` USDe of freed collateral, (3) swap it back to
-    ///         USDC through the pinned Aerodrome pool, (4) re-approve the
+    ///         USDC through the pinned Uniswap V3 pool, (4) re-approve the
     ///         flashloan repayment. Net inflow to the vault is
     ///         `usdcOut - assets` = `proportion * nav - slippage`, which is
     ///         exactly what a proportional redemption needs to satisfy the
@@ -510,14 +514,17 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///        amount of Morpho debt this callback repays (they are the same
     ///        by construction of `plan_deleverage`).
     /// @param data ABI-encoded `(uint256 collateralOut, uint256 minUsdcOut,
-    ///        uint256 deadline)`. `collateralOut` is the USDe amount pulled
-    ///        from Morpho after the repay; `minUsdcOut` is the operator
-    ///        quorum's slippage floor on the USDe -> USDC swap; `deadline`
-    ///        gates the Aerodrome call the same way the open-position swap
-    ///        does.
+    ///        uint256 _reserved, uint256 sharesToRepay)`. `collateralOut`
+    ///        is the USDe amount pulled from Morpho after the repay;
+    ///        `minUsdcOut` is the operator quorum's slippage floor on the
+    ///        USDe -> USDC swap; `sharesToRepay` is the Morpho share
+    ///        amount to burn against the current debt. The third slot is
+    ///        reserved (was `deadline` before the Uniswap V3 migration,
+    ///        kept for wire-format stability so plan builders can be
+    ///        upgraded independently of on-chain contracts).
     function onMorphoFlashLoan(uint256 assets, bytes calldata data) external override {
         if (msg.sender != address(morpho)) revert FlashLoanCallerNotMorpho(msg.sender);
-        (uint256 collateralOut, uint256 minUsdcOut, uint256 deadline, uint256 sharesToRepay) =
+        (uint256 collateralOut, uint256 minUsdcOut,, uint256 sharesToRepay) =
             abi.decode(data, (uint256, uint256, uint256, uint256));
 
         // 1. Repay Morpho debt by SHARES so accrued interest between the
@@ -538,24 +545,28 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
         //    position undercollateralised.
         morpho.withdrawCollateral(_marketParams(), collateralOut, address(this), address(this));
 
-        // 3. Swap USDe -> USDC through the pinned Aerodrome pool. `minUsdcOut`
-        //    is the operator quorum's slippage floor, computed off the same
-        //    TWAP the strike attests; the swap reverts if the pool has moved
-        //    outside that window between the operator's read and this call.
+        // 3. Swap USDe -> USDC through the pinned Uniswap V3 pool.
+        //    `minUsdcOut` is the operator quorum's slippage floor,
+        //    computed off the same TWAP the strike attests; the swap
+        //    reverts if the pool has moved outside that window between
+        //    the operator's read and this call. SwapRouter02 drops the
+        //    per-swap `deadline`; the whole plan step is atomic in one
+        //    tx so the pool state at call time is the state the quorum
+        //    priced against.
         IERC20(collateralToken).forceApprove(swapRouter, collateralOut);
-        uint256 usdcOut = IAerodromeCLRouter(swapRouter)
+        uint256 usdcOut = IUniswapV3SwapRouter02(swapRouter)
             .exactInputSingle(
-                IAerodromeCLRouter.ExactInputSingleParams({
+                IUniswapV3SwapRouter02.ExactInputSingleParams({
                     tokenIn: collateralToken,
                     tokenOut: asset(),
-                    tickSpacing: poolTickSpacing,
+                    fee: poolFee,
                     recipient: address(this),
-                    deadline: deadline,
                     amountIn: collateralOut,
                     amountOutMinimum: minUsdcOut,
                     sqrtPriceLimitX96: 0
                 })
             );
+
         if (usdcOut < minUsdcOut) revert DeleverageSlippage(usdcOut, minUsdcOut);
 
         // 4. Grant Morpho the allowance it needs to pull the flashloan back.
