@@ -766,10 +766,10 @@ pub fn nav_usdc(
     })?;
     let collateral_value = priced_collateral_usdc(collateral_1e18, price_1e24);
     /* Exit-slippage reserve on the collateral leg. 50 bps matches the swap
-       slippage tolerance `plan_deleverage` passes to Uniswap V3, so any
-       execution price INSIDE that tolerance still lands the vault at or
-       above the escrow floor after `_fulfillRedeems`. Cheap to keep at
-       zero when the vault is unlevered (no collateral, no exit swap). */
+    slippage tolerance `plan_deleverage` passes to Uniswap V3, so any
+    execution price INSIDE that tolerance still lands the vault at or
+    above the escrow floor after `_fulfillRedeems`. Cheap to keep at
+    zero when the vault is unlevered (no collateral, no exit swap). */
     let exit_reserve = collateral_value / U256::from(200u16); // 50 bps
     Ok((collateral_value + U256::from(folded_idle)).saturating_sub(debt_usdc + exit_reserve))
 }
