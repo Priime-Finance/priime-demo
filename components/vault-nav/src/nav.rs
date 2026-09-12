@@ -742,6 +742,16 @@ pub fn check_hf_floor(
 /// Attested NAV in USDC base units. Errors if the vault's idle balance is
 /// below the escrow floor (pending deposits + claimable redemptions); floors
 /// at zero if debt exceeds assets.
+///
+/// Applies a 50 bps `exit-slippage reserve` against the collateral leg so a
+/// full 100 %-of-supply redeem has DEX-slippage headroom on the way out:
+/// `plan_deleverage` sizes its swap against nav, and any Uniswap execution
+/// price gap versus TWAP would otherwise leave the vault a few bps below
+/// the escrow floor and revert every strike (Khaled review). The reserve is
+/// the same shape every mature vault carries (Yearn's `performanceFee`,
+/// Beefy's exit fee): an implicit charge the last redeemer eats so the
+/// vault can honor withdrawals atomically. Zero-collateral vaults skip it,
+/// so a fully-unwound vault attests nav = idle-USDC exactly.
 pub fn nav_usdc(
     collateral_1e18: u128,
     price_1e24: U256,
@@ -755,7 +765,13 @@ pub fn nav_usdc(
         format!("escrow floor breached: idle {usdc_balance} < pending+claimable {floor}")
     })?;
     let collateral_value = priced_collateral_usdc(collateral_1e18, price_1e24);
-    Ok((collateral_value + U256::from(folded_idle)).saturating_sub(debt_usdc))
+    /* Exit-slippage reserve on the collateral leg. 50 bps matches the swap
+       slippage tolerance `plan_deleverage` passes to Uniswap V3, so any
+       execution price INSIDE that tolerance still lands the vault at or
+       above the escrow floor after `_fulfillRedeems`. Cheap to keep at
+       zero when the vault is unlevered (no collateral, no exit swap). */
+    let exit_reserve = collateral_value / U256::from(200u16); // 50 bps
+    Ok((collateral_value + U256::from(folded_idle)).saturating_sub(debt_usdc + exit_reserve))
 }
 
 /// Measured LTV in bps: debt / priced_collateral. Zero when there is no
@@ -1235,12 +1251,11 @@ mod tests {
 
     #[test]
     fn preset_equity_haircut_sized_in_nav_not_collateral() {
-        // 100 USDe collateral at par, 60 USDC debt -> NAV 40 USDC pre-haircut.
-        // Old (collateral-price) Conservative would haircut 100 bps of the
-        // 100 USDC collateral leg (1 USDC) -> NAV 39 USDC. That is 2.5%
-        // of equity, leverage-amplified.
-        // New (equity) haircut = 100 bps of NAV = 0.40 USDC -> NAV 39.60 USDC.
-        // Independent of leverage.
+        // 100 USDe collateral at par, 60 USDC debt.
+        // Gross NAV (collateral + idle - debt) = 100 - 60 = 40 USDC.
+        // Exit-slippage reserve (50 bps of collateral leg) = 0.50 USDC.
+        // Pre-preset NAV = 40 - 0.50 = 39.50 USDC.
+        // Conservative equity haircut (100 bps) applied on top -> 39.105 USDC.
         let nav = nav_usdc(
             100_000_000_000_000_000_000u128, // 100 USDe collateral
             U256::from(PAR_PRICE_1E24),
@@ -1250,10 +1265,10 @@ mod tests {
             0,
         )
         .unwrap();
-        assert_eq!(nav, U256::from(40_000_000u64));
+        assert_eq!(nav, U256::from(39_500_000u64));
         let haircut = preset_equity_haircut_bps(RiskPreset::Conservative);
         let attested = nav * U256::from(10_000 - haircut) / U256::from(10_000u16);
-        assert_eq!(attested, U256::from(39_600_000u64));
+        assert_eq!(attested, U256::from(39_105_000u64));
     }
 
     #[test]
@@ -1375,7 +1390,9 @@ mod tests {
     #[test]
     fn nav_is_collateral_value_plus_folded_idle_minus_debt() {
         // 2499.027723 USDe at par, debt 1999.228459, no idle: the loop-entry
-        // position. NAV = 2499.027723 - 1999.228459 = 499.799264.
+        // position. Gross nav = 2499.027723 - 1999.228459 = 499.799264.
+        // Exit-slippage reserve = 50 bps of collateral leg = 12.495138 USDC.
+        // Attested nav = 499.799264 - 12.495138 = 487.304126.
         let nav = nav_usdc(
             2_499_027_723_000_000_000_000u128,
             U256::from(PAR_PRICE_1E24),
@@ -1385,7 +1402,7 @@ mod tests {
             0,
         )
         .unwrap();
-        assert_eq!(nav, U256::from(499_799_264u128));
+        assert_eq!(nav, U256::from(487_304_126u128));
     }
 
     #[test]
