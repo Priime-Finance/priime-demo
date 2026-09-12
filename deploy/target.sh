@@ -7,7 +7,7 @@
 #
 # The premise: deploy/fork.config.json describes an anvil fork OF BASE MAINNET
 # at a pinned block, using the real protocol addresses (real USDC, real USDe,
-# real Morpho Blue, real Aerodrome). So almost nothing in these scripts is
+# real Morpho Blue, real Uniswap V3). So almost nothing in these scripts is
 # actually fork-specific. The market is the same market either way, and it
 # stays in fork.config.json, shared by every target. What genuinely differs is
 # small:

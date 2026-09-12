@@ -5,8 +5,8 @@
 //! - Prices use the Morpho oracle scale for this market: 1e24 (36 + 6 - 18).
 //!   Collateral value in USDC base units = collateral_1e18 * price_1e24 / 1e36.
 //! - Collateral is priced at min(par, pool TWAP): par is 1 USDC per USDe
-//!   (1e24 in oracle scale), the TWAP comes from the Aerodrome Slipstream
-//!   pool's tick cumulatives at `inputs_block`.
+//!   (1e24 in oracle scale), the TWAP comes from the Uniswap V3 pool's
+//!   tick cumulatives at `inputs_block`.
 //! - Debt uses Morpho share math: interest accrued since `lastUpdate` via
 //!   the IRM's Taylor-compounded rate, then shares -> assets rounded UP
 //!   (virtual shares 1e6, virtual assets 1), so debt is never understated.

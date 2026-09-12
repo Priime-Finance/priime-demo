@@ -20,7 +20,7 @@
 #   5. registers three operators with EPHEMERAL per-run keys (on a Base fork
 #      the well-known anvil addresses carry EIP-7702 delegations and cannot
 #      be ECDSA signers; fresh random keys are code-free),
-#   6. ensures the Aerodrome pool's observation cardinality covers the TWAP
+#   6. ensures the Uniswap V3 pool's observation cardinality covers the TWAP
 #      window across the loop-entry swaps (permissionless, standard call),
 #   7. starts THREE Priime nodes against the fork, deploys the service to
 #      each, and waits for the first cron strike to land in the vault

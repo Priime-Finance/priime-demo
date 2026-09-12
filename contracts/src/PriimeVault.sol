@@ -519,9 +519,9 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///        `minUsdcOut` is the operator quorum's slippage floor on the
     ///        USDe -> USDC swap; `sharesToRepay` is the Morpho share
     ///        amount to burn against the current debt. The third slot is
-    ///        reserved (was `deadline` before the Uniswap V3 migration,
-    ///        kept for wire-format stability so plan builders can be
-    ///        upgraded independently of on-chain contracts).
+    ///        reserved and kept for wire-format stability so plan
+    ///        builders can be upgraded independently of on-chain
+    ///        contracts.
     function onMorphoFlashLoan(uint256 assets, bytes calldata data) external override {
         if (msg.sender != address(morpho)) revert FlashLoanCallerNotMorpho(msg.sender);
         (uint256 collateralOut, uint256 minUsdcOut,, uint256 sharesToRepay) =

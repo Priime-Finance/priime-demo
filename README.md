@@ -89,7 +89,8 @@ handlers on top; the market itself is unchanged.
 | AdaptiveCurveIRM (real) | `0x46415998764C29aB2a25CbeA6254146D50D22687` |
 | Morpho market id (real, USDe/USDC 91.5% LLTV) | `0x54cf9be57fdfa6457a660991907434ff9d295c465a603a50126ff647d50b7354` |
 | Market oracle (real, Chainlink-backed timelock) | `0xF4b17C79492d68775e22e8Dd0a2Bb22854A39A47` |
-| Aerodrome USDe/USDC pool (real, entry leg) | `0x15BC08D2E2B405afeD3fB872DCd2d962BcCfB7e0` |
+| Uniswap V3 USDe/USDC pool (real, entry leg) | `0xedAf6Ca46FB852D4AB0A2e9449d267cf03213F05` |
+| Uniswap V3 SwapRouter02 (real) | `0x2626664c2603336E57B271c5C0b26F421741e481` |
 
 To run: fill in `.env.mainnet` (see the template at the repo root) with
 `PRIIME_RPC_URL`, the four `PRIIME_*_KEY` role keys and a `LOOP_SERVER_TOKEN`,

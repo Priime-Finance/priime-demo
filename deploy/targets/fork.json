@@ -1,5 +1,5 @@
 {
-  "_comment": "TARGET=fork (the default): an anvil fork OF BASE MAINNET at the block pinned in fork.config.json, served on chain id 31337. Everything that matters -- the Morpho Blue USDe/USDC market, the tokens, the Aerodrome route, the strategy parameters -- is shared with TARGET=mainnet and lives in fork.config.json, because this fork IS Base. Only what is genuinely local is below. This file reproduces the pre-TARGET behaviour of the deploy scripts exactly; changing a value here changes what the fork run does.",
+  "_comment": "TARGET=fork (the default): an anvil fork OF BASE MAINNET at the block pinned in fork.config.json, served on chain id 31337. Everything that matters -- the Morpho Blue USDe/USDC market, the tokens, the Uniswap V3 route, the strategy parameters -- is shared with TARGET=mainnet and lives in fork.config.json, because this fork IS Base. Only what is genuinely local is below. This file reproduces the pre-TARGET behaviour of the deploy scripts exactly; changing a value here changes what the fork run does.",
   "name": "fork",
   "description": "anvil fork of Base mainnet at a pinned block",
   "protocol_config": "fork.config.json",

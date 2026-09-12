@@ -39,9 +39,7 @@ sol! {
     );
     // Uniswap V3 CLPool `slot0()` returns 7 words: sqrtPriceX96, tick,
     // observationIndex, observationCardinality, observationCardinalityNext,
-    // feeProtocol (per-pool protocol fee split), unlocked. Aerodrome's
-    // Slipstream fork drops `feeProtocol` (protocol/unstaked fees live
-    // elsewhere in that codebase), which is why the old ABI here had 6.
+    // feeProtocol (per-pool protocol fee split), unlocked.
     function slot0() external view returns (
         uint160 sqrtPriceX96, int24 tick, uint16 observationIndex,
         uint16 observationCardinality, uint16 observationCardinalityNext,

@@ -122,7 +122,7 @@ echo "  price = $PRICE (USDC per USDe = $(echo "scale=6; $PRICE/1000000000000000
 [ "$(echo "$PRICE > 0" | bc)" = 1 ] || { echo "FAILED: zero oracle price"; exit 1; }
 
 # --- 5. smoke: DEX route liquidity ------------------------------------------
-say "swap route: Aerodrome Slipstream USDe/USDC pool $POOL"
+say "swap route: Uniswap V3 USDe/USDC pool $POOL"
 PU=$(cast call "$COLL" 'balanceOf(address)(uint256)' "$POOL" --rpc-url "$RPC" | awk '{print $1}')
 PC=$(cast call "$LOAN" 'balanceOf(address)(uint256)' "$POOL" --rpc-url "$RPC" | awk '{print $1}')
 LIQ=$(cast call "$POOL" 'liquidity()(uint128)' --rpc-url "$RPC" | awk '{print $1}')
