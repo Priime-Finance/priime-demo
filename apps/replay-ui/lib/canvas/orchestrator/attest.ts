@@ -52,7 +52,7 @@
  *
  * ── THERE IS NO `Processor` INTERFACE IN THIS REPO ────────────────────────
  *
- * `grep` returns zero for it, so this file writes against the shape a WAVS
+ * `grep` returns zero for it, so this file writes against the shape a Priime
  * service handler actually receives:
  *
  *     Envelope      { bytes20 eventId; bytes12 ordering; bytes payload }

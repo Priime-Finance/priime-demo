@@ -1,7 +1,7 @@
 # hello-nav
 
 Operator component for the M1 demo. Implements the `run` export of
-`wavs:operator@2.7.0`'s `wavs-world`.
+`priime:operator@3.0.0`'s `priime-world`.
 
 ## What it does
 
@@ -12,7 +12,7 @@ payload and the aggregator submits it on-chain to `HelloNavHandler`.
 
 ## Why it exists
 
-Retires M1's riskiest unknown: authoring a WAVS component from scratch against
+Retires M1's riskiest unknown: authoring a Priime component from scratch against
 the WIT world. It proves the full toolchain path (bindings generation, build to
 `wasm32-wasip2`, valid component exports) end to end.
 

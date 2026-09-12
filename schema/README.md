@@ -12,7 +12,7 @@ faithful transcriptions, and the two samples validate against all three.
 | `schema_version` | `"1.0.0"` | Frozen version marker. |
 | `strike_id` | string | Unique per strike. Convention: `"<service_id>:<trigger.block>"`. Primary key for replay + live API. |
 | `status` | `pending` \| `settled` \| `stalled` \| `rejected` | Lifecycle (see below). |
-| `service_id` | string (hex) | WAVS service id, the vault's operator set. |
+| `service_id` | string (hex) | Priime service id, the vault's operator set. |
 | `vault` | `{chain_id, address}` | The vault whose NAV is attested. |
 | `component_digest` | `sha256:<64hex>` | Digest of the NAV wasm every operator ran. |
 | `trigger` | `{type, block, tx_hash?}` | What fired the strike (`cron` for NAV strikes; `tx_hash` null for cron/block). |

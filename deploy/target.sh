@@ -83,7 +83,7 @@ required_env() {
 
 # --- chain ------------------------------------------------------------------
 CHAIN_ID=$(tcfg_req .chain_id)
-CHAIN="evm:$CHAIN_ID"                     # ChainKey as WAVS spells it
+CHAIN="evm:$CHAIN_ID"                     # ChainKey as Priime spells it
 CHAIN_KIND=$(tcfg_req .chain.kind)        # anvil-fork | live
 if [ "$CHAIN_KIND" = "anvil-fork" ]; then IS_FORK=1; else IS_FORK=0; fi
 STATE_DIR="$DEPLOY/$(tcfg_req .state_dir)"
@@ -154,7 +154,7 @@ role_addr() {
 }
 
 # Guard for scripts whose node config needs a shared mnemonic (deploy.sh puts
-# one in wavs.toml as signing_mnemonic and derives operator/signer from
+# one in priime.toml as signing_mnemonic and derives operator/signer from
 # indices 0 and 1). Fails loudly rather than inventing one.
 require_mnemonic_target() {
   [ "$KEY_SOURCE" = "mnemonic" ] \

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.27;
 
-import {IWavsServiceHandler} from "./IWavsServiceHandler.sol";
+import {IPriimeServiceHandler} from "./IPriimeServiceHandler.sol";
 
 /**
- * @title IWavsServiceManager
+ * @title IPriimeServiceManager
  * @author Lay3r Labs
  * @notice Interface for the Wavs service manager
  * @dev This interface defines the functions and events for the Wavs service manager
  */
-interface IWavsServiceManager {
+interface IPriimeServiceManager {
     // ------------------------------------------------------------------------
     // Custom Errors
     // ------------------------------------------------------------------------
@@ -64,8 +64,8 @@ interface IWavsServiceManager {
      * @param signatureData The signature data.
      */
     function validate(
-        IWavsServiceHandler.Envelope calldata envelope,
-        IWavsServiceHandler.SignatureData calldata signatureData
+        IPriimeServiceHandler.Envelope calldata envelope,
+        IPriimeServiceHandler.SignatureData calldata signatureData
     ) external view;
 
     /**

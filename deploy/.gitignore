@@ -1,5 +1,5 @@
 # Per-target run artifacts written by fork.sh / vault-service.sh / enter-loop.sh
-# (pidfiles, wasm copies, the WAVS node home, vault-service.json, logs).
+# (pidfiles, wasm copies, the Priime node home, vault-service.json, logs).
 # deploy/.fork/ is also listed in the root .gitignore; every other target's
 # state dir is covered here, so adding a target does not need a second edit
 # somewhere else.

@@ -7,7 +7,7 @@
  * merge exists. `VaultDetail` renders a COMPOSITION: a record the builder
  * priced, whose APY, projection, capacity and automation instruments are
  * modeled and say so. This renders a DEPLOYMENT: a handler on a chain, a cron
- * on the shared WAVS service, and the journals its operator quorum signed.
+ * on the shared Priime service, and the journals its operator quorum signed.
  * Nothing here is modeled, so nothing here is labeled modeled; and nothing a
  * deployment cannot know is drawn with a placeholder number in it. A page with
  * four honest tiles beats a page with nine tiles and five inventions.
@@ -321,7 +321,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
             <h2 className="vxd-sec-h">Overview</h2>
             <div className="vx-panel">
               <p className="vxd-desc">
-                This loop runs as one workflow on the shared WAVS service. On every cron tick the
+                This loop runs as one workflow on the shared Priime service. On every cron tick the
                 component re-reads the position at a pinned block, the operator set signs the result,
                 and the handler accepts the packet only after it has checked that signature against
                 the registry.

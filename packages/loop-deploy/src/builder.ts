@@ -1,5 +1,5 @@
 /**
- * service.json mutation for Option A: one shared WAVS service, one workflow
+ * service.json mutation for Option A: one shared Priime service, one workflow
  * per loop.
  *
  * The builder never constructs a workflow from scratch. It CLONES an
@@ -18,7 +18,7 @@ import { randomBytes } from "node:crypto";
 
 import { isRecord } from "./guards.ts";
 
-/** Matches wavs_types WorkflowId: `[a-z0-9-_]{3,36}`. */
+/** Matches priime_types WorkflowId: `[a-z0-9-_]{3,36}`. */
 const WORKFLOW_ID_RE = /^[a-z0-9_-]{3,36}$/;
 
 export class ServiceDocError extends Error {

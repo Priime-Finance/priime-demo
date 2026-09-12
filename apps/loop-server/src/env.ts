@@ -10,7 +10,7 @@ export interface ServerEnv {
   authToken: string;
   rpcUrl: string;
   chainId: number;
-  /** ChainKey as WAVS spells it, e.g. "evm:31337". */
+  /** ChainKey as Priime spells it, e.g. "evm:31337". */
   chainKey: string;
   managerAddress: string;
   ownerKey: string;

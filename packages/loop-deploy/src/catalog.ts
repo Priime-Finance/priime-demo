@@ -27,7 +27,7 @@
 export interface MarketSpec {
   /** Composer id: primary key here and on `apps/replay-ui/lib/canvas`. */
   candidateId: string;
-  /** WAVS chain key the aggregator submits on. */
+  /** Priime chain key the aggregator submits on. */
   chainKey: string;
   /** Chain id the entry is for, derived from `chainKey` for filtering. */
   chainId: number;
@@ -60,7 +60,7 @@ export interface MarketSpec {
 /**
  * USDe/USDC on Morpho Blue  -  Base. Addresses match the workflow
  * `deploy/vault-service.sh` deploys against the local anvil fork of Base at
- * block 49911282. `chainKey` is the fork's WAVS id (evm:31337); the real
+ * block 49911282. `chainKey` is the fork's Priime id (evm:31337); the real
  * Base run bumps this to evm:8453 alongside a fresh workflow deploy.
  */
 export const USDE_USDC_MORPHO_BASE: MarketSpec = {

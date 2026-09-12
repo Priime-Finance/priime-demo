@@ -10,8 +10,8 @@ operator and its lie is rejected while the honest quorum settles the truth.
 
 ```
 components/
-  hello-nav/          # operator component (wavs:operator@2.7.0), returns nav=42
-  hello-aggregator/   # aggregator component (wavs:aggregator@2.7.0), submits to the handler
+  hello-nav/          # operator component (priime:operator@3.0.0), returns nav=42
+  hello-aggregator/   # aggregator component (priime:aggregator@3.0.0), submits to the handler
   vault-nav/          # operator component (priime-vault-nav): prices a real loop's NAV
 contracts/
   src/HelloNavHandler.sol   # M1 handler: validates operator sigs, records the attested NAV
@@ -32,7 +32,7 @@ apps/replay-ui/             # Next.js frontend: the build canvas, the vault page
 
 Each component has its own README explaining what it does and why. This
 top-level README covers the M1 hello-world pipeline below, the minimal path
-through WAVS. For the fuller demo (compose a loop in the browser, publish
+through Priime. For the fuller demo (compose a loop in the browser, publish
 it, watch real attested strikes land on a live `PriimeVault`), see
 `docs/LIVE_DEMO.md`.
 
@@ -82,7 +82,7 @@ To run: fill in `.env.mainnet` (see the template at the repo root) with
 then `env $(grep -v '^#' .env.mainnet | xargs) TARGET=mainnet deploy/vault-service.sh`.
 Same script the fork uses. See `docs/LIVE_DEMO.md` for the full pipeline.
 
-## M1: hello-world through the full WAVS pipeline (on anvil)
+## M1: hello-world through the full Priime pipeline (on anvil)
 
 A hello-world component through the whole pipeline: scaffold, build, deploy, a
 cron trigger fires, and the result lands in a handler contract on-chain.
@@ -100,7 +100,7 @@ Also required: Foundry (`anvil`/`cast`/`forge`), Rust with the `wasm32-wasip2`
 target (pinned in `rust-toolchain.toml`), and these Docker images:
 
 ```
-ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15
+ghcr.io/priime-finance/priime:3.0.0
 ghcr.io/lay3rlabs/poa-middleware:1.0.1
 ```
 
@@ -112,14 +112,14 @@ bash deploy/deploy.sh
 
 It builds both components, deploys the POA service manager + `HelloNavHandler`,
 publishes the components + service to IPFS, assembles and deploys the service
-(cron every 10s), registers the single operator, starts the WAVS node, and waits
+(cron every 10s), registers the single operator, starts the Priime node, and waits
 for the first strike to land. Expected tail:
 
 ```
 SUCCESS: strikeCount=1 latestNav=42
 ```
 
-Inspect the running node with `docker logs wavs-m1`. The script is re-runnable
+Inspect the running node with `docker logs priime-m1`. The script is re-runnable
 (fresh service manager + handler each run). It uses the well-known anvil test
 mnemonic; local development only.
 

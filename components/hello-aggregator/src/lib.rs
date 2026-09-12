@@ -1,13 +1,13 @@
-//! Minimal WAVS aggregator for the verifiable-vaults M1 demo.
+//! Minimal Priime aggregator for the verifiable-vaults M1 demo.
 //!
-//! Implements `wavs:aggregator@2.7.0`'s `aggregator-world`. For each operator
+//! Implements `priime:aggregator@3.0.0`'s `aggregator-world`. For each operator
 //! response it emits one EVM submit action per configured submit chain,
 //! targeting the workflow's service-handler address (`HelloNavHandler`). No
 //! timer batching and no gas oracle: submit immediately and let the node pay
 //! default gas. This is the piece that turns a signed operator result into the
 //! on-chain `handleSignedEnvelope` call.
 
-use crate::wavs::{
+use crate::priime::{
     aggregator::output::{EvmSubmitAction, SubmitAction},
     types::{chain::EvmAddress, service::Submit},
 };

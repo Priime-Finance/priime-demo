@@ -1,5 +1,5 @@
 /**
- * A service document shaped like what deploy/vault-service.sh's wavs-cli run
+ * A service document shaped like what deploy/vault-service.sh's priime-cli run
  * produces: one cron workflow (vault-nav) with an aggregator submit. The
  * `x_future_field` entries stand in for schema additions the builder must
  * pass through untouched, and the timestamps exceed 2^53 on purpose.
@@ -77,7 +77,7 @@ export function fixtureServiceText(): string {
     2,
   )
     // Inject >2^53 nanos timestamps as raw JSON so the fixture matches what
-    // wavs-cli emits (JSON.stringify of a JS number would corrupt them).
+    // priime-cli emits (JSON.stringify of a JS number would corrupt them).
     .replace('"start_time": null', '"start_time": 1786611911000000001')
     .replace('"end_time": null', '"end_time": 1786615511000000003');
 }

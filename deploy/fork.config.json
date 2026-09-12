@@ -51,7 +51,7 @@
     "provenance": "GeckoTerminal USDe pools on Base (deepest USDe/USDC pool); Basescan label 'Aerodrome: SlipStream Swap Router'; pool token0/token1/balances/liquidity and router.factory==pool.factory confirmed on-chain at pinned block"
   },
   "service": {
-    "_comment": "Vault WAVS service (one service manager, one workflow: cron -> vault-nav -> aggregator -> PriimeVault). twap_window_secs bounds the Aerodrome TWAP used for min(par, TWAP) collateral pricing; inputs_block_lag is how far behind head the component pins its reads (NAV-03 self-determined height); observation_cardinality is the pool ring-buffer size ensured at bring-up so the TWAP window stays answerable across the loop-entry swaps (cardinality is 1 on mainnet at the pinned block). These three are properties of the market and the component, so they are shared across targets. The strike CADENCE is not: it is a cost, and it lives per target in deploy/targets/<target>.json.",
+    "_comment": "Vault Priime service (one service manager, one workflow: cron -> vault-nav -> aggregator -> PriimeVault). twap_window_secs bounds the Aerodrome TWAP used for min(par, TWAP) collateral pricing; inputs_block_lag is how far behind head the component pins its reads (NAV-03 self-determined height); observation_cardinality is the pool ring-buffer size ensured at bring-up so the TWAP window stays answerable across the loop-entry swaps (cardinality is 1 on mainnet at the pinned block). These three are properties of the market and the component, so they are shared across targets. The strike CADENCE is not: it is a cost, and it lives per target in deploy/targets/<target>.json.",
     "twap_window_secs": 1800,
     "inputs_block_lag": 2,
     "observation_cardinality": 64

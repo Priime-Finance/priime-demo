@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {IWavsServiceHandler} from "./interfaces/wavs/IWavsServiceHandler.sol";
-import {IWavsServiceManager} from "./interfaces/wavs/IWavsServiceManager.sol";
+import {IPriimeServiceHandler} from "./interfaces/priime/IPriimeServiceHandler.sol";
+import {IPriimeServiceManager} from "./interfaces/priime/IPriimeServiceManager.sol";
 
 /// @title HelloNavHandler
-/// @notice Minimal WAVS service handler for the verifiable-vaults M1 demo: the
+/// @notice Minimal Priime service handler for the verifiable-vaults M1 demo: the
 ///         on-chain end of the pipeline where an attested NAV strike lands.
 /// @dev The operator set signs the envelope the `priime-hello-nav` component
 ///      produced; the aggregator submits it here. This contract validates the
 ///      signatures via the service manager, guards against replay on
 ///      `eventId`, decodes the `(nav, blockNumber)` payload, and records it.
-contract HelloNavHandler is IWavsServiceHandler {
+contract HelloNavHandler is IPriimeServiceHandler {
     /// @notice Service manager (POA stake registry) that validates operator sigs.
-    IWavsServiceManager public immutable serviceManager;
+    IPriimeServiceManager public immutable serviceManager;
 
     /// @notice Most recent attested NAV (base units) and the block it referenced.
     uint256 public latestNav;
@@ -28,12 +28,12 @@ contract HelloNavHandler is IWavsServiceHandler {
     error AlreadyProcessed(bytes20 eventId);
     error ZeroServiceManager();
 
-    constructor(IWavsServiceManager _serviceManager) {
+    constructor(IPriimeServiceManager _serviceManager) {
         if (address(_serviceManager) == address(0)) revert ZeroServiceManager();
         serviceManager = _serviceManager;
     }
 
-    /// @inheritdoc IWavsServiceHandler
+    /// @inheritdoc IPriimeServiceHandler
     function handleSignedEnvelope(Envelope calldata envelope, SignatureData calldata signatureData) external override {
         // Reverts unless the operator quorum signed this exact envelope.
         serviceManager.validate(envelope, signatureData);
@@ -49,7 +49,7 @@ contract HelloNavHandler is IWavsServiceHandler {
         emit NavAttested(envelope.eventId, nav, blockNumber, strikeCount);
     }
 
-    /// @inheritdoc IWavsServiceHandler
+    /// @inheritdoc IPriimeServiceHandler
     function getServiceManager() external view override returns (address) {
         return address(serviceManager);
     }

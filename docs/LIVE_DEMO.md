@@ -15,7 +15,7 @@ that needs no environment setup.
 | Layer | Where | What it does |
 | --- | --- | --- |
 | Chain | `deploy/fork.sh` (`TARGET=fork` only) | Pinned Base mainnet fork on `:8545`, real Morpho USDe/USDC market at block 49911282. Under `TARGET=mainnet` there is no chain to start; the scripts talk to Base itself. |
-| WAVS service | `deploy/vault-service.sh` | Deploys the POA service manager + `PriimeVault`, publishes the vault-nav wasm to IPFS, starts the `wavs-vault` node, waits for the first cron strike. |
+| Priime service | `deploy/vault-service.sh` | Deploys the POA service manager + `PriimeVault`, publishes the vault-nav wasm to IPFS, starts the `priime-vault` node, waits for the first cron strike. |
 | Loop server | `apps/loop-server` (Node HTTP) | Holds the manager owner key. Resolves the composer's `candidateId` against `packages/loop-deploy/src/catalog.ts`, deploys a new handler + workflow on demand, and derives Journal-shaped records from on chain state for the frontend. |
 | Replay UI | `apps/replay-ui` (Next.js) | The `/build` canvas composes the vault; the `Review & publish` modal POSTs to the loop server through `/api/loops`. A published loop is reachable at `/vaults/loop-xxxxxxxx` (see `apps/replay-ui/lib/vaults/live-id.ts`), where `VaultDetail` shows the attested strike ledger. |
 | IPFS | `ipfs daemon` | Hosts the pinned `service.json`. |
@@ -89,7 +89,7 @@ fails loudly, per-variable, the moment something required is missing
   `deploy/targets/mainnet.json` for the tradeoff comment.
 - Per-run artifacts land in `deploy/.mainnet/`.
 - `deploy/deploy.sh` (the top-level M1 hello-world pipeline in the repo
-  README) refuses `TARGET=mainnet` outright: its `wavs.toml` wants one
+  README) refuses `TARGET=mainnet` outright: its `priime.toml` wants one
   shared signing mnemonic, which only a mnemonic-backed target (`fork`) has.
 
 `TARGET=mainnet` moves real money and has not been exercised end to end in
@@ -140,7 +140,7 @@ MetaMask, Brave Wallet, or any injected EVM wallet:
   fork).
 
 The connected address becomes the loop's **strategist** (the exit key on the
-handler contract, independent of WAVS).
+handler contract, independent of Priime).
 
 On `TARGET=mainnet` there is no wallet-setup step here: connect whatever
 wallet holds (or should hold) the account named by `PRIIME_STRATEGIST_KEY`.
@@ -153,7 +153,7 @@ Binaries in `$PATH`: `ipfs`, `docker`, `forge`, `pnpm`, `cast`, `jq`,
 `anvil` is only required for `TARGET=fork`.
 
 Docker daemon running (`sudo rc-service docker start` on Artix). Docker
-images `ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15` and
+images `ghcr.io/priime-finance/priime:3.0.0` and
 `ghcr.io/lay3rlabs/poa-middleware:1.0.1` pulled.
 
 ## Manual startup (no script, `TARGET=fork`)
@@ -237,7 +237,7 @@ which happens to be correct for `TARGET=fork` and only `TARGET=fork` (see
   catalog's addresses with the user's leverage + cadence into the full
   `LoopConfig`, deploys a new `PriimeVault` with the connected wallet as
   `strategist`, clones the template workflow into `service.json`, pins the
-  mutation, and calls `setServiceURI` on the manager. WAVS nodes pick the
+  mutation, and calls `setServiceURI` on the manager. Priime nodes pick the
   new workflow up automatically via the `ServiceURIUpdated` event.
 - `GET /loops/:id/journals` (loop server) reads `NavUpdated` logs off the
   handler, decodes `handleSignedEnvelope` calldata, and emits records that

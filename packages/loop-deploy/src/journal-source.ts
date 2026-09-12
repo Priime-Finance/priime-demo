@@ -165,7 +165,7 @@ const PAYLOAD_TUPLE = [
   },
 ] as const;
 
-/** Envelope tuple as WAVS signs it. */
+/** Envelope tuple as Priime signs it. */
 const ENVELOPE_TUPLE = [
   { type: "bytes20" },
   { type: "bytes12" },

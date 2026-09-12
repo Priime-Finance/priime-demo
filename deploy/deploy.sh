@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# M1: hello-world WAVS component through the full pipeline on anvil.
+# M1: hello-world Priime component through the full pipeline on anvil.
 #
 # Scaffold -> build -> deploy -> cron fires -> result lands in a handler on-chain.
-# Demo-owned: uses the upstream WAVS + POA docker images directly, no priime-pools
+# Demo-owned: uses the upstream Priime + POA docker images directly, no priime-pools
 # coupling. Single operator, single node, local anvil + IPFS.
 #
 # Local harness, not a production path: it deploys a hello-world handler and a
 # component that attests a constant. It reads its chain, keys and cadence from
 # the deploy TARGET like everything else in deploy/, but it REQUIRES a
-# mnemonic-backed target: the node's wavs.toml carries one signing_mnemonic
+# mnemonic-backed target: the node's priime.toml carries one signing_mnemonic
 # and derives the operator and its signing key from indices 0 and 1. A target
 # that takes each key from a separate env var (mainnet) cannot express that,
 # so this script stops rather than inventing a mnemonic.
@@ -16,7 +16,7 @@
 # Prereqs (start these first):
 #   anvil --host 0.0.0.0 --block-time 1          # chainId 31337 on :8545
 #   ipfs daemon                                  # gateway on :8080, api on :5001
-#   docker images: ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15, poa-middleware:1.0.1
+#   docker images: ghcr.io/priime-finance/priime:3.0.1, poa-middleware:1.0.1
 #
 # Re-runnable: redeploys a fresh service manager + handler each run.
 set -euo pipefail
@@ -26,9 +26,9 @@ DEPLOY="$ROOT/deploy"
 source "$DEPLOY/target.sh"                        # TARGET, RPC, CHAIN, CRON_SCHEDULE, helpers
 require_mnemonic_target "deploy.sh"
 GATEWAY="http://127.0.0.1:8080/ipfs/"
-WAVS_IMG="ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15"
+PRIIME_IMG="ghcr.io/priime-finance/priime:3.0.1"
 POA_IMG="ghcr.io/lay3rlabs/poa-middleware:1.0.1"
-NODE="wavs-m1"
+NODE="priime-m1"
 MNEMONIC="$TARGET_MNEMONIC"                       # from the target (fork: the anvil default)
 
 K0=$(role_key owner)                                                      # deployer + operator
@@ -52,16 +52,16 @@ say "build contracts"
 ( cd "$ROOT/contracts" && forge build >/dev/null )
 
 # --- 2. config files --------------------------------------------------------
-# wavs.toml carries all node config (mnemonic + credentials) so no env file with
+# priime.toml carries all node config (mnemonic + credentials) so no env file with
 # spaces is needed. poa.env is unquoted (docker --env-file is literal). .env is
-# empty so wavs-cli's dotenv autoload has nothing to choke on.
-cat > "$DEPLOY/wavs.toml" <<EOF
+# empty so priime-cli's dotenv autoload has nothing to choke on.
+cat > "$DEPLOY/priime.toml" <<EOF
 [default]
 [default.chains.evm.31337]
 ws_endpoints = ["ws://localhost:8545"]
 http_endpoint = "http://localhost:8545"
 
-[wavs]
+[priime]
 ipfs_gateway = "$GATEWAY"
 port = 8041
 host = "0.0.0.0"
@@ -109,7 +109,7 @@ echo "nav=$NAV_CID agg=$AGG_CID"
 
 # --- 6. assemble service.json (cron trigger -> nav -> aggregator -> handler) -
 say "assemble service.json"
-CLI=(docker run --rm --network host -w /data -v "$DEPLOY:/data" "$WAVS_IMG" wavs-cli service \
+CLI=(docker run --rm --network host -w /data -v "$DEPLOY:/data" "$PRIIME_IMG" priime-cli service \
   --json true --home /data --file /data/service.json --ipfs-gateway "$GATEWAY")
 rm -f "$DEPLOY/service.json"
 START=$(date +%s%N); END=$(( START + 3600000000000 ))
@@ -140,17 +140,17 @@ cast send "$SM" "updateOperatorSigningKey(address,bytes)" "$SIGNING_KEY" "$SIG" 
 cast send "$SM" "setServiceURI(string)" "ipfs://$SVC_CID" --private-key "$K0" --rpc-url "$RPC" >/dev/null
 
 # --- 8. run the node --------------------------------------------------------
-say "start WAVS operator node"
+say "start Priime operator node"
 docker rm -f "$NODE" >/dev/null 2>&1 || true
-docker run -d --name "$NODE" --network host -v "$DEPLOY:/root/wavs" "$WAVS_IMG" \
-  wavs --home /root/wavs --ipfs-gateway "$GATEWAY" --host 0.0.0.0 --log-level info >/dev/null
+docker run -d --name "$NODE" --network host -v "$DEPLOY:/root/priime" "$PRIIME_IMG" \
+  priime --home /root/priime --ipfs-gateway "$GATEWAY" --host 0.0.0.0 --log-level info >/dev/null
 for i in $(seq 1 30); do curl -sf http://localhost:8041/services >/dev/null 2>&1 && break; sleep 1; done
 
 # --- 9. deploy the service to the node -------------------------------------
 say "deploy service to node"
-docker run --rm --network host -v "$DEPLOY:/data" "$WAVS_IMG" wavs-cli deploy-service \
+docker run --rm --network host -v "$DEPLOY:/data" "$PRIIME_IMG" priime-cli deploy-service \
   --service-uri "ipfs://$SVC_CID" --log-level=info --data /data/.docker --home /data \
-  --wavs-endpoint http://localhost:8041 --ipfs-gateway "$GATEWAY"
+  --priime-endpoint http://localhost:8041 --ipfs-gateway "$GATEWAY"
 
 # --- 10. wait for the cron-driven strike to land on-chain ------------------
 say "await first attested NAV strike"

@@ -1,6 +1,6 @@
 # hello-aggregator
 
-Aggregator component for the M1 demo. Implements `wavs:aggregator@2.7.0`'s
+Aggregator component for the M1 demo. Implements `priime:aggregator@3.0.0`'s
 `aggregator-world`.
 
 ## What it does
@@ -13,7 +13,7 @@ on-chain `handleSignedEnvelope` call.
 
 ## Why it exists
 
-The WAVS submit path routes operator results through an aggregator component,
+The Priime submit path routes operator results through an aggregator component,
 and there is no off-the-shelf one to reuse here, so this is the minimal version.
 `process-input` and `handle-timer-callback` return the submit action;
 `handle-submit-callback` just propagates the transaction result.

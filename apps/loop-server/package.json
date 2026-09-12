@@ -2,7 +2,7 @@
   "name": "@priime-demo/loop-server",
   "version": "0.1.0",
   "private": true,
-  "description": "Control plane for deploying user loops as workflows on the shared WAVS service. HTTP API behind nginx; holds the service manager owner key.",
+  "description": "Control plane for deploying user loops as workflows on the shared Priime service. HTTP API behind nginx; holds the service manager owner key.",
   "type": "module",
   "scripts": {
     "start": "node src/main.ts",

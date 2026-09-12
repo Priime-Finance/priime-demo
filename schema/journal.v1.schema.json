@@ -35,7 +35,7 @@
     },
     "service_id": {
       "type": "string",
-      "description": "WAVS service id (hex; hash of the service-manager chain+address). Identifies the vault/strategy's operator set."
+      "description": "Priime service id (hex; hash of the service-manager chain+address). Identifies the vault/strategy's operator set."
     },
     "vault": {
       "type": "object",
@@ -96,7 +96,7 @@
           "id": { "$ref": "#/$defs/evm_address", "description": "Operator signing address (recovered from signature; registered in the on-chain operator registry)." },
           "result_hash": { "$ref": "#/$defs/hash32", "description": "keccak256 of result_payload. Equality across operators == agreement. THE hash the demo shows." },
           "nav": { "$ref": "#/$defs/uint_string", "description": "NAV this operator computed, integer string in nav_unit base units." },
-          "signature": { "$ref": "#/$defs/signature", "description": "Operator's secp256k1 signature over the WAVS envelope (eip191). Readable back from the on-chain attestation's aggregated signature set." },
+          "signature": { "$ref": "#/$defs/signature", "description": "Operator's secp256k1 signature over the Priime envelope (eip191). Readable back from the on-chain attestation's aggregated signature set." },
           "timestamp": { "$ref": "#/$defs/unix_secs", "description": "When this operator's submission was observed (unix seconds, UTC)." },
           "accepted": { "type": "boolean", "description": "True if this submission is part of the quorum-winning set (result_hash == quorum.winning_result_hash)." },
           "result_payload": { "$ref": "#/$defs/hex_bytes", "description": "Optional. The abi-encoded result bytes that were hashed+signed. Included so anyone can independently recompute keccak256 and decode nav." }

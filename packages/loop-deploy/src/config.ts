@@ -29,7 +29,7 @@ export class ValidationError extends Error {
 export interface LoopConfigInput {
   /** Optional user-visible name. Falls back to a placeholder when missing. */
   name?: string;
-  /** User address; becomes the handler's strategist (WAVS-independent exit). */
+  /** User address; becomes the handler's strategist (Priime-independent exit). */
   strategist: string;
   /** Strike cadence in seconds. 5..59, or a multiple of 60 up to 3600. */
   cronSeconds: number;
@@ -52,7 +52,7 @@ export interface LoopConfigInput {
 export interface LoopConfig {
   /** Display name, informational only. */
   name: string;
-  /** User address; becomes the handler's strategist (WAVS-independent exit). */
+  /** User address; becomes the handler's strategist (Priime-independent exit). */
   strategist: string;
   /** Strike cadence in seconds. 5..59, or a multiple of 60 up to 3600. */
   cronSeconds: number;

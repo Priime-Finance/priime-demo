@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot local demo: brings up the chain (the pinned fork by default), the
-# WAVS service, the loop server and the replay UI dev server, then opens Brave
+# Priime service, the loop server and the replay UI dev server, then opens Brave
 # on /vault so the Live loops section (with a Deploy loop form) is visible.
 #
 # Target-aware like the rest of deploy/: TARGET=fork (the default) is the
@@ -13,7 +13,7 @@
 # alone if it was already up. Logs land in deploy/.<target>/live-demo/*.log.
 #
 # Cleanup: `bash deploy/run-live-demo.sh stop` shuts down the two servers,
-# the wavs-vault-N containers and anvil (IPFS stays running).
+# the priime-vault-N containers and anvil (IPFS stays running).
 
 set -euo pipefail
 
@@ -59,7 +59,7 @@ if [ "${1:-}" = "stop" ]; then
   say "stopping live-demo servers"
   stop_pidfile "$PIDFILE_LS" "loop-server"
   stop_pidfile "$PIDFILE_UI" "replay-ui"
-  docker rm -f wavs-vault wavs-vault-1 wavs-vault-2 wavs-vault-3 >/dev/null 2>&1 || true
+  docker rm -f priime-vault priime-vault-1 priime-vault-2 priime-vault-3 >/dev/null 2>&1 || true
   # There is only an anvil to stop when we started one.
   if [ "$IS_FORK" = "1" ] && [ -f "$FORKDIR/anvil.pid" ]; then
     pid="$(cat "$FORKDIR/anvil.pid")"
@@ -111,7 +111,7 @@ say "loop-server"
 stop_pidfile "$PIDFILE_LS" "loop-server"
 SVC_JSON="$FORKDIR/vault-service.json"
 SM="$(jq -r .service_manager "$SVC_JSON")"
-DIG="$(jq -r '.workflows | to_entries[0].value.component.source.download.digest' "$FORKDIR/wavs-vault-1/service.json")"
+DIG="$(jq -r '.workflows | to_entries[0].value.component.source.download.digest' "$FORKDIR/priime-vault-1/service.json")"
 
 # Node reaches a local anvil most reliably over the literal loopback address
 # (localhost can resolve to ::1, which anvil is not listening on), so keep the

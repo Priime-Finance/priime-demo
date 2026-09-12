@@ -4,7 +4,7 @@
  * scripts. Users turn dials; the full band set is DERIVED and clamped here.
  *
  * The invariants below are not aesthetic: each encodes a shipped bug class
- * (T5, D4, A1, A3, A9, A12) or an on-chain/WAVS requirement. Do not loosen one
+ * (T5, D4, A1, A3, A9, A12) or an on-chain/Priime requirement. Do not loosen one
  * without reading the incident it encodes. Equally: do not ADD one that
  * restates a constant defined ten lines above it. Three of the five that
  * shipped here did exactly that and were deleted (see the validator note).
@@ -154,7 +154,7 @@ export function deriveHfBands(preset: RiskPreset, appliedLeverage: number, liqLt
 // MM-additive rule (strategy-constants.ts): venue MM = 1/(2·maxLeverage);
 // every band = MM + the SAME absolute pp offset the shipped strategies use.
 // The binding constraint is distance-to-liquidation, an absolute quantity —
-// hence additive, not proportional. All edges snap to 25 bps (the WAVS
+// hence additive, not proportional. All edges snap to 25 bps (the Priime
 // hl_margin.rs quantizer requirement — off-bucket edges break quorum).
 
 export interface HlMarginBandsDerived {

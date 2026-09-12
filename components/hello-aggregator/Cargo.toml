@@ -2,7 +2,7 @@
 name = "priime-hello-aggregator"
 version = "0.1.0"
 edition = "2021"
-description = "Minimal WAVS aggregator (wavs:aggregator@2.7.0) for the verifiable-vaults demo."
+description = "Minimal Priime aggregator (priime:aggregator@3.0.0) for the verifiable-vaults demo."
 license = "MIT"
 
 # Standalone workspace (wasm32-wasip2), detached from the repo-root workspace.

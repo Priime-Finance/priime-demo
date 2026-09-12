@@ -2,7 +2,7 @@
   "name": "@priime-demo/loop-deploy",
   "version": "0.1.0",
   "private": true,
-  "description": "Control-plane library for deploying user loops as workflows on the shared WAVS service: service.json mutation, handler deploys, IPFS pinning, loop registry.",
+  "description": "Control-plane library for deploying user loops as workflows on the shared Priime service: service.json mutation, handler deploys, IPFS pinning, loop registry.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
