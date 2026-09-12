@@ -57,16 +57,6 @@ export function fetchLoopJournals(id: string, limit = 20): Promise<LoopJournalsR
   return getJson<LoopJournalsResponse>(`/api/loops/${encodeURIComponent(id)}/journals${suffix}`);
 }
 
-/** Remove the loop's workflow from the service. Handler stays on-chain;
- *  operators just stop scheduling new triggers. Idempotent server-side. */
-export async function pauseLoop(id: string): Promise<LoopDetailResponse> {
-  const res = await fetch(`/api/loops/${encodeURIComponent(id)}`, { method: "DELETE" });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `pause failed: ${String(res.status)}`);
-  }
-  return (await res.json()) as LoopDetailResponse;
-}
 
 /**
  * Body shape for POST /api/loops. Matches the loop-deploy `LoopConfigInput`

@@ -26,6 +26,20 @@ export class LoopNotFoundError extends Error {
   }
 }
 
+/** Raised when pause is refused because the on-chain vault still has mid-flight deposit or redeem escrow that a workflow removal would strand. */
+export class PauseGuardError extends Error {
+  readonly pendingDepositAssets: bigint;
+  readonly pendingRedeemShares: bigint;
+  constructor(pendingDepositAssets: bigint, pendingRedeemShares: bigint) {
+    super(
+      `refusing to pause: vault has pendingDepositAssets=${pendingDepositAssets.toString()} (USDC base units) and pendingRedeemShares=${pendingRedeemShares.toString()} (vault-share base units). Both must be zero — wait for the next quorum-signed strike to fulfill them, then retry.`,
+    );
+    this.name = "PauseGuardError";
+    this.pendingDepositAssets = pendingDepositAssets;
+    this.pendingRedeemShares = pendingRedeemShares;
+  }
+}
+
 export interface DeployerOptions {
   registry: LoopRegistry;
   chain: ChainPort;
@@ -80,6 +94,17 @@ export class LoopDeployer {
         `candidateId "${config.candidateId}" is not deployable on this server's chain (${this.chainKey})`,
       ]);
     }
+    // Pool preflight: one eth_call to slot0() so a market with a wrong
+    // pool address is rejected here, not diagnosed later from an opaque
+    // WASM `buffer overrun while deserializing` in the operator logs.
+    // Regression pin for the Aerodrome CL → Uniswap V3 migration bug.
+    try {
+      await this.chain.verifyUniswapV3Pool(config.poolAddress);
+    } catch (err) {
+      throw new ValidationError([
+        `poolAddress "${config.poolAddress}" does not respond as a Uniswap V3 pool: ${err instanceof Error ? err.message : String(err)}`,
+      ]);
+    }
     const record = this.registry.create({
       id: `loop-${crypto.randomUUID().slice(0, 8)}`,
       name: config.name,
@@ -103,6 +128,18 @@ export class LoopDeployer {
     const record = this.registry.get(id);
     if (record === null) throw new LoopNotFoundError(id);
     if (record.status === "inactive") return record;
+    // Pre-flight: refuse pause if the on-chain vault would leave any tester's
+    // escrow stranded. `totalPendingDepositAssets` and `totalPendingRedeemShares`
+    // only clear at a quorum-signed strike; if the workflow is removed first,
+    // there is nothing left to fulfill them. Handler-less loops (still
+    // scaffolding) skip: no vault means nothing to strand.
+    if (record.handlerAddress !== null) {
+      const { pendingDepositAssets, pendingRedeemShares } =
+        await this.chain.vaultPendingBalances(record.handlerAddress);
+      if (pendingDepositAssets > 0n || pendingRedeemShares > 0n) {
+        throw new PauseGuardError(pendingDepositAssets, pendingRedeemShares);
+      }
+    }
     try {
       // Deploys that never reached the service have nothing to remove.
       if (record.step === "service_updated" || record.step === "active") {

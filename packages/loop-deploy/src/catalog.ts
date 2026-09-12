@@ -74,7 +74,7 @@ export const USDE_USDC_MORPHO_BASE: MarketSpec = {
   oracleAddress: "0xf4b17c79492d68775e22e8dd0a2bb22854a39a47",
   irmAddress: "0x46415998764c29ab2a25cbea6254146d50d22687",
   morphoAddress: "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
-  poolAddress: "0x15bc08d2e2b405afed3fb872dcd2d962bccfb7e0",
+  poolAddress: "0xedAf6Ca46FB852D4AB0A2e9449d267cf03213F05",
   twapWindowSecs: 1800,
   inputsBlockLag: 2,
   swapRouter: "0x2626664c2603336E57B271c5C0b26F421741e481",

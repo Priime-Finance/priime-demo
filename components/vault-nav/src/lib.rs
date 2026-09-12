@@ -572,6 +572,22 @@ mod component {
             ));
         }
 
+        /* Pending-redeem guard.
+           Any capital sitting in `total_pending_redeem_shares` belongs to a
+           user who has already told the vault they want out. If we fall
+           through to `plan_open_position` below, the strike will swap that
+           user's would-be USDC into fresh collateral and open Morpho debt
+           against it — the opposite of what they asked for, and it will
+           always breach the escrow floor because `_fulfillRedeems` still
+           needs to carve out `shares * nav / totalSupply` of idle USDC.
+           Result: PlanRejected every strike, redeem never fulfills,
+           and the frontend surfaces "no strikes" because the plan keeps
+           rolling back. Emit an empty plan so `_fulfillRedeems` runs on
+           the current idle balance and the redeem settles cleanly. */
+        if s.total_pending_redeem_shares != 0 {
+            return Ok(nav::PlanBuild::empty(s.block_timestamp));
+        }
+
         let configured_leverage_bps = match cfg_opt("applied_leverage") {
             Some(v) => nav::parse_decimal_bps(&v)?,
             None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),

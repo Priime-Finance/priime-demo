@@ -23,6 +23,7 @@ import {
   LoopDeployer,
   LoopNotFoundError,
   LoopRegistry,
+  PauseGuardError,
   ServiceDocError,
   ValidationError,
   makeChain,
@@ -204,6 +205,15 @@ const server = createServer((req, res) => {
       sendJson(res, 400, { error: "invalid config", issues: err.issues });
     } else if (err instanceof LoopNotFoundError) {
       sendJson(res, 404, { error: err.message });
+    } else if (err instanceof PauseGuardError) {
+      // 409 Conflict: pause refused because the on-chain vault has escrow
+      // mid-flight. Ship the raw base-unit balances so the caller can render
+      // "N.NN USDC pending, M.MM shares pending" without guessing units.
+      sendJson(res, 409, {
+        error: err.message,
+        pendingDepositAssets: err.pendingDepositAssets.toString(),
+        pendingRedeemShares: err.pendingRedeemShares.toString(),
+      });
     } else if (err instanceof ServiceDocError) {
       sendJson(res, 409, { error: err.message });
     } else {
