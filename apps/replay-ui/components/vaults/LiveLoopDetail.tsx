@@ -66,6 +66,7 @@ import {
   readLoopConfig,
 } from "./live-loop";
 import { Hex } from "./Hex";
+import SubgraphPanel from "./SubgraphPanel";
 import { AWAITING_LABEL, strikeRows } from "@/lib/vaults/attested";
 import { fetchLoop, fetchLoopJournals, pauseLoop } from "@/lib/vaults/live-source";
 import { withParamKinds } from "@/lib/vaults/param-kind";
@@ -445,6 +446,9 @@ export default function LiveLoopDetail({ id }: { id: string }) {
                   </div>
                 ))}
               </div>
+            )}
+            {loop.handlerAddress !== null && (
+              <SubgraphPanel vaultAddress={loop.handlerAddress} />
             )}
           </section>
 

@@ -20,6 +20,17 @@ The vault is chain-agnostic: `SwapRouter02` is deployed at the same interface on
 
 Feedback on the developer experience of integrating Uniswap V3: see [FEEDBACK.md](FEEDBACK.md).
 
+## The Graph integration
+
+The vault's on-chain event history is indexed by an in-repo subgraph deployed to Subgraph Studio, and served over GraphQL to the replay UI so the strike ledger, per-day rollups and plan-execution history all come from an independent indexer instead of an RPC scan. The subgraph follows the ERC-4626 / Messari Standardized Vault shape, so the same query pattern works against any ERC-4626 vault indexed under the same conventions.
+
+- **Subgraph package**: [`packages/subgraph/`](packages/subgraph/) — schema, mappings, manifest.
+- **Standardized schema**: [`packages/subgraph/schema.graphql`](packages/subgraph/schema.graphql) — `Vault`, `VaultDailyMetric`, `VaultDepositRequest`, `VaultRedeemRequest`, `DepositFulfilled`, `RedeemFulfilled` follow ERC-4626 conventions; `Strike`, `PlanExecution`, `PlanRejection`, `Deleverage`, `ExecuteCall` are Priime-specific extensions covering the operator quorum's NAV attestation and quorum-signed strategy plans.
+- **AssemblyScript mappings**: [`packages/subgraph/src/priime-vault.ts`](packages/subgraph/src/priime-vault.ts) — one handler per event, rolling up `Vault` counters plus a day-bucketed `VaultDailyMetric`.
+- **Deployed endpoint (Subgraph Studio)**: `https://api.studio.thegraph.com/query/1755125/priime-demo/v0.0.1`
+- **UI consumer**: [`apps/replay-ui/lib/vaults/subgraph.ts`](apps/replay-ui/lib/vaults/subgraph.ts) fetches the vault snapshot; [`apps/replay-ui/components/vaults/SubgraphPanel.tsx`](apps/replay-ui/components/vaults/SubgraphPanel.tsx) renders it inside the vault page as an "Indexed by The Graph" panel that polls every 30 s.
+- **Subgraph MCP**: [`packages/subgraph/SKILL.md`](packages/subgraph/SKILL.md) — a SKILL config that layers the Subgraph MCP on top of the deployed subgraph so an MCP-aware agent (Claude Desktop, Cursor, ChatGPT) can query the vault in natural language. That composes a second Graph product on the same schema.
+
 ## Layout
 
 ```
