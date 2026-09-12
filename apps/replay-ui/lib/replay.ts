@@ -164,7 +164,7 @@ interface ReplayOperatorState {
   result_hash: string;
   /** NAV as an integer string in `nav_unit` base units. */
   nav: string;
-  /** secp256k1 signature over the WAVS envelope. */
+  /** secp256k1 signature over the Priime envelope. */
   signature: string;
   /** Unix seconds the submission was observed. */
   timestamp: number;

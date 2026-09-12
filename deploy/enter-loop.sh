@@ -3,7 +3,7 @@
 # Base fork.
 #
 # Runs against deploy/fork.sh (fork) + deploy/vault-service.sh (service:
-# manager, vault, WAVS node, cron NAV strikes). Every settlement here is a
+# manager, vault, Priime node, cron NAV strikes). Every settlement here is a
 # REAL attested strike from the running pipeline; this script signs nothing:
 #   1. reads the vault/strategist from the service bring-up,
 #   2. seeds the depositor with initial_deposit_usdc and requestDeposit()s,
@@ -139,7 +139,7 @@ for i in $(seq 1 "$STRIKE_TRIES"); do
   if [ "$PENDING" = "0" ]; then FULFILLED=1; break; fi
   echo "  t+$((i*5))s: deposit still pending"
 done
-[ "$FULFILLED" = "1" ] || { echo "FATAL: deposit not fulfilled; inspect the wavs-vault node logs"; exit 1; }
+[ "$FULFILLED" = "1" ] || { echo "FATAL: deposit not fulfilled; inspect the priime-vault node logs"; exit 1; }
 NAV=$(cast call "$VAULT" 'nav()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
 [ "$NAV" = "$DEPOSIT" ] || { echo "FATAL: bootstrap fold nav=$NAV, want $DEPOSIT"; exit 1; }
 echo "deposit fulfilled by attested strike: nav=$NAV (capital unlocked)"
@@ -317,7 +317,7 @@ for i in $(seq 1 "$STRIKE_TRIES"); do
   if [ "$(ibc "$IB >= $ENTRY_BLOCK")" = "1" ]; then REMARKED=1; break; fi
   echo "  t+$((i*5))s: last inputsBlock $IB < entry block $ENTRY_BLOCK"
 done
-[ "$REMARKED" = "1" ] || { echo "FATAL: no post-entry strike; inspect the wavs-vault node logs"; exit 1; }
+[ "$REMARKED" = "1" ] || { echo "FATAL: no post-entry strike; inspect the priime-vault node logs"; exit 1; }
 NAV=$(cast call "$VAULT" 'nav()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
 read_pos
 EXPECT=$(ibc "$COLLVAL - $DEBT")

@@ -1,7 +1,7 @@
 /**
  * ON-CHAIN EXECUTIONS OF THE LIVE LOOP, read off Base.
  *
- * Every run of the loop's WAVS component that ends in an on-chain action lands
+ * Every run of the loop's Priime component that ends in an on-chain action lands
  * as one `handleSignedEnvelope` call on the service handler: the operator
  * signs the packet, the handler checks that signature against the operator
  * registry, and only then acts. The transaction is the proof a depositor can
@@ -26,7 +26,7 @@ import { HERO_SLUG } from "@/lib/demo-scope";
 /** Base mainnet. The only chain the live loop settles on. */
 export const EXECUTION_CHAIN_ID = 8453;
 
-/** The WAVS service handler every execution is sent to. */
+/** The Priime service handler every execution is sent to. */
 export const SERVICE_HANDLER = "0xC3dc704425BCD9a33cEFC168a12129fB56c1B60f";
 
 /** The operator whose signature the handler checked on every row below. */

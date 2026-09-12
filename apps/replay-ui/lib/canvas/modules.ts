@@ -507,7 +507,7 @@ export const MODULE_DEFS: Record<ModuleKey, AxisModuleDef> = {
          * as a grade.
          *
          * The stored VALUES are untouched: they are the compile schema's own
-         * enum and the WAVS band derivation reads them.
+         * enum and the Priime band derivation reads them.
          */
         field: "riskPreset",
         friendlyLabel: "Drift before it trims",

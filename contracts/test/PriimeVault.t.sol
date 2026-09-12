@@ -2,8 +2,8 @@
 pragma solidity ^0.8.27;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IWavsServiceHandler} from "../src/interfaces/wavs/IWavsServiceHandler.sol";
-import {IWavsServiceManager} from "../src/interfaces/wavs/IWavsServiceManager.sol";
+import {IPriimeServiceHandler} from "../src/interfaces/priime/IPriimeServiceHandler.sol";
+import {IPriimeServiceManager} from "../src/interfaces/priime/IPriimeServiceManager.sol";
 import {PriimeVault} from "../src/PriimeVault.sol";
 import {IMorphoBlue, IMorphoFlashLoanCallback} from "../src/interfaces/external/IMorphoBlue.sol";
 import {IAerodromeCLRouter} from "../src/interfaces/external/IAerodromeCLRouter.sol";
@@ -216,7 +216,7 @@ contract MockAerodromeRouter {
     }
 }
 
-/// @dev Toggleable stand-in for the WAVS service manager: `validate` passes by
+/// @dev Toggleable stand-in for the Priime service manager: `validate` passes by
 ///      default and reverts once `setReject(true)` is called, so tests can
 ///      exercise both the accepted-quorum and rejected-quorum paths. Test-only;
 ///      the src/ MockServiceManager stays a no-op for the anvil pipeline.
@@ -239,23 +239,23 @@ contract ToggleableServiceManager {
     /// @dev Pin the exact envelope and signature bytes the vault must hand to
     ///      `validate`.
     ///
-    ///      `IWavsServiceManager.validate` is `view`, so the vault reaches it
+    ///      `IPriimeServiceManager.validate` is `view`, so the vault reaches it
     ///      through a STATICCALL and no mock can write down what it saw. The
     ///      check is therefore inverted: the test states the bytes up front and
     ///      `validate` fails the call when anything else arrives, so a
     ///      successful `handleSignedEnvelope` is itself proof that the envelope
     ///      and signature data crossed the seam unchanged.
     function expectForwarded(
-        IWavsServiceHandler.Envelope calldata envelope,
-        IWavsServiceHandler.SignatureData calldata signatureData
+        IPriimeServiceHandler.Envelope calldata envelope,
+        IPriimeServiceHandler.SignatureData calldata signatureData
     ) external {
         expectedEnvelopeHash = keccak256(abi.encode(envelope));
         expectedSignatureHash = keccak256(abi.encode(signatureData));
     }
 
     function validate(
-        IWavsServiceHandler.Envelope calldata envelope,
-        IWavsServiceHandler.SignatureData calldata signatureData
+        IPriimeServiceHandler.Envelope calldata envelope,
+        IPriimeServiceHandler.SignatureData calldata signatureData
     ) external view {
         if (reject) revert ValidationRejected();
         if (expectedEnvelopeHash != bytes32(0)) {
@@ -314,7 +314,7 @@ contract PriimeVaultTest {
             poolTickSpacing: int24(1)
         });
         vault =
-            new PriimeVault(IWavsServiceManager(address(manager)), IERC20(address(usdc)), STRATEGIST, strategyConfig);
+            new PriimeVault(IPriimeServiceManager(address(manager)), IERC20(address(usdc)), STRATEGIST, strategyConfig);
 
         usdc.mint(ALICE, 1_000_000 * ONE_USDC);
         usdc.mint(BOB, 1_000_000 * ONE_USDC);
@@ -332,7 +332,7 @@ contract PriimeVaultTest {
     function _envelope(bytes20 eventId, uint256 nav, uint256 inputsBlock)
         internal
         view
-        returns (IWavsServiceHandler.Envelope memory)
+        returns (IPriimeServiceHandler.Envelope memory)
     {
         return _envelope(eventId, nav, inputsBlock, bytes32(0));
     }
@@ -340,7 +340,7 @@ contract PriimeVaultTest {
     function _envelope(bytes20 eventId, uint256 nav, uint256 inputsBlock, bytes32 configHash)
         internal
         view
-        returns (IWavsServiceHandler.Envelope memory)
+        returns (IPriimeServiceHandler.Envelope memory)
     {
         PriimeVault.BoundNavResult memory result = PriimeVault.BoundNavResult({
             handler: address(vault),
@@ -355,7 +355,7 @@ contract PriimeVaultTest {
             breachFlags: 0,
             plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
         });
-        return IWavsServiceHandler.Envelope({
+        return IPriimeServiceHandler.Envelope({
             eventId: eventId,
             ordering: bytes12(0),
             // abi.encode(BoundNavResult) mirrors the component's
@@ -368,7 +368,7 @@ contract PriimeVaultTest {
     function _envelopeWithBreach(bytes20 eventId, uint256 nav, uint256 inputsBlock, uint16 flags)
         internal
         view
-        returns (IWavsServiceHandler.Envelope memory)
+        returns (IPriimeServiceHandler.Envelope memory)
     {
         PriimeVault.BoundNavResult memory result = PriimeVault.BoundNavResult({
             handler: address(vault),
@@ -383,12 +383,12 @@ contract PriimeVaultTest {
             breachFlags: flags,
             plan: PriimeVault.StrategyPlan({targets: new address[](0), calldatas: new bytes[](0), timestamp: 0})
         });
-        return IWavsServiceHandler.Envelope({eventId: eventId, ordering: bytes12(0), payload: abi.encode(result)});
+        return IPriimeServiceHandler.Envelope({eventId: eventId, ordering: bytes12(0), payload: abi.encode(result)});
     }
 
-    function _sigs() internal pure returns (IWavsServiceHandler.SignatureData memory) {
+    function _sigs() internal pure returns (IPriimeServiceHandler.SignatureData memory) {
         return
-            IWavsServiceHandler.SignatureData({
+            IPriimeServiceHandler.SignatureData({
                 signers: new address[](0), signatures: new bytes[](0), referenceBlock: 0
             });
     }
@@ -1006,7 +1006,7 @@ contract PriimeVaultTest {
         ToggleableServiceManager muManager = new ToggleableServiceManager();
 
         PriimeVault muVault = new PriimeVault(
-            IWavsServiceManager(address(muManager)),
+            IPriimeServiceManager(address(muManager)),
             IERC20(address(muUsdc)),
             STRATEGIST,
             PriimeVault.StrategyConfig({
@@ -1556,7 +1556,7 @@ contract PriimeVaultTest {
         router = new MockAerodromeRouter(IERC20(address(usdcMock)), IERC20(address(usdeMock)));
         ToggleableServiceManager mgr = new ToggleableServiceManager();
         v = new PriimeVault(
-            IWavsServiceManager(address(mgr)),
+            IPriimeServiceManager(address(mgr)),
             IERC20(address(usdcMock)),
             STRATEGIST,
             PriimeVault.StrategyConfig({
@@ -1721,8 +1721,8 @@ contract PriimeVaultTest {
             breachFlags: 0,
             plan: plan
         });
-        IWavsServiceHandler.Envelope memory env =
-            IWavsServiceHandler.Envelope({eventId: eventId, ordering: bytes12(0), payload: abi.encode(result)});
+        IPriimeServiceHandler.Envelope memory env =
+            IPriimeServiceHandler.Envelope({eventId: eventId, ordering: bytes12(0), payload: abi.encode(result)});
         v.handleSignedEnvelope(env, _sigs());
     }
 
@@ -1777,7 +1777,7 @@ contract PriimeVaultTest {
         // Payload names a handler that is not this vault; must be rejected
         // before any state is touched, regardless of quorum validity.
         address other = address(0xDEAD);
-        IWavsServiceHandler.Envelope memory env = IWavsServiceHandler.Envelope({
+        IPriimeServiceHandler.Envelope memory env = IPriimeServiceHandler.Envelope({
             eventId: bytes20(uint160(1)),
             ordering: bytes12(0),
             payload: abi.encode(
@@ -1961,7 +1961,7 @@ contract PriimeVaultTest {
     // --- envelope forwarding across the service-manager seam ------------------
 
     function test_HandleSignedEnvelopeForwardsEnvelopeAndSignaturesVerbatim() public {
-        IWavsServiceHandler.Envelope memory env = IWavsServiceHandler.Envelope({
+        IPriimeServiceHandler.Envelope memory env = IPriimeServiceHandler.Envelope({
             eventId: bytes20(uint160(0x5E11)),
             ordering: bytes12(uint96(0xABCDEF)), // non-zero, so a dropped word would show
             payload: abi.encode(
@@ -1987,8 +1987,8 @@ contract PriimeVaultTest {
         bytes[] memory signatures = new bytes[](2);
         signatures[0] = hex"1122334455";
         signatures[1] = hex"deadbeefcafe";
-        IWavsServiceHandler.SignatureData memory sigs =
-            IWavsServiceHandler.SignatureData({signers: signers, signatures: signatures, referenceBlock: 99});
+        IPriimeServiceHandler.SignatureData memory sigs =
+            IPriimeServiceHandler.SignatureData({signers: signers, signatures: signatures, referenceBlock: 99});
 
         // The quorum's bytes must reach `validate` untouched: the vault decodes
         // the payload for its own guards but must never re-encode what it
@@ -1998,7 +1998,7 @@ contract PriimeVaultTest {
         require(vault.totalAssets() == 1_234 * ONE_USDC, "update landed on forwarded bytes");
 
         // Negative controls: the seam check is live, not vacuous.
-        IWavsServiceHandler.Envelope memory other = IWavsServiceHandler.Envelope({
+        IPriimeServiceHandler.Envelope memory other = IPriimeServiceHandler.Envelope({
             eventId: bytes20(uint160(0x5E12)),
             ordering: bytes12(uint96(0xABCDEF)),
             payload: abi.encode(
@@ -2027,8 +2027,8 @@ contract PriimeVaultTest {
         vault.handleSignedEnvelope(other, sigs);
 
         manager.expectForwarded(other, sigs);
-        IWavsServiceHandler.SignatureData memory tampered =
-            IWavsServiceHandler.SignatureData({signers: signers, signatures: signatures, referenceBlock: 100});
+        IPriimeServiceHandler.SignatureData memory tampered =
+            IPriimeServiceHandler.SignatureData({signers: signers, signatures: signatures, referenceBlock: 100});
         vm.expectRevert(
             abi.encodeWithSelector(
                 ToggleableServiceManager.SignatureNotForwardedVerbatim.selector,

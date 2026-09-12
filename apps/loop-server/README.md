@@ -1,11 +1,11 @@
 # @priime-demo/loop-server
 
-Authenticated control plane for deploying user configured loops onto the shared WAVS service (Option A: one workflow per loop, one service, one operator set, one quorum).
+Authenticated control plane for deploying user configured loops onto the shared Priime service (Option A: one workflow per loop, one service, one operator set, one quorum).
 
 What a loop deploy does, in order:
 
 1. Validates the user's `LoopConfig` (market addresses, cadence, TWAP window, strategist).
-2. Deploys a `PriimeVault` handler with the user as `strategist` -- the WAVS independent exit: the strategist can unwind the position with the machinery completely dead.
+2. Deploys a `PriimeVault` handler with the user as `strategist` -- the Priime independent exit: the strategist can unwind the position with the machinery completely dead.
 3. Fetches the manager's current service.json, clones the template workflow, swaps the cron window, the vault-nav config, and the aggregator submit target, pins the result to IPFS, and calls `setServiceURI`.
 4. Operator nodes pick the new workflow up automatically via the `ServiceURIUpdated` event. No operator action per loop.
 

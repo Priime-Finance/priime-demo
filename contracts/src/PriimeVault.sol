@@ -5,15 +5,15 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IWavsServiceHandler} from "./interfaces/wavs/IWavsServiceHandler.sol";
-import {IWavsServiceManager} from "./interfaces/wavs/IWavsServiceManager.sol";
+import {IPriimeServiceHandler} from "./interfaces/priime/IPriimeServiceHandler.sol";
+import {IPriimeServiceManager} from "./interfaces/priime/IPriimeServiceManager.sol";
 import {IMorphoBlue, IMorphoFlashLoanCallback} from "./interfaces/external/IMorphoBlue.sol";
 import {IAerodromeCLRouter} from "./interfaces/external/IAerodromeCLRouter.sol";
 
 /// @title PriimeVault
 /// @notice ERC-7540 fully asynchronous vault (async deposits AND async
 ///         redemptions) over a single asset (USDC), whose settlement price is
-///         the WAVS quorum-attested NAV: "the vault that cannot lie".
+///         the Priime quorum-attested NAV: "the vault that cannot lie".
 ///
 ///         Why 7540 and not sync 4626: the vault's NAV is attested
 ///         asynchronously, one strike at a time, by operators re-executing the
@@ -70,7 +70,7 @@ import {IAerodromeCLRouter} from "./interfaces/external/IAerodromeCLRouter.sol";
 ///      revert. Partial claims use floor division, and the claim that empties
 ///      either side of a bucket settles the whole bucket, so rounding dust
 ///      goes to the final claimer rather than stranding in the vault.
-contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
+contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback {
     using SafeERC20 for IERC20;
 
     /// @notice Fungible request model: every request is requestId 0.
@@ -87,7 +87,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
     uint256 public constant MAX_QUEUE_LENGTH = 100;
 
     /// @notice Service manager (POA stake registry) that validates operator sigs.
-    IWavsServiceManager public immutable serviceManager;
+    IPriimeServiceManager public immutable serviceManager;
 
     /// @notice Trusted demo role that drives the strategy from the vault's own
     ///         balance via `execute` (manual override). Quorum-signed
@@ -346,7 +346,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
     error ZeroStrategyConfigField();
 
     constructor(
-        IWavsServiceManager _serviceManager,
+        IPriimeServiceManager _serviceManager,
         IERC20 _asset,
         address _strategist,
         StrategyConfig memory _strategy
@@ -943,7 +943,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
     // VAULT-02 / VAULT-03: attested NAV updates settle the epoch
     // ------------------------------------------------------------------------
 
-    /// @inheritdoc IWavsServiceHandler
+    /// @inheritdoc IPriimeServiceHandler
     /// @dev The only way NAV moves. Guards, in order: (0) the payload's
     ///      handler field must be this vault — an attestation is scoped to
     ///      exactly one handler, even though the service manager validating
@@ -1023,7 +1023,7 @@ contract PriimeVault is ERC4626, IWavsServiceHandler, IMorphoFlashLoanCallback {
         }
     }
 
-    /// @inheritdoc IWavsServiceHandler
+    /// @inheritdoc IPriimeServiceHandler
     function getServiceManager() external view override returns (address) {
         return address(serviceManager);
     }

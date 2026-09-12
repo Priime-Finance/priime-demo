@@ -80,7 +80,7 @@ pub struct Operator {
     pub result_hash: String,
     /// NAV as an integer string in `nav_unit` base units (never a float).
     pub nav: String,
-    /// secp256k1 signature over the WAVS envelope (eip191).
+    /// secp256k1 signature over the Priime envelope (eip191).
     pub signature: String,
     /// Unix seconds (UTC) the submission was observed.
     pub timestamp: u64,

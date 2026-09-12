@@ -1,7 +1,7 @@
 /**
  * Lossless JSON for service.json.
  *
- * WAVS `Timestamp` serializes as a bare integer of nanoseconds since the
+ * Priime `Timestamp` serializes as a bare integer of nanoseconds since the
  * epoch (~1.8e18), which exceeds Number.MAX_SAFE_INTEGER. A naive
  * JSON.parse/stringify round trip silently corrupts those fields and the
  * node would then see a different trigger window than the one deployed.

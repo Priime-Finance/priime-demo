@@ -35,7 +35,7 @@ export interface Operator {
   result_hash: string;
   /** NAV as an integer string in nav_unit base units (never a float). */
   nav: string;
-  /** secp256k1 signature over the WAVS envelope (eip191). */
+  /** secp256k1 signature over the Priime envelope (eip191). */
   signature: string;
   /** Unix seconds (UTC) the submission was observed. */
   timestamp: number;

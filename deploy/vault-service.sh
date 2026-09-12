@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# M3-4: the vault WAVS service on the pinned Base fork.
+# M3-4: the vault Priime service on the pinned Base fork.
 #
-# THREE operators, 2-of-3 quorum: three independent WAVS nodes each register
+# THREE operators, 2-of-3 quorum: three independent Priime nodes each register
 # their own operator on the shared POA service manager, each with its own
 # signing key. Every strike the vault sees carries the multi-sig from the
-# quorum WAVS's aggregator collected across nodes (SignatureData.signers /
+# quorum Priime's aggregator collected across nodes (SignatureData.signers /
 # .signatures arrays; see IWavsServiceHandler.sol). The nodes discover each
-# other via hyperswarm (WAVS's built-in Hypercore peer transport) so no
+# other via hyperswarm (Priime's built-in Hypercore peer transport) so no
 # extra topology config is needed for the local case: three containers on
 # --network host see each other and gossip signatures until the aggregator
 # role sees threshold and submits ONE tx.
@@ -22,7 +22,7 @@
 #      be ECDSA signers; fresh random keys are code-free),
 #   6. ensures the Aerodrome pool's observation cardinality covers the TWAP
 #      window across the loop-entry swaps (permissionless, standard call),
-#   7. starts THREE WAVS nodes against the fork, deploys the service to
+#   7. starts THREE Priime nodes against the fork, deploys the service to
 #      each, and waits for the first cron strike to land in the vault
 #      (updateCount >= 1).
 #
@@ -39,7 +39,7 @@
 # Prereqs:
 #   deploy/fork.sh                                   # TARGET=fork only: pinned Base fork on :8545
 #   ipfs daemon                                      # api on :5001
-#   docker images: ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15, poa-middleware:1.0.1
+#   docker images: ghcr.io/priime-finance/priime:3.0.0, poa-middleware:1.0.1
 #   TARGET=mainnet: PRIIME_RPC_URL + the four role keys named in
 #                   deploy/targets/mainnet.json, and a treasury holding ETH.
 #
@@ -51,10 +51,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # priime-demo
 DEPLOY="$ROOT/deploy"
 source "$DEPLOY/target.sh"                        # TARGET, RPC, CHAIN, STATE_DIR, CRON_SCHEDULE, helpers
 FORKDIR="$STATE_DIR"
-HOME_BASE="$FORKDIR/wavs-vault"                   # per-node home dirs: wavs-vault-1, -2, -3
-WAVS_IMG="ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15"
+HOME_BASE="$FORKDIR/priime-vault"                   # per-node home dirs: priime-vault-1, -2, -3
+PRIIME_IMG="ghcr.io/priime-finance/priime:3.0.0"
 POA_IMG="ghcr.io/lay3rlabs/poa-middleware:1.0.1"
-NODE_BASE="wavs-vault"                            # per-node containers
+NODE_BASE="priime-vault"                            # per-node containers
 NODE_COUNT=3
 # Each node exposes its own admin/HTTP port on the host (--network host); the
 # three ports are consecutive from NODE_PORT_BASE. libp2p peer listens on
@@ -92,7 +92,7 @@ STRATEGIST=$(role_addr strategist)
 # One mnemonic PER NODE. HD indices:
 #   0: operator EOA (registered on the service manager, pays for its own
 #      updateOperatorSigningKey tx)
-#   1: signing key (WAVS signs envelopes with this; verified on-chain)
+#   1: signing key (Priime signs envelopes with this; verified on-chain)
 #   2: aggregator submitter (sends handleSignedEnvelope; per-node so the
 #      three aggregators do not race a shared nonce for K0)
 # Three fresh, code-free EOAs per node; on a live chain they still have to be
@@ -167,7 +167,7 @@ else
   # a different host need PRIIME_WS_URL set explicitly.
   DOCKER_WS="${PRIIME_WS_URL:-${DOCKER_RPC/http/ws}}"
 fi
-# host[:port] the components actually dial (wavs.toml http_endpoint below);
+# host[:port] the components actually dial (priime.toml http_endpoint below);
 # scopes component --http-hosts instead of the chain being wide open.
 DOCKER_RPC_HOST="${DOCKER_RPC#http://}"; DOCKER_RPC_HOST="${DOCKER_RPC_HOST#https://}"
 DOCKER_RPC_HOST="${DOCKER_RPC_HOST%%/*}"
@@ -190,8 +190,8 @@ say "build components (wasm32-wasip2) + contracts"
 ( cd "$ROOT/components/vault-nav"        && cargo build --release --target wasm32-wasip2 >/dev/null )
 ( cd "$ROOT/components/hello-aggregator" && cargo build --release --target wasm32-wasip2 >/dev/null )
 ( cd "$ROOT/contracts" && forge build >/dev/null )
-# Per-node home dirs (each holds wavs.toml, service.json, .env). Node 1's
-# home doubles as the wavs-cli home for service.json assembly; the assembled
+# Per-node home dirs (each holds priime.toml, service.json, .env). Node 1's
+# home doubles as the priime-cli home for service.json assembly; the assembled
 # service.json is copied into the other node homes before start.
 declare -a HOME_DIRS NODE_NAMES NODE_PORTS
 for i in $(seq 0 $((NODE_COUNT - 1))); do
@@ -205,7 +205,7 @@ mkdir -p "$FORKDIR/nodes-vault" "$FORKDIR/.docker"
 cp "$ROOT/components/vault-nav/target/wasm32-wasip2/release/priime_vault_nav.wasm"               "$FORKDIR/vault_nav.wasm"
 cp "$ROOT/components/hello-aggregator/target/wasm32-wasip2/release/priime_hello_aggregator.wasm" "$FORKDIR/aggregator.wasm"
 # ------------------------------------------------------------------------
-# wavs.toml is written in TWO PHASES:
+# priime.toml is written in TWO PHASES:
 #   phase A: node 1 gets an EMPTY bootstrap_nodes list so it starts as the
 #   libp2p bootstrap. We start it, scrape its deterministic peer_id from
 #   the startup log ("Using P2P identity derived from signing_mnemonic
@@ -217,16 +217,16 @@ cp "$ROOT/components/hello-aggregator/target/wasm32-wasip2/release/priime_hello_
 
 # One tiny helper so both phases emit identical config apart from
 # listen_port and bootstrap_nodes.
-write_wavs_toml() {  # $1=index (0-based), $2=bootstrap_nodes TOML expression
+write_priime_toml() {  # $1=index (0-based), $2=bootstrap_nodes TOML expression
   local i="$1" nodes="$2"
   local port="${NODE_PORTS[$i]}" p2p="${NODE_P2P_PORTS[$i]}"
-  cat > "${HOME_DIRS[$i]}/wavs.toml" <<EOF
+  cat > "${HOME_DIRS[$i]}/priime.toml" <<EOF
 [default]
 [default.chains.evm.$FORK_CHAIN_ID]
 ws_endpoints = ["$DOCKER_WS"]
 http_endpoint = "$DOCKER_RPC"
 
-[wavs]
+[priime]
 ipfs_gateway = "$GATEWAY"
 port = $port
 host = "0.0.0.0"
@@ -236,14 +236,14 @@ mcp_chain_credential = "$K0"
 aggregator_evm_credential = "${K_AGGS[$i]}"
 
 # libp2p peer discovery over the loopback: node 1 is the bootstrap
-# (bootstrap_nodes=[]) and nodes 2/3 dial its multiaddr. Every WAVS node
+# (bootstrap_nodes=[]) and nodes 2/3 dial its multiaddr. Every Priime node
 # derives a stable peer_id from signing_mnemonic (m/44'/60'/0'/0/0) so the
 # multiaddrs are known once node 1 has started once. Without this section
-# WAVS logs "P2P networking is disabled" and every node submits its own
+# Priime logs "P2P networking is disabled" and every node submits its own
 # single signature; the service manager reverts with 0xe121632f
 # (insufficient stake) because a 1000-weight sig can't clear the
 # 2000-weight 2-of-3 threshold.
-[wavs.p2p.remote]
+[priime.p2p.remote]
 listen_port = $p2p
 bootstrap_nodes = $nodes
 
@@ -260,8 +260,8 @@ start_node() {  # $1=index (0-based)
   local port="${NODE_PORTS[$i]}"
   local home="${HOME_DIRS[$i]}"
   docker rm -f "$name" >/dev/null 2>&1 || true
-  docker run -d --name "$name" --network host -v "$home:/root/wavs" "$WAVS_IMG" \
-    wavs --home /root/wavs --ipfs-gateway "$GATEWAY" --host 0.0.0.0 --log-level info >/dev/null
+  docker run -d --name "$name" --network host -v "$home:/root/priime" "$PRIIME_IMG" \
+    priime --home /root/priime --ipfs-gateway "$GATEWAY" --host 0.0.0.0 --log-level info >/dev/null
   local ready=0
   for _ in $(seq 1 30); do
     curl -sf "http://localhost:$port/services" >/dev/null 2>&1 && { ready=1; break; }
@@ -279,8 +279,8 @@ done
 
 # Write node 1's config now (empty bootstrap) so service.json assembly can
 # still run out of CLI_HOME which is HOME_DIRS[0]. Nodes 2/3 get their
-# wavs.toml after we know node 1's peer_id.
-write_wavs_toml 0 "[]"
+# priime.toml after we know node 1's peer_id.
+write_priime_toml 0 "[]"
 
 # --- 3. POA service manager (THE service manager: one per service) ----------
 say "deploy POA service manager"
@@ -349,7 +349,7 @@ NAV_CID=$(ipfs add -Q --pin=true "$FORKDIR/vault_nav.wasm")
 AGG_CID=$(ipfs add -Q --pin=true "$FORKDIR/aggregator.wasm")
 echo "vault-nav=$NAV_CID aggregator=$AGG_CID"
 
-CLI=(docker run --rm --network host -w /data -v "$CLI_HOME:/data" "$WAVS_IMG" wavs-cli service \
+CLI=(docker run --rm --network host -w /data -v "$CLI_HOME:/data" "$PRIIME_IMG" priime-cli service \
   --json true --home /data --file /data/service.json --ipfs-gateway "$GATEWAY")
 rm -f "$CLI_HOME/service.json"
 START=$(date +%s%N); END=$(( START + 3600000000000 ))
@@ -377,7 +377,7 @@ jq -n \
 "${CLI[@]}" manager set-evm --chain "$CHAIN" --address "$SM" >/dev/null
 "${CLI[@]}" validate >/dev/null || true   # warns on registry availability; IPFS-sourced, safe
 SVC_CID=$(ipfs add -Q --pin=true "$CLI_HOME/service.json")
-# Every node reads the SAME service.json from IPFS on start, but wavs-cli's
+# Every node reads the SAME service.json from IPFS on start, but priime-cli's
 # init also writes a local copy into whichever home it ran from. Copy that
 # assembled document to the other node homes so their CLI/deploy-service
 # invocations see the same fixture.
@@ -412,10 +412,10 @@ done
 cast send "$SM" "setServiceURI(string)" "ipfs://$SVC_CID" --private-key "$K0" --rpc-url "$RPC" >/dev/null
 mine_or_wait
 
-# --- 8. start the three WAVS nodes (libp2p bootstrap topology) --------------
+# --- 8. start the three Priime nodes (libp2p bootstrap topology) --------------
 # Node 1 is the libp2p bootstrap (`bootstrap_nodes = []`). We start it, wait
 # for the "Using P2P identity derived from signing_mnemonic (peer_id: ...)"
-# line, and use that PeerId to write nodes 2 and 3's wavs.toml with a
+# line, and use that PeerId to write nodes 2 and 3's priime.toml with a
 # multiaddr pointing at node 1. Same procedure hodlers-app/DEPLOY.md §3-4
 # uses on Hetzner, collapsed here to one host via 127.0.0.1.
 say "start bootstrap node (${NODE_NAMES[0]})"
@@ -425,7 +425,7 @@ start_node 0
 # lands or give up (peer-id derivation is fast, so 20s is generous).
 PEER_ID=""
 for _ in $(seq 1 40); do
-  # WAVS peer_ids use secp256k1 keys (prefix "16Uiu2HAm"); regex accepts any
+  # Priime peer_ids use secp256k1 keys (prefix "16Uiu2HAm"); regex accepts any
   # multibase-encoded PeerId of the length libp2p emits (~52 chars).
   line=$(docker logs "${NODE_NAMES[0]}" 2>&1 | grep -oE 'peer_id: [A-Za-z0-9]{40,64}' | head -1)
   if [ -n "$line" ]; then
@@ -440,16 +440,16 @@ echo "  bootstrap: $BOOTSTRAP_ADDR"
 
 say "start follower nodes (${NODE_NAMES[1]}, ${NODE_NAMES[2]})"
 for i in $(seq 1 $((NODE_COUNT - 1))); do
-  write_wavs_toml "$i" "[\"$BOOTSTRAP_ADDR\"]"
+  write_priime_toml "$i" "[\"$BOOTSTRAP_ADDR\"]"
   start_node "$i"
 done
 
 say "deploy service to each node"
 for i in $(seq 0 $((NODE_COUNT - 1))); do
   name="${NODE_NAMES[$i]}"; port="${NODE_PORTS[$i]}"; home="${HOME_DIRS[$i]}"
-  docker run --rm --network host -v "$home:/data" "$WAVS_IMG" wavs-cli deploy-service \
+  docker run --rm --network host -v "$home:/data" "$PRIIME_IMG" priime-cli deploy-service \
     --service-uri "ipfs://$SVC_CID" --log-level=info --data /data/.docker --home /data \
-    --wavs-endpoint "http://localhost:$port" --ipfs-gateway "$GATEWAY" >/dev/null
+    --priime-endpoint "http://localhost:$port" --ipfs-gateway "$GATEWAY" >/dev/null
   echo "  $name: service deployed"
 done
 

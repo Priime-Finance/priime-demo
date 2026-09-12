@@ -8,7 +8,7 @@
 # determinism here means: same trigger_time -> same resolved inputs_block ->
 # same payload, regardless of how far the fork's clock (fork.sh runs it on
 # --block-time now) has ticked on between the two runs. The check pauses the
-# WAVS node so it can't submit a strike against the vault mid-check, executes
+# Priime node so it can't submit a strike against the vault mid-check, executes
 # trigger_time (same engine the node runs), and compares the raw payload
 # bytes. The full three-node quorum proof arrives on a live strike; this
 # retires the single-component half of the risk (the same nav.wasm is what
@@ -21,13 +21,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # priime-demo
 DEPLOY="$ROOT/deploy"
 source "$DEPLOY/target.sh"                        # TARGET, RPC, STATE_DIR, say(), cfg()
 FORKDIR="$STATE_DIR"
-# Node 1's home is where wavs-cli/service.json was assembled; use it for the
+# Node 1's home is where priime-cli/service.json was assembled; use it for the
 # component-config lookup and simulation. All three nodes use the same
 # service.json, so any of them would work.
-HOME_DIR="$FORKDIR/wavs-vault-1"
-WAVS_IMG="ghcr.io/lay3rlabs/wavs:2.0.0-vault-rc.15"
+HOME_DIR="$FORKDIR/priime-vault-1"
+PRIIME_IMG="ghcr.io/priime-finance/priime:3.0.0"
 # Pause all three nodes so none can strike the vault mid-check.
-NODES=(wavs-vault-1 wavs-vault-2 wavs-vault-3)
+NODES=(priime-vault-1 priime-vault-2 priime-vault-3)
 
 # --- preconditions -----------------------------------------------------------
 say "preconditions (TARGET=$TARGET, chain $CHAIN_ID)"
@@ -59,7 +59,7 @@ echo "head at $HEAD0 (fork.sh's --block-time keeps mining regardless of the node
 # `--input` produces TriggerData::Raw, which the component now rejects
 # outright (it requires a Cron trigger for trigger_time). --simulates-trigger
 # feeds it a real Cron TriggerData instead; --input is still required by
-# wavs-cli's arg parser but its value is discarded once --simulates-trigger is
+# priime-cli's arg parser but its value is discarded once --simulates-trigger is
 # set. Both runs get the SAME literal nanos, computed once: that's what makes
 # this a determinism check now that inputs_block tracks wall-clock
 # trigger_time rather than the chain head.
@@ -71,8 +71,8 @@ while IFS= read -r kv; do CONFIG_ARGS+=(--config "$kv"); done \
   < <(jq -r 'to_entries[] | "\(.key)=\(.value)"' "$HOME_DIR/component-config.json")
 
 run_exec() { # run_exec <n>
-  docker run --rm --network host -v "$HOME_DIR:/data" -v "$FORKDIR:/fork" "$WAVS_IMG" \
-    wavs-cli exec --home /data --data /data/.docker --component /fork/vault_nav.wasm \
+  docker run --rm --network host -v "$HOME_DIR:/data" -v "$FORKDIR:/fork" "$PRIIME_IMG" \
+    priime-cli exec --home /data --data /data/.docker --component /fork/vault_nav.wasm \
     --input "unused" --simulates-trigger "$SIM_TRIGGER" \
     --json true --quiet-results true --save-deployment false \
     -o "/fork/exec-$1.json" "${CONFIG_ARGS[@]}" >/dev/null 2>&1

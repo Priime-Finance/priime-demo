@@ -29,7 +29,7 @@ import type { Journal, Operator, Transition } from "@priime-demo/journal-schema"
 const SCHEMA_VERSION = "1.0.0" as const;
 import { createHash } from "node:crypto";
 
-/** WAVS ServiceId derivation for EVM managers. Mirrors ServiceId::hash in
+/** Priime ServiceId derivation for EVM managers. Mirrors ServiceId::hash in
  *  priime-processor/packages/types/src/id/service.rs: `sha256("evm" || chain
  *  key || address bytes)`, printed as lowercase 64-char hex without 0x. */
 export function deriveServiceId(chainKey: string, managerAddress: string): string {

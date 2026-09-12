@@ -49,7 +49,7 @@
 #     will fail without one. The decision to seed vs skip the loop entry is
 #     tracked in the swap_route _comment in sepolia.config.json.
 #
-#   - Register the market in the WAVS service. That happens automatically
+#   - Register the market in the Priime service. That happens automatically
 #     when deploy/vault-service.sh runs against TARGET=sepolia: it reads the
 #     addresses from sepolia.config.json exactly as fork.sh reads them from
 #     fork.config.json.
