@@ -2,9 +2,7 @@
 
 Monorepo for the **verifiable vaults** demo: *the vault that cannot lie about its NAV*.
 
-Three independent operators re-execute a NAV computation, agree on identical
-result hashes, reach quorum, and attest the number on-chain. Corrupt one
-operator and its lie is rejected while the honest quorum settles the truth.
+Three independent operators re-execute a NAV computation, agree on identical result hashes, reach quorum, and attest the number on-chain. Corrupt one operator and its lie is rejected while the honest quorum settles the truth.
 
 ## Uniswap V3 integration
 
@@ -27,7 +25,7 @@ The vault's on-chain event history is indexed by an in-repo subgraph deployed to
 - **Subgraph package**: [`packages/subgraph/`](packages/subgraph/) — schema, mappings, manifest.
 - **Standardized schema**: [`packages/subgraph/schema.graphql`](packages/subgraph/schema.graphql) — `Vault`, `VaultDailyMetric`, `VaultDepositRequest`, `VaultRedeemRequest`, `DepositFulfilled`, `RedeemFulfilled` follow ERC-4626 conventions; `Strike`, `PlanExecution`, `PlanRejection`, `Deleverage`, `ExecuteCall` are Priime-specific extensions covering the operator quorum's NAV attestation and quorum-signed strategy plans.
 - **AssemblyScript mappings**: [`packages/subgraph/src/priime-vault.ts`](packages/subgraph/src/priime-vault.ts) — one handler per event, rolling up `Vault` counters plus a day-bucketed `VaultDailyMetric`.
-- **Deployed endpoint (Subgraph Studio)**: `https://api.studio.thegraph.com/query/1755125/priime-demo/v0.0.1`
+- **Deployed endpoint (Subgraph Studio)**: `https://api.studio.thegraph.com/query/1755125/priime-demo/v0.0.2` — every factory-deployed vault is indexed on the next block after `VaultCreated` via a `PriimeVaultInstance` template, no subgraph redeploy per new vault.
 - **UI consumer**: [`apps/replay-ui/lib/vaults/subgraph.ts`](apps/replay-ui/lib/vaults/subgraph.ts) fetches the vault snapshot; [`apps/replay-ui/components/vaults/SubgraphPanel.tsx`](apps/replay-ui/components/vaults/SubgraphPanel.tsx) renders it inside the vault page as an "Indexed by The Graph" panel that polls every 30 s.
 - **Subgraph MCP**: [`packages/subgraph/SKILL.md`](packages/subgraph/SKILL.md) — a SKILL config that layers the Subgraph MCP on top of the deployed subgraph so an MCP-aware agent (Claude Desktop, Cursor, ChatGPT) can query the vault in natural language. That composes a second Graph product on the same schema.
 
@@ -55,19 +53,11 @@ apps/loop-server/           # authenticated HTTP API deploying user loops as wor
 apps/replay-ui/             # Next.js frontend: the build canvas, the vault pages (see its README)
 ```
 
-Each component has its own README explaining what it does and why. This
-top-level README covers the M1 hello-world pipeline below, the minimal path
-through Priime. For the fuller demo (compose a loop in the browser, publish
-it, watch real attested strikes land on a live `PriimeVault`), see
-`docs/LIVE_DEMO.md`.
+Each component has its own README explaining what it does and why. This top-level README covers the M1 hello-world pipeline below, the minimal path through Priime. For the fuller demo (compose a loop in the browser, publish it, watch real attested strikes land on a live `PriimeVault`), see `docs/LIVE_DEMO.md`.
 
 ## Sepolia deployment (already live)
 
-A real Morpho market is deployed on Ethereum Sepolia (chain 11155111) and
-is what `TARGET=sepolia` points at. Nothing needs to be re-created; the
-addresses below are committed as the source of truth in
-`packages/loop-deploy/src/catalog.ts` (`USDE_USDC_MORPHO_SEPOLIA`) and
-`deploy/sepolia.config.json` (`morpho.market`).
+A real Morpho market is deployed on Ethereum Sepolia (chain 11155111) and is what `TARGET=sepolia` points at. Nothing needs to be re-created; the addresses below are committed as the source of truth in `packages/loop-deploy/src/catalog.ts` (`USDE_USDC_MORPHO_SEPOLIA`) and `deploy/sepolia.config.json` (`morpho.market`).
 
 | What | Address |
 | --- | --- |
@@ -77,23 +67,18 @@ addresses below are committed as the source of truth in
 | MorphoChainlinkOracleV2 (ours, 1:1 stub) | `0x1fC32D70B1B6F85c4dbc2F0626C9e558BD2a1bE2` |
 | Morpho market id (ours, 91.5% LLTV) | `0xee461cf86148c9e0e17c2bca906a4e7ff62bab1ff3334d20e82dd9672a899cb3` |
 
-Created 2026-09-09 by `0x03F3c4B41d839846A13841506297a567a3ebBa7a` via
-`deploy/sepolia-setup.sh`. `oracle.price()` returns exactly `1e24` (1:1),
-`Morpho.idToMarketParams(id)` returns the four addresses plus 91.5% LLTV.
+Created 2026-09-09 by `0x03F3c4B41d839846A13841506297a567a3ebBa7a` via `deploy/sepolia-setup.sh`. `oracle.price()` returns exactly `1e24` (1:1), `Morpho.idToMarketParams(id)` returns the four addresses plus 91.5% LLTV.
 
-To reproduce or port to another testnet, see `deploy/sepolia-setup.sh`
-(idempotent). The normal demo path does not need to run it.
+To reproduce or port to another testnet, see `deploy/sepolia-setup.sh` (idempotent). The normal demo path does not need to run it.
 
-## Base mainnet deployment (planned)
+## Base mainnet deployment (live)
 
-`TARGET=mainnet` points at Base itself (chain 8453). Zero deployment work
-on our side: every address the vault reads is already live and is the same
-contract that has attested the mainnet USDe/USDC market for months. The
-deploy scripts stand up the POA service manager and per-loop PriimeVault
-handlers on top; the market itself is unchanged.
+`TARGET=mainnet` runs against Base itself (chain 8453). The mainnet stack is deployed and attesting. Every user-facing vault deploys through a factory, so publishing a new loop through the composer emits `VaultCreated` and the subgraph auto-indexes the new address on the next block.
 
 | What | Address |
 | --- | --- |
+| `PriimeVaultFactory` (ours) | `0xa3cbA56ECC2F6684abf3D5a0Fd2C93D030849aBF` (deployed at block `51230370`) |
+| Service manager (ours) | `0x23d382E3c6b1625B0021d5ef291DBd12995cDf00` |
 | Ethena USDe (real) | `0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34` |
 | Circle USDC (real) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 | Morpho Blue (real) | `0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb` |
@@ -103,15 +88,57 @@ handlers on top; the market itself is unchanged.
 | Uniswap V3 USDe/USDC pool (real, entry leg) | `0xedAf6Ca46FB852D4AB0A2e9449d267cf03213F05` |
 | Uniswap V3 SwapRouter02 (real) | `0x2626664c2603336E57B271c5C0b26F421741e481` |
 
-To run: fill in `.env.mainnet` (see the template at the repo root) with
-`PRIIME_RPC_URL`, the four `PRIIME_*_KEY` role keys and a `LOOP_SERVER_TOKEN`,
-then `env $(grep -v '^#' .env.mainnet | xargs) TARGET=mainnet deploy/vault-service.sh`.
-Same script the fork uses. See `docs/LIVE_DEMO.md` for the full pipeline.
+### Factory deploy model
+
+`contracts/src/PriimeVaultFactory.sol` owns the single "point at me" pin for the subgraph. Every vault deployment routes through `factory.deployVault(serviceManager, asset, strategist, strategy)`, which emits `VaultCreated(vault, strategist, serviceManager, asset, collateralToken, block)`. `packages/subgraph/subgraph.yaml` treats the factory as a data source and spawns a `PriimeVaultInstance` template per `VaultCreated`, so publishing a new loop through the composer surfaces on the subgraph endpoint the next block without a subgraph redeploy.
+
+The factory address is persisted in `deploy/.mainnet/factory.json` and reused across re-runs; `packages/subgraph/scripts/sync-factory.sh` copies it into `networks.json` before `pnpm deploy`.
+
+### Safety rails on the loop server
+
+Two guards land at `POST /loops` and `DELETE /loops/:id` to keep testers from footgunning themselves:
+
+- **Pool preflight** (`packages/loop-deploy/src/chain.ts::verifyUniswapV3Pool`). One `slot0()` call against the resolved pool address before any DB row or IPFS pin lands. Rejects with `400` if the ABI decode does not match the 7-word Uniswap V3 shape (Aerodrome CL forks return 6 words).
+- **Pause guard** (`packages/loop-deploy/src/deployer.ts::PauseGuardError`). `DELETE /loops/:id` reads `totalPendingDepositAssets` and `totalPendingRedeemShares` off the vault before removing the workflow. Non-zero on either side → `409` with the pending amounts, so hitting pause on a vault mid-cycle cannot strand the depositor's escrow. The corresponding button is not exposed in the replay-ui vault page (`apps/replay-ui/components/vaults/LiveLoopDetail.tsx`); the guard defends the API regardless of client.
+
+### Running the mainnet demo end to end
+
+```bash
+# 1. Fill .env.mainnet at the repo root (gitignored via .env.*). Required:
+#    PRIIME_RPC_URL          - keyed provider URL, server-side only
+#    PRIIME_PUBLIC_RPC_URL   - browser-facing RPC (e.g. https://mainnet.base.org)
+#    PRIIME_OWNER_KEY        - manager owner + factory deployer
+#    PRIIME_STRATEGIST_KEY   - vault strategist (Priime independent exit)
+#    PRIIME_DEPOSITOR_KEY    - demo depositor
+#    PRIIME_TREASURY_KEY     - funds the three operator EOAs
+#    LOOP_SERVER_TOKEN       - openssl rand -hex 24
+
+# 2. Bring up the service (POA manager + factory + template vault + 3 nodes).
+#    First run deploys the factory; subsequent runs reuse it via factory.json.
+env $(grep -v '^#' .env.mainnet | xargs) TARGET=mainnet bash deploy/vault-service.sh
+
+# 3. Sync factory address into the subgraph and (re)deploy to Studio.
+cd packages/subgraph
+pnpm install
+pnpm sync-factory       # reads deploy/.mainnet/factory.json, writes networks.json
+pnpm build && pnpm deploy
+cd -
+
+# 4. Start loop-server + replay-ui.
+env $(grep -v '^#' .env.mainnet | xargs) TARGET=mainnet bash deploy/run-live-demo.sh
+
+# 5. In the browser: /build to publish a fresh vault through the composer
+#    (goes through the factory), or /vaults/loop-<id> for any existing loop.
+#    The SubgraphPanel on the vault page pulls from Studio and updates on
+#    every block; the strike ledger lands within one cron interval.
+```
+
+`docs/LIVE_DEMO.md` has the four-target reference (fork/sepolia/mainnet) and target-selector semantics.
+
 
 ## M1: hello-world through the full Priime pipeline (on anvil)
 
-A hello-world component through the whole pipeline: scaffold, build, deploy, a
-cron trigger fires, and the result lands in a handler contract on-chain.
+A hello-world component through the whole pipeline: scaffold, build, deploy, a cron trigger fires, and the result lands in a handler contract on-chain.
 
 ### Prerequisites
 
@@ -122,8 +149,7 @@ anvil --host 0.0.0.0 --block-time 1     # chainId 31337 on :8545 (0.0.0.0 so con
 ipfs daemon                             # gateway :8080, api :5001
 ```
 
-Also required: Foundry (`anvil`/`cast`/`forge`), Rust with the `wasm32-wasip2`
-target (pinned in `rust-toolchain.toml`), and these Docker images:
+Also required: Foundry (`anvil`/`cast`/`forge`), Rust with the `wasm32-wasip2` target (pinned in `rust-toolchain.toml`), and these Docker images:
 
 ```
 ghcr.io/priime-finance/priime:3.0.0
@@ -136,25 +162,17 @@ ghcr.io/lay3rlabs/poa-middleware:1.0.1
 bash deploy/deploy.sh
 ```
 
-It builds both components, deploys the POA service manager + `HelloNavHandler`,
-publishes the components + service to IPFS, assembles and deploys the service
-(cron every 10s), registers the single operator, starts the Priime node, and waits
-for the first strike to land. Expected tail:
+It builds both components, deploys the POA service manager + `HelloNavHandler`, publishes the components + service to IPFS, assembles and deploys the service (cron every 10s), registers the single operator, starts the Priime node, and waits for the first strike to land. Expected tail:
 
 ```
 SUCCESS: strikeCount=1 latestNav=42
 ```
 
-Inspect the running node with `docker logs priime-m1`. The script is re-runnable
-(fresh service manager + handler each run). It uses the well-known anvil test
-mnemonic; local development only.
+Inspect the running node with `docker logs priime-m1`. The script is re-runnable (fresh service manager + handler each run). It uses the well-known anvil test mnemonic; local development only.
 
 ## The journal seam (schema)
 
-Everything downstream is decoupled by one artifact: a JSON **journal**, one
-record per NAV strike. The backend produces it (aggregator keyvalue + on-chain
-attestation readback); the frontend consumes it. It is frozen so backend and
-frontend can proceed in parallel.
+Everything downstream is decoupled by one artifact: a JSON **journal**, one record per NAV strike. The backend produces it (aggregator keyvalue + on-chain attestation readback); the frontend consumes it. It is frozen so backend and frontend can proceed in parallel.
 
 - **Frontend / API (TS):** `import { type Journal, journalSchema } from "@priime-demo/journal-schema"` and validate with ajv against `journalSchema`.
 - **Backend (Rust):** `priime_journal::Journal` (serde). `deny_unknown_fields` makes any drift from the frozen schema a test failure.
@@ -168,5 +186,4 @@ npx ajv-cli@5 validate -s schema/journal.v1.schema.json \
 cd packages/journal-schema && npx -p typescript tsc --noEmit    # TS types compile
 ```
 
-The schema is **frozen at v1**. Any change means a new `$id` (`journal.v2`) plus
-a `schema_version` bump. See `schema/README.md`.
+The schema is **frozen at v1**. Any change means a new `$id` (`journal.v2`) plus a `schema_version` bump. See `schema/README.md`.

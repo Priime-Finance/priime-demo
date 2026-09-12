@@ -4,7 +4,7 @@ This SKILL lets a Subgraph-MCP-aware AI agent (Claude Desktop, Cursor, ChatGPT w
 
 ## What the agent gets
 
-A live GraphQL endpoint indexing the WAVS-attested ERC-7540 vault on Base. Natural language questions the agent can answer against it:
+A live GraphQL endpoint indexing the Priime-attested ERC-7540 vault on Base. Natural language questions the agent can answer against it:
 
 - "What NAV has the vault attested in its latest strike?"
 - "Show me every plan-rejection this vault ever had, with the reason bytes."
@@ -19,7 +19,7 @@ The schema follows the ERC-4626 / Messari Standardized Vault shape, so the same 
 Studio (development):
 
 ```
-https://api.studio.thegraph.com/query/1755125/priime-demo/v0.0.1
+https://api.studio.thegraph.com/query/1755125/priime-demo/v0.0.2
 ```
 
 ## MCP client configuration
@@ -33,7 +33,7 @@ Add this to your MCP client's config (`~/.config/claude-desktop/config.json` for
       "command": "npx",
       "args": ["-y", "@graphprotocol/subgraph-mcp"],
       "env": {
-        "SUBGRAPH_ENDPOINT": "https://api.studio.thegraph.com/query/1755125/priime-demo/v0.0.1"
+        "SUBGRAPH_ENDPOINT": "https://api.studio.thegraph.com/query/1755125/priime-demo/v0.0.2"
       }
     }
   }
@@ -49,7 +49,7 @@ Ask the agent: "Using the subgraph tool, tell me the vault's latest NAV and upda
 For a manual sanity check without the agent:
 
 ```bash
-curl -s https://api.studio.thegraph.com/query/1755125/priime-demo/v0.0.1 \
+curl -s https://api.studio.thegraph.com/query/1755125/priime-demo/v0.0.2 \
   -H 'content-type: application/json' \
   -d '{"query":"{ vaults { id lastNav updateCount } _meta { block { number } hasIndexingErrors } }"}' | jq
 ```

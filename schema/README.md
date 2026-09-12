@@ -1,9 +1,6 @@
 # NAV Strike Journal, frozen v1
 
-The seam between backend and frontend. One JSON record per NAV strike.
-`journal.v1.schema.json` (JSON Schema draft 2020-12) is the **source of truth**;
-the Rust (`crates/journal`) and TypeScript (`packages/journal-schema`) types are
-faithful transcriptions, and the two samples validate against all three.
+The seam between backend and frontend. One JSON record per NAV strike. `journal.v1.schema.json` (JSON Schema draft 2020-12) is the **source of truth**; the Rust (`crates/journal`) and TypeScript (`packages/journal-schema`) types are faithful transcriptions, and the two samples validate against all three.
 
 ## Fields
 
@@ -39,10 +36,7 @@ faithful transcriptions, and the two samples validate against all three.
 
 ## Freeze policy
 
-**Frozen at v1.** Within v1: no field renames, no type changes, no removals.
-Any change ships as a new `$id` (`journal.v2.schema.json`) and a `schema_version`
-bump; consumers switch on `schema_version`. `deny_unknown_fields` (Rust) +
-`additionalProperties:false` (schema) mean drift fails CI, not production.
+**Frozen at v1.** Within v1: no field renames, no type changes, no removals. Any change ships as a new `$id` (`journal.v2.schema.json`) and a `schema_version` bump; consumers switch on `schema_version`. `deny_unknown_fields` (Rust) + `additionalProperties:false` (schema) mean drift fails CI, not production.
 
 ## Decisions made here, confirm or veto before we build on it
 

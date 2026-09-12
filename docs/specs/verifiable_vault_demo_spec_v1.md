@@ -1,7 +1,6 @@
 # Priime Demo Spec v1: "The Vault That Cannot Lie"
 
-**Status:** Draft for roadmap meeting | **Owner:** Khaled | **Date:** 2026-08-05
-**Target:** working demo in 1-2 weeks; live on Base as private beta seed by ETH Global (Sept 4)
+**Status:** Draft for roadmap meeting | **Owner:** Khaled | **Date:** 2026-08-05 **Target:** working demo in 1-2 weeks; live on Base as private beta seed by ETH Global (Sept 4)
 
 ## Concept
 

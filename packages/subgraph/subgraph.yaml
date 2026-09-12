@@ -6,58 +6,6 @@ schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum
-    name: PriimeVault
-    network: base
-    source:
-      address: "0x38ecc349143f107126094e37d20cf14589adceef"
-      abi: PriimeVault
-      startBlock: 51174469
-    mapping:
-      kind: ethereum/events
-      apiVersion: 0.0.7
-      language: wasm/assemblyscript
-      entities:
-        - Vault
-        - Strike
-        - DepositRequest
-        - RedeemRequest
-        - DepositFulfilled
-        - RedeemFulfilled
-        - DepositRefunded
-        - PlanExecution
-        - PlanRejection
-        - Deleverage
-        - ExecuteCall
-        - VaultDailyMetric
-      abis:
-        - name: PriimeVault
-          file: ./abis/PriimeVault.json
-      eventHandlers:
-        - event: NavUpdated(indexed
-            bytes20,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,uint32,uint32,uint16)
-          handler: handleNavUpdated
-        - event: DepositRequest(indexed address,indexed address,indexed
-            uint256,address,uint256)
-          handler: handleDepositRequest
-        - event: RedeemRequest(indexed address,indexed address,indexed
-            uint256,address,uint256)
-          handler: handleRedeemRequest
-        - event: DepositRequestFulfilled(indexed address,uint256,uint256)
-          handler: handleDepositRequestFulfilled
-        - event: RedeemRequestFulfilled(indexed address,uint256,uint256)
-          handler: handleRedeemRequestFulfilled
-        - event: DepositRequestRefunded(indexed address,uint256)
-          handler: handleDepositRequestRefunded
-        - event: Executed(indexed address,bytes)
-          handler: handleExecuted
-        - event: PlanExecuted(indexed bytes32,uint256)
-          handler: handlePlanExecuted
-        - event: PlanRejected(indexed bytes32,bytes)
-          handler: handlePlanRejected
-        - event: Deleveraged(uint256,uint256,uint256)
-          handler: handleDeleveraged
-      file: ./src/priime-vault.ts
-  - kind: ethereum
     name: PriimeVaultFactory
     network: base
     source:
