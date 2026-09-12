@@ -34,6 +34,46 @@ const MANAGER_ABI = [
   },
 ] as const;
 
+const VAULT_ABI = [
+  {
+    type: "function",
+    name: "totalPendingDepositAssets",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "totalPendingRedeemShares",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+] as const;
+
+const POOL_ABI = [
+  {
+    // Uniswap V3 CLPool slot0() returns 7 words:
+    //   sqrtPriceX96, tick, observationIndex, observationCardinality,
+    //   observationCardinalityNext, feeProtocol, unlocked.
+    // Aerodrome CL forks drop `feeProtocol` and return 6. Presence of the
+    // uint8 feeProtocol slot is the sole shape check.
+    type: "function",
+    name: "slot0",
+    inputs: [],
+    outputs: [
+      { name: "sqrtPriceX96", type: "uint160" },
+      { name: "tick", type: "int24" },
+      { name: "observationIndex", type: "uint16" },
+      { name: "observationCardinality", type: "uint16" },
+      { name: "observationCardinalityNext", type: "uint16" },
+      { name: "feeProtocol", type: "uint8" },
+      { name: "unlocked", type: "bool" },
+    ],
+    stateMutability: "view",
+  },
+] as const;
+
 const FACTORY_ABI = [
   {
     type: "function",
@@ -71,12 +111,23 @@ export interface StrategyConfig {
   poolFee: number;
 }
 
+export interface VaultPendingBalances {
+  /** USDC escrowed from unfulfilled `requestDeposit` calls; strandable across pause. */
+  pendingDepositAssets: bigint;
+  /** Vault shares escrowed from unfulfilled `requestRedeem` calls; strandable across pause. */
+  pendingRedeemShares: bigint;
+}
+
 export interface ChainPort {
   /** Deploy a PriimeVault(serviceManager, asset, strategist, StrategyConfig). Returns the address. */
   deployHandler(strategist: string, strategy: StrategyConfig): Promise<string>;
   getServiceUri(): Promise<string>;
   /** Set the manager's service URI and wait for inclusion. Returns the tx hash. */
   setServiceUri(uri: string): Promise<string>;
+  /** Read `totalPendingDepositAssets` + `totalPendingRedeemShares` off the vault. Used by the pause pre-flight so testers can't strand mid-flight deposits or redeems. */
+  vaultPendingBalances(vaultAddress: string): Promise<VaultPendingBalances>;
+  /** Read `slot0()` off the pool and verify it decodes into the 7-word Uniswap V3 shape vault-nav expects. Throws with a specific message on mismatch (e.g. Aerodrome CL, whose 6-word slot0 was the class of bug this preflight prevents). */
+  verifyUniswapV3Pool(poolAddress: string): Promise<void>;
 }
 
 export interface ChainOptions {
@@ -218,6 +269,37 @@ export function makeChain(options: ChainOptions): ChainPort {
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error(`setServiceURI reverted (tx ${hash})`);
       return hash;
+    },
+
+    async vaultPendingBalances(vaultAddress: string): Promise<VaultPendingBalances> {
+      const address = vaultAddress as Address;
+      // The two reads are independent public storage; batch them onto one
+      // multicall via Promise.all so pause pre-flight adds one round trip,
+      // not two.
+      const [pendingDepositAssets, pendingRedeemShares] = await Promise.all([
+        publicClient.readContract({ address, abi: VAULT_ABI, functionName: "totalPendingDepositAssets" }),
+        publicClient.readContract({ address, abi: VAULT_ABI, functionName: "totalPendingRedeemShares" }),
+      ]);
+      return { pendingDepositAssets, pendingRedeemShares };
+    },
+
+    async verifyUniswapV3Pool(poolAddress: string): Promise<void> {
+      // One eth_call. If the returned data does not decode into the 7-word
+      // Uniswap V3 shape (uint160,int24,uint16,uint16,uint16,uint8,bool),
+      // viem throws a decode error; we rethrow with a specific message so
+      // the loop-server surfaces "wrong pool" instead of an opaque revert.
+      try {
+        await publicClient.readContract({
+          address: poolAddress as Address,
+          abi: POOL_ABI,
+          functionName: "slot0",
+        });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `slot0() at ${poolAddress} did not decode into the 7-word Uniswap V3 shape vault-nav expects (Aerodrome CL forks return 6 words); reject the market config before publishing. Underlying: ${detail}`,
+        );
+      }
     },
   };
 }

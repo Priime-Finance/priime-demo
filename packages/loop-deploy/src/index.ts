@@ -26,10 +26,10 @@ export {
   type WorkflowSpec,
   type CronWindow,
 } from "./builder.ts";
-export { makeChain, type ChainPort, type ChainOptions } from "./chain.ts";
+export { makeChain, type ChainPort, type ChainOptions, type VaultPendingBalances } from "./chain.ts";
 export { makeIpfs, type IpfsPort, type IpfsOptions } from "./ipfs.ts";
 export { LoopRegistry, type LoopRecord, type LoopStep, type LoopStatus } from "./registry.ts";
-export { LoopDeployer, LoopNotFoundError, type DeployerOptions } from "./deployer.ts";
+export { LoopDeployer, LoopNotFoundError, PauseGuardError, type DeployerOptions } from "./deployer.ts";
 export {
   deriveServiceId,
   deriveStrikeId,

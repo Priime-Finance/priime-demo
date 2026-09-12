@@ -1608,7 +1608,7 @@ mod tests {
         let usdc = address!("833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
         let usde = address!("5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34");
         let morpho = address!("BBBBBbbBBb9cC5e90e3b3AF64bdAF62C37EEFFCb");
-        let router = address!("BE6D8f0d05cC4be24d5167a3eF062215bE6D18a5");
+        let router = address!("2626664c2603336E57B271c5C0b26F421741e481");
         let usdc_amount = U256::from(5_000_000u64); // 5 USDC
         let twap = U256::from(PAR_PRICE_1E24); // par
         let plan = plan_open_position(
@@ -1685,7 +1685,7 @@ mod tests {
         let usdc = address!("833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
         let usde = address!("5d3a1Ff2b6bab83b63cd9ad0787074081a52eF34");
         let morpho = address!("BBBBBbbBBb9cC5e90e3b3AF64bdAF62C37EEFFCb");
-        let router = address!("BE6D8f0d05cC4be24d5167a3eF062215bE6D18a5");
+        let router = address!("2626664c2603336E57B271c5C0b26F421741e481");
         let oracle = address!("0000000000000000000000000000000000000002");
         let irm = address!("0000000000000000000000000000000000000003");
         let lltv = U256::from(915_000_000_000_000_000u64);

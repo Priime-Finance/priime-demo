@@ -378,7 +378,7 @@ export function componentConfigFor(
     pool_address: cfg.poolAddress,
     twap_window_secs: String(cfg.twapWindowSecs),
     inputs_block_lag: String(cfg.inputsBlockLag),
-    // Required by vault-nav to compose Aerodrome swap calldata every strike
+    // Required by vault-nav to compose Uniswap V3 swap calldata every strike
     // (`build_action_plan` in `components/vault-nav/src/lib.rs`); absent -> the
     // WASM emits an empty plan every cycle. Vault constructor also reads these
     // via `deployHandler`, so the two sides stay pinned to the same catalog row.

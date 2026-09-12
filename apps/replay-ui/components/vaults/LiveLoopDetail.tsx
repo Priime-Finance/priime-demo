@@ -40,11 +40,10 @@
  */
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 import type { LoopRecord, StrikeRecord } from "@priime-demo/loop-deploy";
 
-import { friendlyErrorMessage } from "@/lib/errors";
 
 import { ActivityTable, executionRows, verifyHref } from "./ActivitySection";
 import DepositCard from "./DepositCard";
@@ -68,7 +67,7 @@ import {
 import { Hex } from "./Hex";
 import SubgraphPanel from "./SubgraphPanel";
 import { AWAITING_LABEL, strikeRows } from "@/lib/vaults/attested";
-import { fetchLoop, fetchLoopJournals, pauseLoop } from "@/lib/vaults/live-source";
+import { fetchLoop, fetchLoopJournals } from "@/lib/vaults/live-source";
 import { withParamKinds } from "@/lib/vaults/param-kind";
 /* The product's one money format, from the same owner every other headline
    figure on a vault page reads. */
@@ -159,18 +158,6 @@ export default function LiveLoopDetail({ id }: { id: string }) {
     const tick = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
-  const [pausing, setPausing] = useState<{ kind: "idle" } | { kind: "busy" } | { kind: "error"; message: string }>({ kind: "idle" });
-  const onPause = useCallback(async () => {
-    if (pausing.kind === "busy") return;
-    setPausing({ kind: "busy" });
-    try {
-      const res = await pauseLoop(id);
-      setState((prev) => (prev.kind === "ready" ? { ...prev, loop: res.loop } : prev));
-      setPausing({ kind: "idle" });
-    } catch (err) {
-      setPausing({ kind: "error", message: friendlyErrorMessage(err) });
-    }
-  }, [id, pausing.kind]);
 
   if (state.kind === "loading") return <div className="vx-root" />;
 
@@ -247,22 +234,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
             Paused. Workflow removed from the service; operators no longer schedule strikes. On-chain vault (
             {loop.handlerAddress === null ? "pending" : <Hex full={loop.handlerAddress} />}) still holds any deposited assets.
           </p>
-        ) : (
-          <div className="vxd-actions">
-            <button
-              type="button"
-              className="vxd-btn vxd-btn--ghost"
-              onClick={() => { void onPause(); }}
-              disabled={pausing.kind === "busy"}
-              title="Stop the operator quorum from scheduling this loop's strikes"
-            >
-              {pausing.kind === "busy" ? "Pausing…" : "Pause loop"}
-            </button>
-            {pausing.kind === "error" ? (
-              <span className="vxd-note vxd-note--err">{pausing.message}</span>
-            ) : null}
-          </div>
-        )}
+        ) : null}
         <p className="vx-dsummary">{DEPLOYMENT_SUMMARY}</p>
       </header>
 

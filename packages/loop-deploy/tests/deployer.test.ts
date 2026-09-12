@@ -56,6 +56,8 @@ interface Fakes {
   ipfs: IpfsPort;
   counters: { deploys: number; pins: number; setUri: number };
   failNextPin: () => void;
+  failNextPoolCheck: () => void;
+  setPending: (pendingDepositAssets: bigint, pendingRedeemShares: bigint) => void;
   currentDoc: () => unknown;
 }
 
@@ -67,6 +69,9 @@ function makeFakes(): Fakes {
   let deployCounter = 0;
   const counters = { deploys: 0, pins: 0, setUri: 0 };
   let pinShouldFail = false;
+  let pendingDepositAssets = 0n;
+  let pendingRedeemShares = 0n;
+  let poolShouldFail = false;
 
   const chain: ChainPort = {
     async deployHandler(strategist: string): Promise<string> {
@@ -81,6 +86,15 @@ function makeFakes(): Fakes {
       counters.setUri += 1;
       uri = next;
       return "0xtxhash";
+    },
+    async vaultPendingBalances(_vaultAddress: string): Promise<{ pendingDepositAssets: bigint; pendingRedeemShares: bigint }> {
+      return { pendingDepositAssets: pendingDepositAssets, pendingRedeemShares: pendingRedeemShares };
+    },
+    async verifyUniswapV3Pool(_poolAddress: string): Promise<void> {
+      if (poolShouldFail) {
+        poolShouldFail = false;
+        throw new Error(`Aerodrome CL slot0 mismatch (test-forced)`);
+      }
     },
   };
 
@@ -109,6 +123,13 @@ function makeFakes(): Fakes {
     counters,
     failNextPin: () => {
       pinShouldFail = true;
+    },
+    failNextPoolCheck: () => {
+      poolShouldFail = true;
+    },
+    setPending: (deposits: bigint, redeems: bigint) => {
+      pendingDepositAssets = deposits;
+      pendingRedeemShares = redeems;
     },
     currentDoc: () => parseLossless(store.get(uri) ?? "null"),
   };
@@ -180,6 +201,16 @@ describe("LoopDeployer", () => {
     expect(fakes.counters.setUri).toBe(2);
   });
 
+  it("refuses createLoop when the pool's slot0() does not match Uniswap V3 shape", async () => {
+    const { deployer, registry, fakes } = makeDeployer();
+    fakes.failNextPoolCheck();
+    await expect(deployer.createLoop(validLoopResolveInput())).rejects.toThrow(/does not respond as a Uniswap V3 pool/);
+    // No DB row, no handler, no IPFS mutation; publish rejected at the door.
+    expect(registry.list()).toHaveLength(0);
+    expect(fakes.counters.deploys).toBe(0);
+    expect(fakes.counters.pins).toBe(0);
+  });
+
   it("deactivates a loop by removing its workflow, keeping the handler", async () => {
     const { deployer, fakes } = makeDeployer();
     const loop = await deployer.createLoop(validLoopResolveInput());
@@ -187,6 +218,35 @@ describe("LoopDeployer", () => {
     expect(deactivated.status).toBe("inactive");
     expect(deactivated.handlerAddress).toBe(loop.handlerAddress);
     expect(workflowIds(fakes.currentDoc())).toEqual([TEMPLATE_WORKFLOW_ID]);
+  });
+
+  it("refuses to deactivate a loop whose vault still holds pending deposit escrow", async () => {
+    const { deployer, fakes } = makeDeployer();
+    const loop = await deployer.createLoop(validLoopResolveInput());
+    // 5 USDC (6-dec) sat in requestDeposit, never fulfilled by a strike.
+    fakes.setPending(5_000_000n, 0n);
+    await expect(deployer.deactivateLoop(loop.id)).rejects.toThrow(/refusing to pause/);
+    // Workflow stayed live so the next strike can still fulfill the escrow.
+    expect(workflowIds(fakes.currentDoc())).toContain(loop.workflowId);
+  });
+
+  it("refuses to deactivate a loop whose vault still holds pending redeem shares", async () => {
+    const { deployer, fakes } = makeDeployer();
+    const loop = await deployer.createLoop(validLoopResolveInput());
+    fakes.setPending(0n, 1_000_000_000_000_000_000n);
+    await expect(deployer.deactivateLoop(loop.id)).rejects.toThrow(/pendingRedeemShares=1000000000000000000/);
+    expect(workflowIds(fakes.currentDoc())).toContain(loop.workflowId);
+  });
+
+  it("deactivates once pending escrow clears (guard reads chain each call)", async () => {
+    const { deployer, fakes } = makeDeployer();
+    const loop = await deployer.createLoop(validLoopResolveInput());
+    fakes.setPending(5_000_000n, 0n);
+    await expect(deployer.deactivateLoop(loop.id)).rejects.toThrow(/refusing to pause/);
+    // Next strike fulfilled the escrow; retry succeeds.
+    fakes.setPending(0n, 0n);
+    const deactivated = await deployer.deactivateLoop(loop.id);
+    expect(deactivated.status).toBe("inactive");
   });
 
   it("refuses to deactivate the template workflow via a crafted record", async () => {
@@ -252,7 +312,7 @@ describe("LoopDeployer", () => {
       oracleAddress: "0xf4b17c79492d68775e22e8dd0a2bb22854a39a47",
       irmAddress: "0x46415998764c29ab2a25cbea6254146d50d22687",
       morphoAddress: "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
-      poolAddress: "0x15bc08d2e2b405afed3fb872dcd2d962bccfb7e0",
+      poolAddress: "0xedAf6Ca46FB852D4AB0A2e9449d267cf03213F05",
       twapWindowSecs: 1800,
       inputsBlockLag: 2,
       strategyParams: {},
