@@ -17,7 +17,8 @@ export interface ServerEnv {
   usdcAddress: string;
   ipfsApiUrl: string;
   ipfsGatewayUrl: string;
-  artifactPath: string;
+  /** PriimeVaultFactory address; every deployed vault emits VaultCreated so the subgraph auto-indexes it. */
+  factoryAddress: string;
   dbPath: string;
   templateWorkflowId: string | undefined;
   /** NAV wasm digest, mirrored into every journal so consumers can re-check. */
@@ -53,7 +54,7 @@ export function readEnv(): ServerEnv {
     usdcAddress: required("USDC_ADDRESS"),
     ipfsApiUrl: process.env.IPFS_API_URL ?? "http://127.0.0.1:5001",
     ipfsGatewayUrl: process.env.IPFS_GATEWAY_URL ?? "http://127.0.0.1:8080",
-    artifactPath: process.env.HANDLER_ARTIFACT_PATH ?? new URL("../../../contracts/out/PriimeVault.sol/PriimeVault.json", import.meta.url).pathname,
+    factoryAddress: process.env.FACTORY_ADDRESS ?? factoryFromServiceJson() ?? required("FACTORY_ADDRESS"),
     dbPath: process.env.DB_PATH ?? new URL("../data/loops.db", import.meta.url).pathname,
     templateWorkflowId: process.env.TEMPLATE_WORKFLOW_ID ?? templateFromServiceJson(),
     // Fallback to the placeholder used in journal-schema samples so the
@@ -67,6 +68,18 @@ export function readEnv(): ServerEnv {
   };
 }
 
+/** Read `factory` from vault-service.json (deploy/vault-service.sh writes it there). */
+function factoryFromServiceJson(): string | undefined {
+  const path = process.env.VAULT_SERVICE_JSON ?? new URL("../../../deploy/.fork/vault-service.json", import.meta.url).pathname;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return undefined;
+  }
+  if (isRecord(parsed) && typeof parsed.factory === "string") return parsed.factory;
+  return undefined;
+}
 /** Read the template workflow id vault-service.sh wrote out at bring-up. */
 function templateFromServiceJson(): string | undefined {
   const path = process.env.VAULT_SERVICE_JSON ?? new URL("../../../deploy/.fork/vault-service.json", import.meta.url).pathname;

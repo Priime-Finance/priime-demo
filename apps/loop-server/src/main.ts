@@ -46,7 +46,7 @@ const deployer = new LoopDeployer({
     ownerKey: env.ownerKey,
     managerAddress: env.managerAddress,
     assetAddress: env.usdcAddress,
-    artifactPath: env.artifactPath,
+    factoryAddress: env.factoryAddress,
   }),
   ipfs: makeIpfs({ apiUrl: env.ipfsApiUrl, gatewayUrl: env.ipfsGatewayUrl }),
   chainKey: env.chainKey,

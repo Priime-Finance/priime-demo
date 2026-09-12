@@ -7,20 +7,15 @@
  * money sits behind per-loop handlers whose strategist is the user.
  */
 
-import { readFileSync } from "node:fs";
-
 import {
   createPublicClient,
   createWalletClient,
   defineChain,
   http,
-  type Abi,
   type Address,
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-
-import { isRecord } from "./guards.ts";
 
 const MANAGER_ABI = [
   {
@@ -39,6 +34,33 @@ const MANAGER_ABI = [
   },
 ] as const;
 
+const FACTORY_ABI = [
+  {
+    type: "function",
+    name: "deployVault",
+    inputs: [
+      { name: "serviceManager", type: "address" },
+      { name: "asset", type: "address" },
+      { name: "strategist", type: "address" },
+      {
+        name: "strategy",
+        type: "tuple",
+        components: [
+          { name: "collateralToken", type: "address" },
+          { name: "morpho", type: "address" },
+          { name: "morphoOracle", type: "address" },
+          { name: "morphoIrm", type: "address" },
+          { name: "morphoLltv", type: "uint256" },
+          { name: "swapRouter", type: "address" },
+          { name: "poolFee", type: "uint24" },
+        ],
+      },
+    ],
+    outputs: [{ type: "address" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
 export interface StrategyConfig {
   collateralToken: string;
   morpho: string;
@@ -46,7 +68,7 @@ export interface StrategyConfig {
   morphoIrm: string;
   morphoLltv: bigint;
   swapRouter: string;
-  poolTickSpacing: number;
+  poolFee: number;
 }
 
 export interface ChainPort {
@@ -63,32 +85,10 @@ export interface ChainOptions {
   /** Manager owner private key (0x hex). */
   ownerKey: string;
   managerAddress: string;
+  /** PriimeVaultFactory address. Every deployed vault emits VaultCreated so the subgraph auto-indexes it. */
+  factoryAddress: string;
   /** Vault asset (USDC) for handler constructor args. */
   assetAddress: string;
-  /** Forge artifact for the handler contract (PriimeVault.json). */
-  artifactPath: string;
-}
-
-interface HandlerArtifact {
-  abi: Abi;
-  bytecode: Hex;
-}
-
-/** Load abi + creation bytecode from a forge artifact. */
-export function loadHandlerArtifact(path: string): HandlerArtifact {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(path, "utf8"));
-  } catch (err) {
-    throw new Error(
-      `cannot read handler artifact at ${path} (run \`forge build\` in contracts/ first): ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-  if (!isRecord(parsed) || !Array.isArray(parsed.abi) || !isRecord(parsed.bytecode) || typeof parsed.bytecode.object !== "string") {
-    throw new Error(`handler artifact at ${path} is not a forge artifact (missing abi/bytecode.object)`);
-  }
-  // Forge artifact shapes are stable; abi/bytecode were checked above.
-  return { abi: parsed.abi as Abi, bytecode: parsed.bytecode.object as Hex };
 }
 
 export function makeChain(options: ChainOptions): ChainPort {
@@ -103,7 +103,8 @@ export function makeChain(options: ChainOptions): ChainPort {
   const walletClient = createWalletClient({ chain, transport: http(options.rpcUrl), account });
   const manager = options.managerAddress as Address;
   const asset = options.assetAddress as Address;
-  const artifact = loadHandlerArtifact(options.artifactPath);
+  const factory = options.factoryAddress as Address;
+
 
   /**
    * Alchemy's load-balanced Base RPC pool sometimes routes the next tx from
@@ -140,36 +141,47 @@ export function makeChain(options: ChainOptions): ChainPort {
 
   return {
     async deployHandler(strategist: string, strategy: StrategyConfig): Promise<string> {
+      // Every deploy goes through the factory so the subgraph auto-indexes
+      // the new vault via its VaultCreated event + data-source template.
       const nonceBefore = await publicClient.getTransactionCount({
         address: account.address,
         blockTag: "pending",
       });
-      const hash = await walletClient.deployContract({
-        abi: artifact.abi,
-        bytecode: artifact.bytecode,
-        args: [
-          manager,
-          asset,
-          strategist as Address,
-          {
-            collateralToken: strategy.collateralToken as Address,
-            morpho: strategy.morpho as Address,
-            morphoOracle: strategy.morphoOracle as Address,
-            morphoIrm: strategy.morphoIrm as Address,
-            morphoLltv: strategy.morphoLltv,
-            swapRouter: strategy.swapRouter as Address,
-            poolTickSpacing: strategy.poolTickSpacing,
-          },
-        ],
+      const args = [
+        manager,
+        asset,
+        strategist as Address,
+        {
+          collateralToken: strategy.collateralToken as Address,
+          morpho: strategy.morpho as Address,
+          morphoOracle: strategy.morphoOracle as Address,
+          morphoIrm: strategy.morphoIrm as Address,
+          morphoLltv: strategy.morphoLltv,
+          swapRouter: strategy.swapRouter as Address,
+          poolFee: strategy.poolFee,
+        },
+      ] as const;
+      // Predict the vault address up-front so we do not need to parse
+      // VaultCreated back out of the receipt.
+      const predicted = await publicClient.readContract({
+        address: factory,
+        abi: FACTORY_ABI,
+        functionName: "deployVault",
+        args,
+        account,
+      });
+      const hash = await walletClient.writeContract({
+        address: factory,
+        abi: FACTORY_ABI,
+        functionName: "deployVault",
+        args,
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success" || receipt.contractAddress === null || receipt.contractAddress === undefined) {
-        throw new Error(`handler deploy reverted (tx ${hash})`);
+      if (receipt.status !== "success") {
+        throw new Error(`factory.deployVault reverted (tx ${hash})`);
       }
-      // Deploy landed; make sure every RPC node in the pool sees the updated
-      // pending-nonce before we hand back control.
       await waitForNonce(nonceBefore + 1, 10_000);
-      return receipt.contractAddress.toLowerCase();
+      return (predicted as Address).toLowerCase();
     },
 
     async getServiceUri(): Promise<string> {

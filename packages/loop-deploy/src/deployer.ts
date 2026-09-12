@@ -127,12 +127,12 @@ export class LoopDeployer {
          values either way (see `resolveLoopConfig`). */
       const raw = JSON.parse(record.configJson) as Record<string, unknown>;
       if (raw !== null && typeof raw === "object") {
-        if (raw.swapRouter === undefined || raw.poolTickSpacing === undefined) {
+        if (raw.swapRouter === undefined || raw.poolFee === undefined) {
           const cid = typeof raw.candidateId === "string" ? raw.candidateId : "";
           const market = lookupMarket(cid);
           if (market !== null) {
             if (raw.swapRouter === undefined) raw.swapRouter = market.swapRouter;
-            if (raw.poolTickSpacing === undefined) raw.poolTickSpacing = market.poolTickSpacing;
+            if (raw.poolFee === undefined) raw.poolFee = market.poolFee;
           }
         }
       }
@@ -150,7 +150,7 @@ export class LoopDeployer {
           morphoIrm: market.irmAddress,
           morphoLltv: BigInt(market.lltv),
           swapRouter: market.swapRouter,
-          poolTickSpacing: market.poolTickSpacing,
+          poolFee: market.poolFee,
         });
         record = this.registry.update(id, { handlerAddress: handler, step: "handler_deployed", status: "deploying", error: null });
       }

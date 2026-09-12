@@ -1,0 +1,12 @@
+{
+  "base": {
+    "PriimeVault": {
+      "address": "0x38ecc349143f107126094e37d20cf14589adceef",
+      "startBlock": 51174469
+    },
+    "PriimeVaultFactory": {
+      "address": "0xa3cbA56ECC2F6684abf3D5a0Fd2C93D030849aBF",
+      "startBlock": 51230370
+    }
+  }
+}

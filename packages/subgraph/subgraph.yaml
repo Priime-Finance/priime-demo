@@ -1,0 +1,131 @@
+specVersion: 0.0.5
+description: "Verifiable ERC-7540 vault: NAV attested by a Priime operator
+  quorum, indexed on Base."
+repository: https://github.com/Priime-Finance/priime-demo
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: PriimeVault
+    network: base
+    source:
+      address: "0x38ecc349143f107126094e37d20cf14589adceef"
+      abi: PriimeVault
+      startBlock: 51174469
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Vault
+        - Strike
+        - DepositRequest
+        - RedeemRequest
+        - DepositFulfilled
+        - RedeemFulfilled
+        - DepositRefunded
+        - PlanExecution
+        - PlanRejection
+        - Deleverage
+        - ExecuteCall
+        - VaultDailyMetric
+      abis:
+        - name: PriimeVault
+          file: ./abis/PriimeVault.json
+      eventHandlers:
+        - event: NavUpdated(indexed
+            bytes20,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,uint32,uint32,uint16)
+          handler: handleNavUpdated
+        - event: DepositRequest(indexed address,indexed address,indexed
+            uint256,address,uint256)
+          handler: handleDepositRequest
+        - event: RedeemRequest(indexed address,indexed address,indexed
+            uint256,address,uint256)
+          handler: handleRedeemRequest
+        - event: DepositRequestFulfilled(indexed address,uint256,uint256)
+          handler: handleDepositRequestFulfilled
+        - event: RedeemRequestFulfilled(indexed address,uint256,uint256)
+          handler: handleRedeemRequestFulfilled
+        - event: DepositRequestRefunded(indexed address,uint256)
+          handler: handleDepositRequestRefunded
+        - event: Executed(indexed address,bytes)
+          handler: handleExecuted
+        - event: PlanExecuted(indexed bytes32,uint256)
+          handler: handlePlanExecuted
+        - event: PlanRejected(indexed bytes32,bytes)
+          handler: handlePlanRejected
+        - event: Deleveraged(uint256,uint256,uint256)
+          handler: handleDeleveraged
+      file: ./src/priime-vault.ts
+  - kind: ethereum
+    name: PriimeVaultFactory
+    network: base
+    source:
+      abi: PriimeVaultFactory
+      address: "0xa3cbA56ECC2F6684abf3D5a0Fd2C93D030849aBF"
+      startBlock: 51230370
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Vault
+      abis:
+        - name: PriimeVaultFactory
+          file: ./abis/PriimeVaultFactory.json
+      eventHandlers:
+        - event: VaultCreated(indexed address,indexed address,indexed
+            address,address,address,uint256)
+          handler: handleVaultCreated
+      file: ./src/priime-vault-factory.ts
+templates:
+  - kind: ethereum
+    name: PriimeVaultInstance
+    network: base
+    source:
+      abi: PriimeVault
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Vault
+        - Strike
+        - DepositRequest
+        - RedeemRequest
+        - DepositFulfilled
+        - RedeemFulfilled
+        - DepositRefunded
+        - PlanExecution
+        - PlanRejection
+        - Deleverage
+        - ExecuteCall
+        - VaultDailyMetric
+      abis:
+        - name: PriimeVault
+          file: ./abis/PriimeVault.json
+      eventHandlers:
+        - event: NavUpdated(indexed
+            bytes20,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,uint32,uint32,uint16)
+          handler: handleNavUpdated
+        - event: DepositRequest(indexed address,indexed address,indexed
+            uint256,address,uint256)
+          handler: handleDepositRequest
+        - event: RedeemRequest(indexed address,indexed address,indexed
+            uint256,address,uint256)
+          handler: handleRedeemRequest
+        - event: DepositRequestFulfilled(indexed address,uint256,uint256)
+          handler: handleDepositRequestFulfilled
+        - event: RedeemRequestFulfilled(indexed address,uint256,uint256)
+          handler: handleRedeemRequestFulfilled
+        - event: DepositRequestRefunded(indexed address,uint256)
+          handler: handleDepositRequestRefunded
+        - event: Executed(indexed address,bytes)
+          handler: handleExecuted
+        - event: PlanExecuted(indexed bytes32,uint256)
+          handler: handlePlanExecuted
+        - event: PlanRejected(indexed bytes32,bytes)
+          handler: handlePlanRejected
+        - event: Deleveraged(uint256,uint256,uint256)
+          handler: handleDeleveraged
+      file: ./src/priime-vault.ts

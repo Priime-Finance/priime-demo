@@ -1,0 +1,194 @@
+# PriimeVault subgraph schema (ERC-4626 / ERC-7540 async tokenized vault).
+#
+# Modelled around the Messari Standardized Vault shape so a consumer can swap in any ERC-4626 vault subgraph without rewriting queries. The Priime-specific extensions cover the Priime operator quorum's NAV attestation (`Strike`), the quorum-signed strategy plan (`PlanExecution`, `PlanRejection`), the atomic Morpho flashloan deleverage (`Deleverage`), and the strategist manual-execute audit trail (`ExecuteCall`).
+type Vault @entity(immutable: false) {
+  "Vault contract address (bytes20)."
+  id: Bytes!
+  address: Bytes!
+  "USDC on Base (ERC-4626 asset)."
+  asset: Bytes!
+  "Strategist EOA — the only address `execute()` accepts."
+  strategist: Bytes!
+  "POA service manager the operator quorum registers with."
+  serviceManager: Bytes!
+  "Uniswap V3 SwapRouter02."
+  swapRouter: Bytes!
+  "Uniswap V3 pool fee tier (1e-6 units, e.g. 500 for 0.05%)."
+  poolFee: Int!
+  "Block the vault contract was deployed at."
+  createdBlock: BigInt!
+  createdTimestamp: BigInt!
+  "Cumulative counters, updated on each event."
+  totalShares: BigInt!
+  totalDepositRequested: BigInt!
+  totalDepositFulfilled: BigInt!
+  totalRedeemRequested: BigInt!
+  totalRedeemFulfilled: BigInt!
+  "Latest attested NAV (USDC base units)."
+  lastNav: BigInt!
+  "`inputs_block` of the newest attested strike."
+  lastInputsBlock: BigInt!
+  "Total NAV strikes attested."
+  updateCount: BigInt!
+  "Latest breachFlags observed on any strike."
+  breachFlags: Int!
+  "Derived relations."
+  strikes: [Strike!]! @derivedFrom(field: "vault")
+  depositRequests: [VaultDepositRequest!]! @derivedFrom(field: "vault")
+  redeemRequests: [VaultRedeemRequest!]! @derivedFrom(field: "vault")
+  deposits: [DepositFulfilled!]! @derivedFrom(field: "vault")
+  redeems: [RedeemFulfilled!]! @derivedFrom(field: "vault")
+  planExecutions: [PlanExecution!]! @derivedFrom(field: "vault")
+  planRejections: [PlanRejection!]! @derivedFrom(field: "vault")
+  deleverages: [Deleverage!]! @derivedFrom(field: "vault")
+  executes: [ExecuteCall!]! @derivedFrom(field: "vault")
+  dailyMetrics: [VaultDailyMetric!]! @derivedFrom(field: "vault")
+}
+
+"One Priime-attested NAV strike."
+type Strike @entity(immutable: true) {
+  "Unique per strike: `eventId` (bytes20 dedup key from the aggregator)."
+  id: Bytes!
+  vault: Vault!
+  eventId: Bytes!
+  "Attested NAV in USDC base units."
+  nav: BigInt!
+  "Block height the operator quorum read state at."
+  inputsBlock: BigInt!
+  updateCount: BigInt!
+  "keccak256 of the workflow's canonicalized componentConfig — the operator quorum's binding to the config version they attested."
+  configHash: Bytes!
+  leverageBps: Int!
+  ltvBps: Int!
+  reserveBps: Int!
+  supplyApyBps: Int!
+  hoursSinceUpdate: Int!
+  "OR-composed guard-trip bits (0 == clean)."
+  breachFlags: Int!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type VaultDepositRequest @entity(immutable: true) {
+  id: Bytes!
+  vault: Vault!
+  controller: Bytes!
+  owner: Bytes!
+  sender: Bytes!
+  requestId: BigInt!
+  assets: BigInt!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type VaultRedeemRequest @entity(immutable: true) {
+  id: Bytes!
+  vault: Vault!
+  controller: Bytes!
+  owner: Bytes!
+  sender: Bytes!
+  requestId: BigInt!
+  shares: BigInt!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type DepositFulfilled @entity(immutable: true) {
+  id: Bytes!
+  vault: Vault!
+  controller: Bytes!
+  assets: BigInt!
+  shares: BigInt!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type RedeemFulfilled @entity(immutable: true) {
+  id: Bytes!
+  vault: Vault!
+  controller: Bytes!
+  shares: BigInt!
+  assets: BigInt!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type DepositRefunded @entity(immutable: true) {
+  id: Bytes!
+  vault: Vault!
+  controller: Bytes!
+  assets: BigInt!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type PlanExecution @entity(immutable: true) {
+  "planHash + tx hash so the same planHash retried later is a distinct row."
+  id: Bytes!
+  vault: Vault!
+  planHash: Bytes!
+  stepCount: BigInt!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type PlanRejection @entity(immutable: true) {
+  id: Bytes!
+  vault: Vault!
+  planHash: Bytes!
+  "Raw revert bytes from the failing step or the escrow-floor guard."
+  reason: Bytes!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type Deleverage @entity(immutable: true) {
+  id: Bytes!
+  vault: Vault!
+  "Flashloan principal (USDC base units)."
+  flashAssets: BigInt!
+  "USDe withdrawn from Morpho collateral."
+  collateralOut: BigInt!
+  "USDC received from the Uniswap V3 swap."
+  usdcOut: BigInt!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type ExecuteCall @entity(immutable: true) {
+  id: Bytes!
+  vault: Vault!
+  target: Bytes!
+  data: Bytes!
+  block: BigInt!
+  timestamp: BigInt!
+  tx: Bytes!
+}
+
+type VaultDailyMetric @entity(immutable: false) {
+  "vault-<day>."
+  id: Bytes!
+  vault: Vault!
+  "UTC day timestamp (seconds, floored to 00:00)."
+  day: BigInt!
+  strikeCount: Int!
+  "NAV at the day's last strike (USDC base units)."
+  navEnd: BigInt!
+  navMin: BigInt!
+  navMax: BigInt!
+  depositRequests: Int!
+  redeemRequests: Int!
+  depositsFulfilled: BigInt!
+  redeemsFulfilled: BigInt!
+  planExecuted: Int!
+  planRejected: Int!
+}
