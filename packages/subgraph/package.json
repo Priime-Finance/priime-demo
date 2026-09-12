@@ -6,7 +6,8 @@
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy": "graph deploy priime-demo --node https://api.studio.thegraph.com/deploy/ --version-label v0.0.1",
+    "sync-factory": "./scripts/sync-factory.sh",
+    "deploy": "graph deploy priime-demo --node https://api.studio.thegraph.com/deploy/ --version-label v0.0.2 --network-file ./networks.json --network base",
     "auth": "echo 'Run: graph auth <YOUR_STUDIO_DEPLOY_KEY>'"
   },
   "devDependencies": {

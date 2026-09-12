@@ -79,7 +79,7 @@ export interface LoopConfig {
   /** Blocks behind the trigger-time block to pin reads (reorg depth). */
   inputsBlockLag: number;
   /**
-   * Aerodrome Slipstream router for USDC<->USDe swaps. Set on vault
+   * Uniswap V3 router for USDC<->USDe swaps. Set on vault
    * construction AND read every strike by the WASM component when it
    * composes StrategyPlan swap calldata. Absent -> the component emits an
    * empty plan on every strike (dead loop). Sourced from the market catalog
@@ -87,11 +87,11 @@ export interface LoopConfig {
    */
   swapRouter: string;
   /**
-   * Slipstream tick spacing for the USDC/USDe pool (not a fee tier).
+   * Uniswap V3 tick spacing for the USDC/USDe pool (not a fee tier).
    * Same lifecycle as `swapRouter` — set at construction, read every
    * strike. Zero/absent -> empty plan.
    */
-  poolTickSpacing: number;
+  poolFee: number;
   /**
    * The composer's knobs, string-encoded. Copied verbatim from the publish
    * input and merged into `componentConfigFor`'s output, so every workflow
@@ -218,7 +218,7 @@ export function validateLoopConfig(input: unknown): LoopConfig {
   const twapWindowSecs = intField(input, "twapWindowSecs", 300, 86400, issues);
   const inputsBlockLag = intField(input, "inputsBlockLag", 0, 100, issues);
   const swapRouter = addressField(input, "swapRouter", issues);
-  const poolTickSpacing = intField(input, "poolTickSpacing", 1, 200_000, issues);
+  const poolFee = intField(input, "poolFee", 100, 10_000, issues);
 
   // strategyParams is optional at the stored/internal boundary too, so old
   // configs that predate the composer still validate.
@@ -261,7 +261,7 @@ export function validateLoopConfig(input: unknown): LoopConfig {
     twapWindowSecs,
     inputsBlockLag,
     swapRouter,
-    poolTickSpacing,
+    poolFee,
     strategyParams,
   };
 }
@@ -335,7 +335,7 @@ export function resolveLoopConfig(input: unknown): LoopConfig {
     twapWindowSecs: market.twapWindowSecs,
     inputsBlockLag: market.inputsBlockLag,
     swapRouter: market.swapRouter,
-    poolTickSpacing: market.poolTickSpacing,
+    poolFee: market.poolFee,
     strategyParams,
   };
 }
@@ -383,6 +383,6 @@ export function componentConfigFor(
     // WASM emits an empty plan every cycle. Vault constructor also reads these
     // via `deployHandler`, so the two sides stay pinned to the same catalog row.
     swap_router: cfg.swapRouter,
-    pool_tick_spacing: String(cfg.poolTickSpacing),
+    pool_fee: String(cfg.poolFee),
   };
 }

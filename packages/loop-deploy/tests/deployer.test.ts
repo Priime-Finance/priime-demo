@@ -232,9 +232,9 @@ describe("LoopDeployer", () => {
     expect(fakes.counters.deploys).toBe(0);
   });
 
-  it("resumes a legacy configJson written before swapRouter/poolTickSpacing were first-class", async () => {
+  it("resumes a legacy configJson written before swapRouter/poolFee were first-class", async () => {
     /* Regression pin for roadmap P00 #9: any loop record persisted before the
-       LoopConfig grew `swapRouter`/`poolTickSpacing` would otherwise fail
+       LoopConfig grew `swapRouter`/`poolFee` would otherwise fail
        `validateLoopConfig` on resume; the deployer backfills both from the
        market catalog before validating, and the resumed loop lands active. */
     const { deployer, registry, fakes } = makeDeployer();
@@ -256,7 +256,7 @@ describe("LoopDeployer", () => {
       twapWindowSecs: 1800,
       inputsBlockLag: 2,
       strategyParams: {},
-      // NB: no swapRouter, no poolTickSpacing.
+      // NB: no swapRouter, no poolFee.
     };
     const record = registry.create({
       id: "loop-legacy1",
@@ -275,7 +275,7 @@ describe("LoopDeployer", () => {
     // The two backfilled values must also reach the deployed workflow's
     // componentConfig, or the operator quorum still builds an empty plan.
     const config = componentConfigOf(fakes.currentDoc(), resumed.workflowId);
-    expect(config.swap_router).toBe("0xbe6d8f0d05cc4be24d5167a3ef062215be6d18a5");
-    expect(config.pool_tick_spacing).toBe("1");
+    expect(config.swap_router).toBe("0x2626664c2603336e57b271c5c0b26f421741e481");
+    expect(config.pool_fee).toBe("500");
   });
 });

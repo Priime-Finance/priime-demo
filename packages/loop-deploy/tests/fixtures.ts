@@ -106,8 +106,8 @@ export function validLoopInput(): Record<string, unknown> {
     poolAddress: "0x15BC08D2E2B405afeD3fB872DCd2d962BcCfB7e0",
     twapWindowSecs: 1800,
     inputsBlockLag: 2,
-    swapRouter: "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5",
-    poolTickSpacing: 1,
+    swapRouter: "0x2626664c2603336E57B271c5C0b26F421741e481",
+    poolFee: 500,
   };
 }
 

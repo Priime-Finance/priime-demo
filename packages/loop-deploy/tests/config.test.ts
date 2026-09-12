@@ -88,11 +88,11 @@ describe("resolveLoopConfig", () => {
     expect(cfg.usdeAddress).toBe("0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34");
     expect(cfg.targetLeverage).toBe(5);
     expect(cfg.cronSeconds).toBe(60);
-    /* Regression pin: resolveLoopConfig must source the router and tick
-       spacing from the catalog, not the user input, so a composer-published
-       loop can actually compose swap calldata every strike. */
-    expect(cfg.swapRouter).toBe("0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5");
-    expect(cfg.poolTickSpacing).toBe(1);
+    /* Regression pin: resolveLoopConfig must source the router and pool fee
+       from the catalog, not the user input, so a composer-published loop
+       can actually compose swap calldata every strike. */
+    expect(cfg.swapRouter).toBe("0x2626664c2603336E57B271c5C0b26F421741e481");
+    expect(cfg.poolFee).toBe(500);
   });
 
   it("rejects an unknown candidate id with a catalog-shaped error", () => {
@@ -222,7 +222,7 @@ describe("componentConfigFor", () => {
       "morpho_address",
       "oracle_address",
       "pool_address",
-      "pool_tick_spacing",
+      "pool_fee",
       "swap_router",
       "twap_window_secs",
       "usdc_address",
@@ -234,7 +234,7 @@ describe("componentConfigFor", () => {
     expect(out.inputs_block_lag).toBe("2");
     // Composer-published loops die on missing router/tickSpacing (vault-nav
     // returns PlanBuild::empty on either read failing); pin both.
-    expect(out.swap_router).toBe("0xbe6d8f0d05cc4be24d5167a3ef062215be6d18a5");
-    expect(out.pool_tick_spacing).toBe("1");
+    expect(out.swap_router).toBe("0x2626664c2603336e57b271c5c0b26f421741e481");
+    expect(out.pool_fee).toBe("500");
   });
 });

@@ -51,10 +51,10 @@ export interface MarketSpec {
   twapWindowSecs: number;
   /** Blocks behind the trigger-time block to pin reads (reorg depth). */
   inputsBlockLag: number;
-  /** Aerodrome Slipstream router used for USDC<->USDe swaps in strategy plans. */
+  /** Uniswap V3 router used for USDC<->USDe swaps in strategy plans. */
   swapRouter: string;
-  /** Pool tick spacing (Slipstream uses tickSpacing, not fee tier). */
-  poolTickSpacing: number;
+  /** Pool tick spacing (Uniswap V3 uses Uniswap V3 fee tier (500 = 0.05%)). */
+  poolFee: number;
 }
 
 /**
@@ -77,8 +77,8 @@ export const USDE_USDC_MORPHO_BASE: MarketSpec = {
   poolAddress: "0x15bc08d2e2b405afed3fb872dcd2d962bccfb7e0",
   twapWindowSecs: 1800,
   inputsBlockLag: 2,
-  swapRouter: "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5",
-  poolTickSpacing: 1,
+  swapRouter: "0x2626664c2603336E57B271c5C0b26F421741e481",
+  poolFee: 500,
 };
 
 /**
@@ -111,7 +111,7 @@ export const USDE_USDC_MORPHO_SEPOLIA: MarketSpec = {
   twapWindowSecs: 1800,
   inputsBlockLag: 2,
   swapRouter: "0x0000000000000000000000000000000000000000",
-  poolTickSpacing: 1,
+  poolFee: 500,
 };
 
 const MARKET_CATALOG: Record<string, MarketSpec> = {

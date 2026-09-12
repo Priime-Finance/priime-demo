@@ -310,22 +310,50 @@ mine_or_wait
 "${POA[@]}" owner_operation updateQuorum 2 3 >/dev/null
 echo "service manager: $SM"
 
-# --- 4. deploy PriimeVault --------------------------------------------------
-say "deploy PriimeVault"
-# Previous step's updateStakeThreshold + updateQuorum txs and the POA
-# container's internal txs all bumped this key's nonce. Give the RPC a
-# block to settle before forge queries it, so a stale-nonce race does not
-# eat the deploy.
+# --- 4. deploy PriimeVaultFactory (once per state dir) + vault via factory ---
+# The factory address is the single "point at me" pin for the subgraph. It is
+# persisted in $FACTORY_JSON so subsequent vault-service.sh runs on the same
+# state dir re-use it: every subsequent vault deployment emits a VaultCreated
+# event the subgraph's data-source template picks up automatically.
+FACTORY_JSON="$FORKDIR/factory.json"
+say "deploy PriimeVaultFactory (or reuse persisted address)"
 mine_or_wait
-VAULT=$( cd "$ROOT/contracts" && forge create src/PriimeVault.sol:PriimeVault \
-  --rpc-url "$RPC" --private-key "$K0" --broadcast \
-  --constructor-args "$SM" "$USDC" "$STRATEGIST" \
-  "($USDE,$MORPHO,$ORACLE,$IRM,$LLTV,$ROUTER,$FEE)" \
-  | awk '/Deployed to/{print $NF}' )
+if [ -f "$FACTORY_JSON" ] && [ "$(cast code "$(jq -r .factory "$FACTORY_JSON")" --rpc-url "$RPC")" != "0x" ]; then
+  FACTORY=$(jq -r .factory "$FACTORY_JSON")
+  echo "factory (reused): $FACTORY"
+else
+  DEPLOY_BLOCK=$(cast block-number --rpc-url "$RPC")
+  FACTORY=$( cd "$ROOT/contracts" && forge create src/PriimeVaultFactory.sol:PriimeVaultFactory \
+    --rpc-url "$RPC" --private-key "$K0" --broadcast \
+    | awk '/Deployed to/{print $NF}' )
+  echo "factory (new):    $FACTORY (block $DEPLOY_BLOCK)"
+  jq -n --arg factory "$FACTORY" --arg chain_id "$CHAIN_ID" --argjson start_block "$DEPLOY_BLOCK" \
+    '{factory: $factory, chain_id: $chain_id, start_block: $start_block}' > "$FACTORY_JSON"
+fi
+mine_or_wait
+for _ in $(seq 1 30); do
+  if [ "$(cast code "$FACTORY" --rpc-url "$RPC")" != "0x" ]; then break; fi
+  sleep 2
+done
+[ "$(cast code "$FACTORY" --rpc-url "$RPC")" != "0x" ] \
+  || { echo "FATAL: factory $FACTORY still has no code after 60s"; exit 1; }
+
+say "deploy PriimeVault via factory"
+VAULT=$(cast send "$FACTORY" \
+  'deployVault(address,address,address,(address,address,address,address,uint256,address,uint24))(address)' \
+  "$SM" "$USDC" "$STRATEGIST" "($USDE,$MORPHO,$ORACLE,$IRM,$LLTV,$ROUTER,$FEE)" \
+  --rpc-url "$RPC" --private-key "$K0" --json \
+  | jq -r '.logs[] | select(.topics[0] == "0x90ae3f42922cbde58f515026e99db64dd285292d682810cdbcb9e061b03a8f39") | .topics[1]' \
+  | head -1)
+# Fallback: use factory.vaults(vaultCount()-1) if event parsing missed.
+if [ -z "$VAULT" ] || [ "$VAULT" = "null" ]; then
+  COUNT=$(cast call "$FACTORY" 'vaultCount()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
+  VAULT=$(cast call "$FACTORY" 'vaults(uint256)(address)' "$((COUNT - 1))" --rpc-url "$RPC" | awk '{print $1}')
+else
+  # Strip 0x000...pad from an indexed-address topic.
+  VAULT="0x$(echo "$VAULT" | sed -E 's/^0x0{24}//')"
+fi
 echo "vault: $VAULT (strategist $STRATEGIST)"
-# Alchemy-style load-balanced RPCs can return the deploy address from one
-# node before the next read hits a node that has seen the tx. Poll for code
-# with a short backoff so the verify below is not a read-after-write race.
 for _ in $(seq 1 30); do
   if [ "$(cast code "$VAULT" --rpc-url "$RPC")" != "0x" ]; then break; fi
   sleep 2
@@ -470,11 +498,12 @@ for i in $(seq 1 "$STRIKE_TRIES"); do
     # field for compatibility with the single-node consumers.
     NODE_LIST=$(printf '%s\n' "${NODE_NAMES[@]}" | jq -R . | jq -s .)
     jq -n --arg vault "$VAULT" --arg sm "$SM" --arg strategist "$STRATEGIST" \
+      --arg factory "$FACTORY" \
       --arg node "${NODE_NAMES[0]}" --argjson nodes "$NODE_LIST" \
       --arg template_workflow_id "$WID" \
       --arg target "$TARGET" --arg chain_id "$CHAIN_ID" \
       --arg quorum_threshold 2 --arg quorum_total 3 \
-      '{vault: $vault, service_manager: $sm, strategist: $strategist, node: $node, nodes: $nodes, template_workflow_id: $template_workflow_id, target: $target, chain_id: $chain_id, quorum_threshold: ($quorum_threshold|tonumber), quorum_total: ($quorum_total|tonumber)}' \
+      '{vault: $vault, factory: $factory, service_manager: $sm, strategist: $strategist, node: $node, nodes: $nodes, template_workflow_id: $template_workflow_id, target: $target, chain_id: $chain_id, quorum_threshold: ($quorum_threshold|tonumber), quorum_total: ($quorum_total|tonumber)}' \
       > "$FORKDIR/vault-service.json"
     echo "SUCCESS: updateCount=$UPDATES nav=$NAV inputsBlock=$IB"
     echo "vault=$VAULT  serviceManager=$SM  nodes=${NODE_NAMES[*]} (docker logs ${NODE_NAMES[0]})"
