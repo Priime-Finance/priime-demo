@@ -131,17 +131,16 @@ sol! {
     ) external;
     function flashLoan(address token, uint256 assets, bytes data) external;
 
-    struct AerodromeExactInputSingleParams {
+    struct UniswapV3ExactInputSingleParams {
         address tokenIn;
         address tokenOut;
-        int24 tickSpacing;
+        uint24 fee;
         address recipient;
-        uint256 deadline;
         uint256 amountIn;
         uint256 amountOutMinimum;
         uint160 sqrtPriceLimitX96;
     }
-    function exactInputSingle(AerodromeExactInputSingleParams params)
+    function exactInputSingle(UniswapV3ExactInputSingleParams params)
         external payable returns (uint256 amountOut);
 }
 
@@ -193,7 +192,7 @@ pub fn plan_open_position(
     usde: Address,
     morpho: Address,
     swap_router: Address,
-    tick_spacing: i32,
+    pool_fee: u32,
     market_params: (Address, Address, Address, Address, U256),
     usdc_amount: U256,
     twap_price_1e24: U256,
@@ -237,13 +236,11 @@ pub fn plan_open_position(
     plan.push(
         swap_router,
         exactInputSingleCall {
-            params: AerodromeExactInputSingleParams {
+            params: UniswapV3ExactInputSingleParams {
                 tokenIn: usdc,
                 tokenOut: usde,
-                tickSpacing: alloy_primitives::Signed::<24, 1>::try_from(tick_spacing)
-                    .unwrap_or_default(),
+                fee: alloy_primitives::Uint::<24, 1>::from(pool_fee),
                 recipient: vault,
-                deadline: U256::from(deadline_secs),
                 amountIn: usdc_amount,
                 amountOutMinimum: min_usde_out,
                 sqrtPriceLimitX96: alloy_primitives::Uint::<160, 3>::ZERO,
@@ -372,7 +369,7 @@ pub fn plan_redeem_collateral(
     usde: Address,
     morpho: Address,
     swap_router: Address,
-    tick_spacing: i32,
+    pool_fee: u32,
     market_params: (Address, Address, Address, Address, U256),
     usde_out: U256,
     min_usdc_out: U256,
@@ -413,13 +410,11 @@ pub fn plan_redeem_collateral(
     plan.push(
         swap_router,
         exactInputSingleCall {
-            params: AerodromeExactInputSingleParams {
+            params: UniswapV3ExactInputSingleParams {
                 tokenIn: usde,
                 tokenOut: usdc,
-                tickSpacing: alloy_primitives::Signed::<24, 1>::try_from(tick_spacing)
-                    .unwrap_or_default(),
+                fee: alloy_primitives::Uint::<24, 1>::from(pool_fee),
                 recipient: vault,
-                deadline: U256::from(deadline_secs),
                 amountIn: usde_out,
                 amountOutMinimum: min_usdc_out,
                 sqrtPriceLimitX96: alloy_primitives::Uint::<160, 3>::ZERO,
@@ -1694,7 +1689,7 @@ mod tests {
         let oracle = address!("0000000000000000000000000000000000000002");
         let irm = address!("0000000000000000000000000000000000000003");
         let lltv = U256::from(915_000_000_000_000_000u64);
-        let tick_spacing: i32 = 1;
+        let pool_fee: u32 = 500;
         let usde_out = U256::from(910u64) * U256::from(10u128.pow(18)); // 910 USDe
         let min_usdc_out = U256::from(909u64 * 1_000_000u64); // 909 USDC
         let deadline = 1_800_000_300u64;
@@ -1705,7 +1700,7 @@ mod tests {
             usde,
             morpho,
             router,
-            tick_spacing,
+            pool_fee,
             (usdc, usde, oracle, irm, lltv),
             usde_out,
             min_usdc_out,
@@ -1748,7 +1743,10 @@ mod tests {
         assert_eq!(s.params.recipient, vault);
         assert_eq!(s.params.amountIn, usde_out);
         assert_eq!(s.params.amountOutMinimum, min_usdc_out);
-        assert_eq!(s.params.deadline, U256::from(deadline));
+        assert_eq!(
+            s.params.fee,
+            alloy_primitives::Uint::<24, 1>::from(pool_fee)
+        );
     }
 
     // --- knob invariants ----------------------------------------------------

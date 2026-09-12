@@ -6,7 +6,7 @@ import {IPriimeServiceHandler} from "../src/interfaces/priime/IPriimeServiceHand
 import {IPriimeServiceManager} from "../src/interfaces/priime/IPriimeServiceManager.sol";
 import {PriimeVault} from "../src/PriimeVault.sol";
 import {IMorphoBlue, IMorphoFlashLoanCallback} from "../src/interfaces/external/IMorphoBlue.sol";
-import {IAerodromeCLRouter} from "../src/interfaces/external/IAerodromeCLRouter.sol";
+import {IUniswapV3SwapRouter02} from "../src/interfaces/external/IUniswapV3SwapRouter02.sol";
 
 /// @dev Minimal surface of forge's built-in cheatcode contract; declared here
 ///      instead of vendoring forge-std (the repo vendors no forge-std).
@@ -187,9 +187,9 @@ contract MockMorpho {
     }
 }
 
-/// @dev Minimal Aerodrome Slipstream router mock: exact 1:1e12 par swap
+/// @dev Minimal Uniswap V3 SwapRouter02 mock: exact 1:1e12 par swap
 ///      between USDC (6-dec) and USDe (18-dec). Pre-funded with both tokens.
-contract MockAerodromeRouter {
+contract MockUniswapV3SwapRouter02 {
     IERC20 public immutable usdc;
     IERC20 public immutable usde;
 
@@ -198,7 +198,7 @@ contract MockAerodromeRouter {
         usde = _usde;
     }
 
-    function exactInputSingle(IAerodromeCLRouter.ExactInputSingleParams calldata p)
+    function exactInputSingle(IUniswapV3SwapRouter02.ExactInputSingleParams calldata p)
         external
         payable
         returns (uint256 amountOut)
@@ -311,7 +311,7 @@ contract PriimeVaultTest {
             morphoIrm: address(0x03),
             morphoLltv: 915_000_000_000_000_000,
             swapRouter: address(0x04),
-            poolTickSpacing: int24(1)
+            poolFee: uint24(500)
         });
         vault =
             new PriimeVault(IPriimeServiceManager(address(manager)), IERC20(address(usdc)), STRATEGIST, strategyConfig);
@@ -987,7 +987,7 @@ contract PriimeVaultTest {
 
     // ------------------------------------------------------------------------
     // Roadmap P1 #4: plan_deleverage end-to-end. Fresh setup (dummy addresses
-    // don't hold state) with a full Morpho + Aerodrome mock stack. Proves the
+    // don't hold state) with a full Morpho + Uniswap V3 mock stack. Proves the
     // whole 7540 withdrawal flow:
     //   1. deposit + strike -> position opens against Morpho
     //   2. requestRedeem + strike -> plan_deleverage frees USDC via flashLoan
@@ -1002,7 +1002,8 @@ contract PriimeVaultTest {
         TestUSDC muUsdc = new TestUSDC();
         TestUSDe muUsde = new TestUSDe();
         MockMorpho muMorpho = new MockMorpho(IERC20(address(muUsdc)), IERC20(address(muUsde)));
-        MockAerodromeRouter muRouter = new MockAerodromeRouter(IERC20(address(muUsdc)), IERC20(address(muUsde)));
+        MockUniswapV3SwapRouter02 muRouter =
+            new MockUniswapV3SwapRouter02(IERC20(address(muUsdc)), IERC20(address(muUsde)));
         ToggleableServiceManager muManager = new ToggleableServiceManager();
 
         PriimeVault muVault = new PriimeVault(
@@ -1016,7 +1017,7 @@ contract PriimeVaultTest {
                 morphoIrm: address(0x03),
                 morphoLltv: 915_000_000_000_000_000,
                 swapRouter: address(muRouter),
-                poolTickSpacing: int24(1)
+                poolFee: uint24(500)
             })
         );
 
@@ -1048,13 +1049,12 @@ contract PriimeVaultTest {
         muVault.execute(
             address(muRouter),
             abi.encodeCall(
-                IAerodromeCLRouter.exactInputSingle,
-                (IAerodromeCLRouter.ExactInputSingleParams({
+                IUniswapV3SwapRouter02.exactInputSingle,
+                (IUniswapV3SwapRouter02.ExactInputSingleParams({
                         tokenIn: address(muUsdc),
                         tokenOut: address(muUsde),
-                        tickSpacing: int24(1),
+                        fee: uint24(500),
                         recipient: address(muVault),
-                        deadline: block.timestamp + 300,
                         amountIn: 1_000 * ONE_USDC,
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
@@ -1125,13 +1125,12 @@ contract PriimeVaultTest {
         muVault.execute(
             address(muRouter),
             abi.encodeCall(
-                IAerodromeCLRouter.exactInputSingle,
-                (IAerodromeCLRouter.ExactInputSingleParams({
+                IUniswapV3SwapRouter02.exactInputSingle,
+                (IUniswapV3SwapRouter02.ExactInputSingleParams({
                         tokenIn: address(muUsdc),
                         tokenOut: address(muUsde),
-                        tickSpacing: int24(1),
+                        fee: uint24(500),
                         recipient: address(muVault),
-                        deadline: block.timestamp + 300,
                         amountIn: 500 * ONE_USDC,
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
@@ -1269,8 +1268,13 @@ contract PriimeVaultTest {
            tripping Morpho's LLTV check on the withdrawCollateral step.
            NEW-code behavior (shares-based repay) pulls the exact current
            debt slice, so the LLTV check passes. */
-        (PriimeVault muVault, MockAerodromeRouter muRouter, MockMorpho muMorpho, TestUSDC muUsdc, TestUSDe muUsde) =
-            _buildMorphoMockStack();
+        (
+            PriimeVault muVault,
+            MockUniswapV3SwapRouter02 muRouter,
+            MockMorpho muMorpho,
+            TestUSDC muUsdc,
+            TestUSDe muUsde
+        ) = _buildMorphoMockStack();
 
         muUsdc.mint(ALICE, 1_000 * ONE_USDC);
         vm.prank(ALICE);
@@ -1414,8 +1418,13 @@ contract PriimeVaultTest {
            emits a 3-step spot unwind: `withdrawCollateral` + `approve` +
            `exactInputSingle`. This test builds the same plan by hand and
            proves the strike now delivers the claim atomically. */
-        (PriimeVault muVault, MockAerodromeRouter muRouter, MockMorpho muMorpho, TestUSDC muUsdc, TestUSDe muUsde) =
-            _buildMorphoMockStack();
+        (
+            PriimeVault muVault,
+            MockUniswapV3SwapRouter02 muRouter,
+            MockMorpho muMorpho,
+            TestUSDC muUsdc,
+            TestUSDe muUsde
+        ) = _buildMorphoMockStack();
 
         // ---- 1. Alice deposits 1000 USDC. Bootstrap strike mints shares.
         muUsdc.mint(ALICE, 1_000 * ONE_USDC);
@@ -1436,13 +1445,12 @@ contract PriimeVaultTest {
         muVault.execute(
             address(muRouter),
             abi.encodeCall(
-                IAerodromeCLRouter.exactInputSingle,
-                (IAerodromeCLRouter.ExactInputSingleParams({
+                IUniswapV3SwapRouter02.exactInputSingle,
+                (IUniswapV3SwapRouter02.ExactInputSingleParams({
                         tokenIn: address(muUsdc),
                         tokenOut: address(muUsde),
-                        tickSpacing: int24(1),
+                        fee: uint24(500),
                         recipient: address(muVault),
-                        deadline: block.timestamp + 300,
                         amountIn: 900 * ONE_USDC,
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
@@ -1507,13 +1515,12 @@ contract PriimeVaultTest {
             abi.encodeCall(IMorphoBlue.withdrawCollateral, (params, usdeOut, address(muVault), address(muVault)));
         calldatas[1] = abi.encodeCall(TestUSDe.approve, (address(muRouter), usdeOut));
         calldatas[2] = abi.encodeCall(
-            IAerodromeCLRouter.exactInputSingle,
-            (IAerodromeCLRouter.ExactInputSingleParams({
+            IUniswapV3SwapRouter02.exactInputSingle,
+            (IUniswapV3SwapRouter02.ExactInputSingleParams({
                     tokenIn: address(muUsde),
                     tokenOut: address(muUsdc),
-                    tickSpacing: int24(1),
+                    fee: uint24(500),
                     recipient: address(muVault),
-                    deadline: block.timestamp + 300,
                     amountIn: usdeOut,
                     amountOutMinimum: minUsdcOut,
                     sqrtPriceLimitX96: 0
@@ -1548,12 +1555,18 @@ contract PriimeVaultTest {
 
     function _buildMorphoMockStack()
         internal
-        returns (PriimeVault v, MockAerodromeRouter router, MockMorpho morphoMock, TestUSDC usdcMock, TestUSDe usdeMock)
+        returns (
+            PriimeVault v,
+            MockUniswapV3SwapRouter02 router,
+            MockMorpho morphoMock,
+            TestUSDC usdcMock,
+            TestUSDe usdeMock
+        )
     {
         usdcMock = new TestUSDC();
         usdeMock = new TestUSDe();
         morphoMock = new MockMorpho(IERC20(address(usdcMock)), IERC20(address(usdeMock)));
-        router = new MockAerodromeRouter(IERC20(address(usdcMock)), IERC20(address(usdeMock)));
+        router = new MockUniswapV3SwapRouter02(IERC20(address(usdcMock)), IERC20(address(usdeMock)));
         ToggleableServiceManager mgr = new ToggleableServiceManager();
         v = new PriimeVault(
             IPriimeServiceManager(address(mgr)),
@@ -1566,7 +1579,7 @@ contract PriimeVaultTest {
                 morphoIrm: address(0x03),
                 morphoLltv: 915_000_000_000_000_000,
                 swapRouter: address(router),
-                poolTickSpacing: int24(1)
+                poolFee: uint24(500)
             })
         );
         usdcMock.mint(address(morphoMock), 100_000 * ONE_USDC);
@@ -1578,7 +1591,7 @@ contract PriimeVaultTest {
         PriimeVault v,
         TestUSDC usdcT,
         TestUSDe usdeT,
-        MockAerodromeRouter router,
+        MockUniswapV3SwapRouter02 router,
         MockMorpho morphoM
     ) internal {
         vm.prank(STRATEGIST);
@@ -1587,13 +1600,12 @@ contract PriimeVaultTest {
         v.execute(
             address(router),
             abi.encodeCall(
-                IAerodromeCLRouter.exactInputSingle,
-                (IAerodromeCLRouter.ExactInputSingleParams({
+                IUniswapV3SwapRouter02.exactInputSingle,
+                (IUniswapV3SwapRouter02.ExactInputSingleParams({
                         tokenIn: address(usdcT),
                         tokenOut: address(usdeT),
-                        tickSpacing: int24(1),
+                        fee: uint24(500),
                         recipient: address(v),
-                        deadline: block.timestamp + 300,
                         amountIn: 1_000 * ONE_USDC,
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
@@ -1647,7 +1659,7 @@ contract PriimeVaultTest {
         PriimeVault v,
         TestUSDC usdcT,
         TestUSDe usdeT,
-        MockAerodromeRouter router,
+        MockUniswapV3SwapRouter02 router,
         MockMorpho morphoM,
         uint256 usdcAmount
     ) internal {
@@ -1657,13 +1669,12 @@ contract PriimeVaultTest {
         v.execute(
             address(router),
             abi.encodeCall(
-                IAerodromeCLRouter.exactInputSingle,
-                (IAerodromeCLRouter.ExactInputSingleParams({
+                IUniswapV3SwapRouter02.exactInputSingle,
+                (IUniswapV3SwapRouter02.ExactInputSingleParams({
                         tokenIn: address(usdcT),
                         tokenOut: address(usdeT),
-                        tickSpacing: int24(1),
+                        fee: uint24(500),
                         recipient: address(v),
-                        deadline: block.timestamp + 300,
                         amountIn: usdcAmount,
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
@@ -2152,19 +2163,18 @@ contract PriimeVaultTest {
 
         // (11) `exactInputSingle` with a rogue recipient — USDe → USDC swap
         //      lands somewhere else.
-        IAerodromeCLRouter.ExactInputSingleParams memory swapParams = IAerodromeCLRouter.ExactInputSingleParams({
+        IUniswapV3SwapRouter02.ExactInputSingleParams memory swapParams = IUniswapV3SwapRouter02.ExactInputSingleParams({
             tokenIn: collateral,
             tokenOut: address(usdc),
-            tickSpacing: 1,
+            fee: 500,
             recipient: SINK,
-            deadline: block.timestamp + 300,
             amountIn: 100,
             amountOutMinimum: 100,
             sqrtPriceLimitX96: 0
         });
         _expectRejectedStep(
             router,
-            abi.encodeCall(IAerodromeCLRouter.exactInputSingle, (swapParams)),
+            abi.encodeCall(IUniswapV3SwapRouter02.exactInputSingle, (swapParams)),
             abi.encodeWithSelector(PriimeVault.PlanReceiverNotSelf.selector, SINK)
         );
 

@@ -6,6 +6,20 @@ Three independent operators re-execute a NAV computation, agree on identical
 result hashes, reach quorum, and attest the number on-chain. Corrupt one
 operator and its lie is rejected while the honest quorum settles the truth.
 
+## Uniswap V3 integration
+
+The vault swaps USDe ↔ USDC through **Uniswap V3** on Base. The integration is:
+
+- **Router interface**: [`contracts/src/interfaces/external/IUniswapV3SwapRouter02.sol`](contracts/src/interfaces/external/IUniswapV3SwapRouter02.sol)
+- **On-chain swap call**: [`contracts/src/PriimeVault.sol::onMorphoFlashLoan`](contracts/src/PriimeVault.sol) (the `IUniswapV3SwapRouter02(swapRouter).exactInputSingle(...)` block inside the Morpho flashloan callback)
+- **Selector whitelist**: [`contracts/src/PriimeVault.sol::_validatePlanStep`](contracts/src/PriimeVault.sol) pins `swapRouter` to `IUniswapV3SwapRouter02.exactInputSingle.selector` and decodes `ExactInputSingleParams` to enforce `recipient == address(this)`, so a compromised operator quorum cannot route the swap output anywhere but back to the vault.
+- **Off-chain plan builders** (Rust `wasm32-wasip2`): [`components/vault-nav/src/nav.rs::plan_open_position`](components/vault-nav/src/nav.rs) and [`components/vault-nav/src/nav.rs::plan_redeem_collateral`](components/vault-nav/src/nav.rs) emit `exactInputSingle` calldata via the `alloy` `sol!` binding of `UniswapV3ExactInputSingleParams`.
+- **Deployment config**: [`deploy/fork.config.json::swap_route`](deploy/fork.config.json) pins Base's `SwapRouter02` (`0x2626664c2603336E57B271c5C0b26F421741e481`), factory (`0x33128a8fC17869897dcE68Ed026d694621f6FDfD`) and the deep 0.05% USDe/USDC pool (`0xedAf6Ca46FB852D4AB0A2e9449d267cf03213F05`).
+
+The vault is chain-agnostic: `SwapRouter02` is deployed at the same interface on every chain Uniswap V3 supports (Ethereum, Optimism, Arbitrum, Polygon, BNB, Avalanche, and more). Swap the three addresses in `deploy/fork.config.json` and redeploy.
+
+Feedback on the developer experience of integrating Uniswap V3: see [FEEDBACK.md](FEEDBACK.md).
+
 ## Layout
 
 ```

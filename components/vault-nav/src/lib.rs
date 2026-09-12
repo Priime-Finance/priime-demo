@@ -174,7 +174,7 @@ mod component {
             "morpho_address",
             "oracle_address",
             "pool_address",
-            "pool_tick_spacing",
+            "pool_fee",
             "reserve_fraction",
             "risk_preset",
             "swap_router",
@@ -402,7 +402,8 @@ mod component {
         let usde = cfg_address("usde_address")?;
         let morpho = cfg_address("morpho_address")?;
 
-        // Swap route: composer publishes address + tick spacing. Missing
+        // Swap route: composer publishes router address + pool fee tier
+        // (Uniswap V3 fee in 1e-6 units, e.g. 500 for 0.05%). Missing
         // either -> no plan (the vault has no way to swap).
         let swap_router = match cfg_opt("swap_router") {
             Some(v) => match v.trim().parse::<alloy_primitives::Address>() {
@@ -411,11 +412,8 @@ mod component {
             },
             None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
         };
-        let tick_spacing: i32 = match cfg_opt("pool_tick_spacing") {
-            Some(v) => v
-                .trim()
-                .parse()
-                .map_err(|e| format!("bad pool_tick_spacing: {e}"))?,
+        let pool_fee: u32 = match cfg_opt("pool_fee") {
+            Some(v) => v.trim().parse().map_err(|e| format!("bad pool_fee: {e}"))?,
             None => return Ok(nav::PlanBuild::empty(s.block_timestamp)),
         };
 
@@ -494,7 +492,7 @@ mod component {
                 + debt * proportion_wad / one_wad / U256::from(5_000u16); // + 20 bps
                                                                           // 50 bps against TWAP — same convention plan_open_position uses.
             let min_usdc_out = nav::swap_min_usdc_out(collateral_out_usde, twap_price_1e24, 50);
-            let _ = (vault, usde, tick_spacing, swap_router); // reserved for future lever-up branch parity
+            let _ = (vault, usde, pool_fee, swap_router); // reserved for future lever-up branch parity
             return Ok(nav::plan_deleverage(
                 usdc,
                 morpho,
@@ -566,7 +564,7 @@ mod component {
                 usde,
                 morpho,
                 swap_router,
-                tick_spacing,
+                pool_fee,
                 market_params_tuple,
                 usde_out,
                 min_usdc_out,
@@ -635,7 +633,7 @@ mod component {
             usde,
             morpho,
             swap_router,
-            tick_spacing,
+            pool_fee,
             market_params,
             deploy_amount,
             twap_price_1e24,
