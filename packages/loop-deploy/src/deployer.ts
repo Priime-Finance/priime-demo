@@ -11,7 +11,7 @@
  *   handler or the workflow.
  */
 
-import { addLoopWorkflow, mergeMissingWorkflows, newWorkflowId, removeLoopWorkflow, workflowIds } from "./builder.ts";
+import { addLoopWorkflow, mergeMissingWorkflows, newWorkflowId, removeLoopWorkflow, ServiceDocError, workflowIds } from "./builder.ts";
 import { friendlyErrorMessage } from "./friendly-error.ts";
 import { lookupMarket } from "./catalog.ts";
 import type { ChainPort } from "./chain.ts";
@@ -142,11 +142,24 @@ export class LoopDeployer {
       }
     }
     try {
-      // Deploys that never reached the service have nothing to remove.
+      // Deploys that never reached the service have nothing to remove. A
+      // workflow already absent on chain (out-of-band cleanup, or a prior
+      // half-completed delete that flipped status without writing the
+      // registry) is also a no-op: `removeLoopWorkflow` throws in that
+      // case and we treat it as success — the desired state is already
+      // in place.
       if (record.step === "service_updated" || record.step === "active") {
         const protectedIds = this.templateWorkflowId === undefined ? [] : [this.templateWorkflowId];
-        const cid = await this.mutateService((doc) => removeLoopWorkflow(doc, record.workflowId, protectedIds));
-        this.registry.update(id, { serviceCid: cid });
+        try {
+          const cid = await this.mutateService((doc) => removeLoopWorkflow(doc, record.workflowId, protectedIds));
+          this.registry.update(id, { serviceCid: cid });
+        } catch (err) {
+          if (err instanceof ServiceDocError && err.message.includes("does not exist in the service")) {
+            // Already gone. Fall through to the inactive flip.
+          } else {
+            throw err;
+          }
+        }
       }
       return this.registry.update(id, { status: "inactive", error: null });
     } catch (err) {

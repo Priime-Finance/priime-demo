@@ -27,21 +27,33 @@ import type { Journal, Operator, Transition } from "@priime-demo/journal-schema"
  *  json import path is not resolvable under Node without an assertion). The
  *  frozen v1 contract fixes this string; a change means a v2 package. */
 const SCHEMA_VERSION = "1.0.0" as const;
-import { createHash } from "node:crypto";
+import { sha256 } from "viem";
 
 /** Priime ServiceId derivation for EVM managers. Mirrors ServiceId::hash in
  *  priime-processor/packages/types/src/id/service.rs: `sha256("evm" || chain
- *  key || address bytes)`, printed as lowercase 64-char hex without 0x. */
+ *  key || address bytes)`, printed as lowercase 64-char hex without 0x.
+ *
+ *  Uses viem's sync `sha256` (WASM-backed noble-hashes) instead of
+ *  `node:crypto::createHash`: the same package barrel is bundled into
+ *  `apps/replay-ui`'s composer via `publish-loop.ts`, and any client
+ *  import of `node:crypto` tanks webpack with `UnhandledSchemeError`.
+ *  viem is already a dep for the rest of this file's work. */
 export function deriveServiceId(chainKey: string, managerAddress: string): string {
   const addressHex = managerAddress.toLowerCase().replace(/^0x/, "");
   if (addressHex.length !== 40) throw new Error(`bad manager address: ${managerAddress}`);
-  const chainBytes = Buffer.from(chainKey, "utf8");
-  const addressBytes = Buffer.from(addressHex, "hex");
-  return createHash("sha256")
-    .update(Buffer.from("evm", "utf8"))
-    .update(chainBytes)
-    .update(addressBytes)
-    .digest("hex");
+  const utf8 = new TextEncoder();
+  const chainBytes = utf8.encode(chainKey);
+  const addressBytes = new Uint8Array(addressHex.length / 2);
+  for (let i = 0; i < addressBytes.length; i += 1) {
+    addressBytes[i] = Number.parseInt(addressHex.slice(i * 2, i * 2 + 2), 16);
+  }
+  const evmBytes = utf8.encode("evm");
+  const input = new Uint8Array(evmBytes.length + chainBytes.length + addressBytes.length);
+  input.set(evmBytes, 0);
+  input.set(chainBytes, evmBytes.length);
+  input.set(addressBytes, evmBytes.length + chainBytes.length);
+  // `sha256` returns `0x`-prefixed hex; the schema wants raw hex.
+  return sha256(input).slice(2);
 }
 
 /** `<service_id>:<inputs_block>`, matching the sample convention. */

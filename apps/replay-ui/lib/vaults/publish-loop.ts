@@ -19,7 +19,7 @@ import {
   type IntentDomain,
   type LoopPublishIntent,
   type LoopPublishTypedData,
-} from "@priime-demo/loop-deploy";
+} from "@priime-demo/loop-deploy/auth";
 
 import { createLoop, LoopValidationError, type CreateLoopInput } from "./live-source";
 

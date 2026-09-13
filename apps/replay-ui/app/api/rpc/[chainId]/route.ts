@@ -17,7 +17,7 @@
 import { NextResponse } from "next/server";
 
 import { clientIdentity } from "@/lib/request-identity";
-import { type Bucket, takeToken } from "@/lib/canvas/copilot/rate-limit";
+import { RPC_BUCKET, takeToken, type Bucket } from "@/lib/canvas/copilot/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -154,7 +154,7 @@ export async function POST(
   if (ALLOWED_METHODS[method] !== true) {
     return rpcError(id, -32601, `method ${method} not allowed`);
   }
-  const take = takeToken(rpcBuckets, clientIdentity(req), Date.now());
+  const take = takeToken(rpcBuckets, clientIdentity(req), Date.now(), RPC_BUCKET);
   if (!take.ok) {
     return rpcError(id, -32005, `rate limited, retry in ${String(take.retryAfterMs)}ms`);
   }

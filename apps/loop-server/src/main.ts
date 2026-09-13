@@ -50,21 +50,59 @@ const env = readEnv();
 mkdirSync(dirname(env.dbPath), { recursive: true });
 
 const registry = new LoopRegistry(env.dbPath);
+const chain = makeChain({
+  rpcUrl: env.rpcUrl,
+  chainId: env.chainId,
+  ownerKey: env.ownerKey,
+  managerAddress: env.managerAddress,
+  assetAddress: env.usdcAddress,
+  factoryAddress: env.factoryAddress,
+});
 const deployer = new LoopDeployer({
   registry,
-  chain: makeChain({
-    rpcUrl: env.rpcUrl,
-    chainId: env.chainId,
-    ownerKey: env.ownerKey,
-    managerAddress: env.managerAddress,
-    assetAddress: env.usdcAddress,
-    factoryAddress: env.factoryAddress,
-  }),
+  chain,
   ipfs: makeIpfs({ apiUrl: env.ipfsApiUrl, gatewayUrl: env.ipfsGatewayUrl }),
   chainKey: env.chainKey,
   usdcAddress: env.usdcAddress,
   templateWorkflowId: env.templateWorkflowId,
 });
+
+/**
+ * Re-emit `ServiceURIUpdated` on the manager without changing content.
+ *
+ * Each POST /loops already fires a `setServiceURI` with a NEW ipfs URI —
+ * that first tx is what actually installs the new workflow. This helper
+ * fires an idempotent SECOND tx with the same (post-publish) URI a few
+ * seconds later so a WS subscription that has silently stopped shipping
+ * matching logs (real Alchemy behaviour on long-idle subs — the socket
+ * stays open but the sub goes cold) gets a second chance to deliver
+ * the workflow install without the caller waiting on the periodic
+ * heartbeat's next tick.
+ *
+ * Also runs on a 4-min cron: even when no publish is happening the sub
+ * receives one `ServiceURIUpdated` per interval, which stays well under
+ * Alchemy's observed idle window and keeps every future publish's real
+ * event landing on a hot sub. Content-identical → operators' `change_service`
+ * hashes the same doc and no-ops after the reload; no state churn.
+ */
+async function nudgeServiceUri(reason: string): Promise<void> {
+  try {
+    const uri = await chain.getServiceUri();
+    await chain.setServiceUri(uri);
+    console.log(`[loop-server] nudge (${reason}) re-emitted ServiceURIUpdated for ${uri}`);
+  } catch (err) {
+    console.error(
+      `[loop-server] nudge (${reason}) failed:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+const HEARTBEAT_INTERVAL_MS = 4 * 60 * 1000;
+const heartbeatTimer = setInterval(() => {
+  void nudgeServiceUri("heartbeat");
+}, HEARTBEAT_INTERVAL_MS);
+heartbeatTimer.unref();
 
 const journalReader: JournalReader = makeJournalReader({
   rpcUrl: env.rpcUrl,
@@ -261,6 +299,10 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     delete configInput.signature;
     delete configInput.signedAt;
     const loop = await deployer.createLoop(configInput);
+    // Immediate defence-in-depth against a cold WS sub: re-emit the same
+    // URI ~4 s after the workflow install landed so a stalled subscription
+    // gets a second chance without the user waiting on the 4-min cron.
+    setTimeout(() => { void nudgeServiceUri("post-publish"); }, 4_000).unref();
     sendJson(res, 201, { loop: serializeLoop(loop) });
     return;
   }
@@ -295,6 +337,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const resumeMatch = /^\/loops\/([a-z0-9-]+)\/resume$/.exec(path);
   if (resumeMatch !== null && req.method === "POST") {
     const loop = await deployer.resumeLoop(resumeMatch[1]!);
+    setTimeout(() => { void nudgeServiceUri("post-resume"); }, 4_000).unref();
     sendJson(res, 200, { loop: serializeLoop(loop) });
     return;
   }
