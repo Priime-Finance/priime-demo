@@ -31,6 +31,7 @@ const HANDLER_ABI = parseAbi([
   "event PlanRejected(bytes32 indexed planHash, bytes reason)",
   "function handleSignedEnvelope((bytes20 eventId, bytes12 ordering, bytes payload) envelope, (address[] signers, bytes[] signatures, uint32 referenceBlock) signatureData) external",
   "function asset() external view returns (address)",
+  "function updateCount() external view returns (uint256)",
 ]) satisfies Abi;
 
 /** Signatures the operator quorum encodes into StrategyPlan step calldatas.
@@ -118,9 +119,31 @@ export type StrikeRecord = Journal & {
   plan: AttestedPlan;
 };
 
+/**
+ * Result of `readJournals`. Carries the scan window and the on-chain
+ * strike count alongside the decoded strikes so consumers can tell a
+ * "vault has never attested" state apart from a "vault attested plenty,
+ * but every strike is older than our lookback window" state — which
+ * used to render identically as `{ journals: [], attested: null }`.
+ */
+export interface JournalScan {
+  strikes: StrikeRecord[];
+  /**
+   * `updateCount` read straight off the vault. `strikes.length` never
+   * exceeds `Number(chainStrikeCount)`; if it is strictly less, our
+   * window is missing strikes and the UI MUST tell the operator the
+   * shortfall instead of drawing an idle vault.
+   */
+  chainStrikeCount: bigint;
+  /** Inclusive lower bound of the block range we scanned. */
+  windowFromBlock: bigint;
+  /** Inclusive upper bound of the block range we scanned. */
+  windowToBlock: bigint;
+}
+
 export interface JournalReader {
-  /** Latest N strikes for a handler, newest first. */
-  readJournals(vaultAddress: string, limit: number): Promise<StrikeRecord[]>;
+  /** Latest N strikes for a handler, newest first, with window metadata. */
+  readJournals(vaultAddress: string, limit: number): Promise<JournalScan>;
 }
 
 /**
@@ -165,12 +188,44 @@ const PAYLOAD_TUPLE = [
   },
 ] as const;
 
-/** Envelope tuple as Priime signs it. */
+/**
+ * Envelope tuple as Priime signs it. `Envelope` is a Solidity struct with a
+ * dynamic field (`payload`), so `abi.encode(envelope)` — which is what the
+ * Rust side does via `SolValue::abi_encode` on the struct — wraps the tuple
+ * with an outer offset word. Encoding as three loose parameters produces a
+ * different byte string and therefore a different keccak256, which is what
+ * ever consumer would use to verify the signatures we persist in the
+ * journal against. Model the tuple explicitly.
+ */
 const ENVELOPE_TUPLE = [
-  { type: "bytes20" },
-  { type: "bytes12" },
-  { type: "bytes" },
+  {
+    type: "tuple",
+    components: [
+      { name: "eventId", type: "bytes20" },
+      { name: "ordering", type: "bytes12" },
+      { name: "payload", type: "bytes" },
+    ],
+  },
 ] as const;
+
+/**
+ * Result hash the operator quorum signs. Byte-identical to what
+ * `Envelope.abi_encode()` produces in `priime-types::signing` (verified
+ * against the alloy encoding with a matching sample). Any consumer that
+ * wants to verify the persisted signatures re-derives the hash from the
+ * `payload` + `eventId` + `ordering` fields in the journal, so this
+ * function has to stay in lockstep with the Rust side or the whole
+ * signature record becomes decorative.
+ */
+export function hashEnvelope(envelope: { eventId: `0x${string}`; ordering: `0x${string}`; payload: `0x${string}` }): `0x${string}` {
+  return keccak256(
+    encodeAbiParameters(ENVELOPE_TUPLE, [{
+      eventId: envelope.eventId,
+      ordering: envelope.ordering,
+      payload: envelope.payload,
+    }]),
+  );
+}
 
 interface NavUnit {
   asset: string;
@@ -208,12 +263,20 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
   };
 
   return {
-    async readJournals(vaultAddress: string, limit: number): Promise<StrikeRecord[]> {
+    async readJournals(vaultAddress: string, limit: number): Promise<JournalScan> {
       const vault = vaultAddress.toLowerCase() as Address;
       // Some RPCs (Base fork on anvil) cap eth_getLogs at 10k blocks. Default
       // to a rolling window ending at head; callers with a wider need set
       // fromBlock explicitly.
-      const head = await client.getBlockNumber();
+      const [head, chainStrikeCount] = await Promise.all([
+        client.getBlockNumber(),
+        // Read the vault's own strike counter so callers can tell a
+        // stalled vault ("plenty of strikes on-chain, none in our
+        // window") from an idle one ("vault has never attested"). The
+        // rolling-window read below cannot make that distinction on
+        // its own: an empty log slice looks identical either way.
+        client.readContract({ address: vault, abi: HANDLER_ABI, functionName: "updateCount" }),
+      ]);
       const from = options.fromBlock ?? (head > 9_999n ? head - 9_999n : 0n);
       const logs = await client.getLogs({
         address: vault,
@@ -274,11 +337,11 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           );
         }
 
-        const envelopeBytes = encodeAbiParameters(
-          ENVELOPE_TUPLE,
-          [envelope.eventId, envelope.ordering, envelope.payload],
-        );
-        const resultHash = keccak256(envelopeBytes);
+        const resultHash = hashEnvelope({
+          eventId: envelope.eventId,
+          ordering: envelope.ordering,
+          payload: envelope.payload,
+        });
 
         const input: JournalBuildInput = {
           chainId: options.chainId,
@@ -318,7 +381,7 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
 
         strikes.push({ ...buildJournal(input), observations, plan });
       }
-      return strikes;
+      return { strikes, chainStrikeCount, windowFromBlock: from, windowToBlock: head };
     },
   };
 }

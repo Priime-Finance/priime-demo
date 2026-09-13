@@ -20,8 +20,18 @@ export interface LoopDetailResponse {
   loop: LoopRecord;
 }
 
+/**
+ * `/api/loops/:id/journals` payload. `chainStrikeCount` reports the
+ * vault's own `updateCount()`; if it is strictly greater than
+ * `journals.length` the vault has strikes older than the scan window,
+ * so the UI must NOT render "awaiting first strike". `null` values
+ * mean the vault has not been deployed yet.
+ */
 export interface LoopJournalsResponse {
   journals: StrikeRecord[];
+  chainStrikeCount: string | null;
+  windowFromBlock: string | null;
+  windowToBlock: string | null;
 }
 
 /** Wrap fetch so callers get a typed result or a plain Error. */

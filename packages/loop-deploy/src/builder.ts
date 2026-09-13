@@ -131,3 +131,30 @@ export function removeLoopWorkflow(doc: unknown, workflowId: string, protectedId
   delete workflows[workflowId];
   return next;
 }
+
+/**
+ * Rescue workflows a competing writer added between our doc fetch and
+ * our own `setServiceURI`. Copies every workflow entry present in
+ * `donor` but not in `target`, verbatim. The runtime treats each
+ * workflow as an opaque document (see `addLoopWorkflow`'s narrow field
+ * writes above), so `structuredClone` is safe: no serde reshaping.
+ *
+ * Used by `LoopDeployer.mutateService`'s optimistic-concurrency retry:
+ * once we detect that our `setServiceURI` overwrote a `ServiceURIUpdated`
+ * event landed in the window, we fetch each clobbered URI's doc, merge
+ * its unknown workflows into our own edited doc, and re-pin+re-set.
+ */
+export function mergeMissingWorkflows(target: unknown, donor: unknown): unknown {
+  const targetWorkflows = workflowsOf(target);
+  const donorWorkflows = workflowsOf(donor);
+  const missing = Object.keys(donorWorkflows).filter((id) => targetWorkflows[id] === undefined);
+  if (missing.length === 0) return target;
+  const next = structuredClone(target);
+  const nextWorkflows = workflowsOf(next);
+  for (const id of missing) {
+    // structuredClone is applied by the outer clone above; the donor
+    // entry is already a fresh subtree.
+    nextWorkflows[id] = structuredClone(donorWorkflows[id]);
+  }
+  return next;
+}

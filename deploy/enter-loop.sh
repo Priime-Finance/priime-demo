@@ -60,7 +60,7 @@ IRM=$(cfg .morpho.market.params.irm)
 LLTV=$(cfg .morpho.market.params.lltv)             # 1e18 scale
 POOL=$(cfg .swap_route.pool)                       # read by pool_p() below
 ROUTER=$(cfg .swap_route.router)
-TICK_SPACING=$(cfg .swap_route.tick_spacing)
+POOL_FEE=$(cfg .swap_route.fee)                    # Uniswap V3 fee tier (uint24, e.g. 500)
 MKT_PARAMS="($USDC,$USDE,$ORACLE,$IRM,$LLTV)"      # Morpho MarketParams tuple
 
 TARGET_LTV=$(cfg .deploy_params.target_ltv)        # e.g. 0.80
@@ -194,7 +194,14 @@ oracle_p()  { cast call "$ORACLE" 'price()(uint256)' --rpc-url "$RPC" | awk '{pr
 # breaks min_out below when USDe trades above par.
 pool_p() {
   local sqrtp
-  sqrtp=$(cast call "$POOL" 'slot0()(uint160,int24,uint16,uint16,uint16,bool)' --rpc-url "$RPC" | awk 'NR==1{print $1}')
+  # SwapRouter02 sits on top of the Uniswap V3 pool. Uniswap V3 pools
+  # return 7 words from slot0 (feeProtocol as the 6th uint8 is present);
+  # Aerodrome CL forks return 6. `.swap_route` in the catalog is pinned
+  # to Uniswap V3 (see fork.config.json), so decode 7 words. A future
+  # Aerodrome market pin would need its own reader wired the same way
+  # `contracts/src/PriimeVault.sol::verifyUniswapV3Pool` sanity-checks
+  # the shape at deploy time.
+  sqrtp=$(cast call "$POOL" 'slot0()(uint160,int24,uint16,uint16,uint16,uint8,bool)' --rpc-url "$RPC" | awk 'NR==1{print $1}')
   ibc "$sqrtp * $sqrtp * 10^36 / 2^192"
 }
 # Position reads: collateral (1e18) and debt (1e6, borrow shares -> assets
@@ -210,7 +217,7 @@ read_pos() { # sets COLL, DEBT, COLLVAL
   COLLVAL=$(ibc "$COLL * $P / 1000000000000000000000000000000000000")   # 1e24 scale -> USDC 1e6
 }
 swap_supply() { # swap the vault's whole USDC amount $1 -> USDe, supply it all
-  local amt="$1" price min_out deadline got
+  local amt="$1" price min_out got
   # USDC (6 dec) -> USDe (18 dec) at the pool's current spot price, bound by
   # max_slippage_bps: out ~= amt * 1e36 / price_1e24 (inverse of nav.rs's
   # collateral_value = collateral_1e18 * price_1e24 / 1e36). Par-only pricing
@@ -218,10 +225,16 @@ swap_supply() { # swap the vault's whole USDC amount $1 -> USDe, supply it all
   # halts entry on a real premium.
   price=$(pool_p)
   min_out=$(ibc "$amt * 10^36 * (10000 - $SLIP_BPS) / ($price * 10000)")
-  deadline=$(( $(cast block latest -f timestamp --rpc-url "$RPC") + 600 ))
   exec_vault "$USDC" "approve(address,uint256)" "$ROUTER" "$amt"                     # exact-amount
-  exec_vault "$ROUTER" "exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))" \
-    "($USDC,$USDE,$TICK_SPACING,$VAULT,$deadline,$amt,$min_out,0)"
+  # Uniswap V3 SwapRouter02.exactInputSingle takes SEVEN fields:
+  #   (tokenIn, tokenOut, uint24 fee, recipient, amountIn, amountOutMinimum, sqrtPriceLimitX96)
+  # NOT the 8-field Aerodrome CL shape with int24 tickSpacing + a deadline
+  # slot. Using the wrong shape decodes into arbitrary field positions and
+  # the swap either reverts or steers into an unrelated pool. See
+  # contracts/src/interfaces/external/IUniswapV3SwapRouter02.sol for the
+  # canonical struct the vault's allowlist pins against.
+  exec_vault "$ROUTER" "exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))" \
+    "($USDC,$USDE,$POOL_FEE,$VAULT,$amt,$min_out,0)"
   got=$(usde_bal)
   exec_vault "$USDE" "approve(address,uint256)" "$MORPHO" "$got"                     # exact-amount
   exec_vault "$MORPHO" "supplyCollateral((address,address,address,address,uint256),uint256,address,bytes)" \

@@ -82,18 +82,34 @@ function serializeLoop(loop: LoopRecord): Record<string, unknown> {
   return { ...loop };
 }
 
-/** Convenience: derive `{ nav, inputsBlock, txHash, timestamp }` from the
- *  most recent NavUpdated log on this loop's handler, or null when no strike
- *  has landed yet. Non-fatal on RPC errors: the detail endpoint returns the
- *  loop record without the attested block. */
-async function latestAttested(loop: LoopRecord): Promise<{ nav: string; inputsBlock: number; txHash: string; timestamp: number } | null> {
+/**
+ * Convenience: derive the last attested strike PLUS a "why is the strike
+ * feed empty" hint. The window used to hide a stall that had run for
+ * more than 9_999 blocks — the vault sat quiet in the API but was very
+ * much broken. Every consumer needs `chainStrikeCount` to distinguish
+ * "vault has never attested" (0) from "vault stalled somewhere past
+ * our lookback window" (>0 with empty strikes).
+ */
+async function latestAttested(loop: LoopRecord): Promise<
+  | { nav: string; inputsBlock: number; txHash: string; timestamp: number; chainStrikeCount: string; windowFromBlock: string; windowToBlock: string }
+  | { nav: null; chainStrikeCount: string; windowFromBlock: string; windowToBlock: string }
+  | null
+> {
   if (loop.handlerAddress === null) return null;
   try {
-    const [latest] = await journalReader.readJournals(loop.handlerAddress, 1);
-    if (latest === undefined) return null;
+    const scan = await journalReader.readJournals(loop.handlerAddress, 1);
+    const meta = {
+      chainStrikeCount: scan.chainStrikeCount.toString(),
+      windowFromBlock: scan.windowFromBlock.toString(),
+      windowToBlock: scan.windowToBlock.toString(),
+    };
+    const [latest] = scan.strikes;
+    if (latest === undefined) return { nav: null, ...meta };
     const { nav_final, tx_hash, timestamp } = latest.attestation;
-    if (nav_final === null || tx_hash === null || timestamp === null) return null;
-    return { nav: nav_final, inputsBlock: latest.inputs_block, txHash: tx_hash, timestamp };
+    if (nav_final === null || tx_hash === null || timestamp === null) {
+      return { nav: null, ...meta };
+    }
+    return { nav: nav_final, inputsBlock: latest.inputs_block, txHash: tx_hash, timestamp, ...meta };
   } catch {
     return null;
   }
@@ -244,13 +260,24 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const loop = registry.get(journalsMatch[1]!);
     if (loop === null) throw new LoopNotFoundError(journalsMatch[1]!);
     if (loop.handlerAddress === null) {
-      sendJson(res, 200, { journals: [] });
+      // Vault not yet deployed — no chain to read; return an explicit
+      // "no scan performed" marker instead of the same shape the reader
+      // uses for a deployed-but-stalled vault.
+      sendJson(res, 200, { journals: [], chainStrikeCount: null, windowFromBlock: null, windowToBlock: null });
       return;
     }
     const limitRaw = url.searchParams.get("limit");
     const limit = limitRaw === null ? 20 : Math.min(200, Math.max(1, Number.parseInt(limitRaw, 10) || 20));
-    const journals = await journalReader.readJournals(loop.handlerAddress, limit);
-    sendJson(res, 200, { journals });
+    const scan = await journalReader.readJournals(loop.handlerAddress, limit);
+    sendJson(res, 200, {
+      journals: scan.strikes,
+      // Serialize BigInts as decimal strings — every other loop-server
+      // response type-checks the same way and the front-end already
+      // parses `updateCount` off other endpoints as a string.
+      chainStrikeCount: scan.chainStrikeCount.toString(),
+      windowFromBlock: scan.windowFromBlock.toString(),
+      windowToBlock: scan.windowToBlock.toString(),
+    });
     return;
   }
 

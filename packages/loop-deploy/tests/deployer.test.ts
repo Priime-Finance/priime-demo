@@ -8,7 +8,7 @@ import type { ChainPort } from "../src/chain.ts";
 import type { IpfsPort } from "../src/ipfs.ts";
 import { workflowIds } from "../src/builder.ts";
 import { LoopDeployer } from "../src/deployer.ts";
-import { parseLossless } from "../src/json.ts";
+import { parseLossless, stringifyLossless } from "../src/json.ts";
 import { LoopRegistry } from "../src/registry.ts";
 import { fixtureServiceText, TEMPLATE_WORKFLOW_ID, validLoopResolveInput } from "./fixtures.ts";
 
@@ -59,12 +59,27 @@ interface Fakes {
   failNextPoolCheck: () => void;
   setPending: (pendingDepositAssets: bigint, pendingRedeemShares: bigint) => void;
   currentDoc: () => unknown;
+  /**
+   * Register a one-shot hook that fires just BEFORE the next `pinText`
+   * call. Used to simulate an out-of-band `setServiceURI` writer landing
+   * mid-mutation, which is exactly the cross-process race
+   * `mutateService`'s optimistic-concurrency loop is meant to detect.
+   */
+  beforeNextPin: (fn: () => Promise<void>) => void;
 }
 
 function makeFakes(): Fakes {
   const store = new Map<string, string>();
   store.set("ipfs://QmGenesis", fixtureServiceText());
   let uri = "ipfs://QmGenesis";
+  // Emulate a chain head: every `setServiceUri` records a
+  // `ServiceURIUpdated` event at the CURRENT head, then advances. The
+  // real chain advances by many blocks between txs; a single-block bump
+  // per event is enough to exercise the race-detection window because
+  // `mutateService` walks (checkpoint+1, writeBlock-1) inclusively.
+  let block = 100n;
+  const serviceUriUpdates: { block: bigint; uri: string }[] = [];
+  let beforeNextPinHook: (() => Promise<void>) | null = null;
   let pinCounter = 0;
   let deployCounter = 0;
   const counters = { deploys: 0, pins: 0, setUri: 0 };
@@ -91,10 +106,27 @@ function makeFakes(): Fakes {
     async getServiceUri(): Promise<string> {
       return uri;
     },
-    async setServiceUri(next: string): Promise<string> {
+    async setServiceUri(next: string): Promise<{ txHash: string; blockNumber: bigint }> {
       counters.setUri += 1;
+      // Real chain: a submitted tx mines in a block STRICTLY GREATER
+      // than any block observable via `getBlockNumber` at submit time.
+      // Advance the head first, THEN record the event, so a checkpoint
+      // captured before submission and this write's block sandwich any
+      // other writer that landed in the same interval — which is what
+      // `mutateService`'s optimistic-concurrency scan needs to see.
+      block += 1n;
+      serviceUriUpdates.push({ block, uri: next });
       uri = next;
-      return "0xtxhash";
+      return { txHash: "0xtxhash", blockNumber: block };
+    },
+    async getCurrentBlockNumber(): Promise<bigint> {
+      return block;
+    },
+    async getServiceUriUpdates(fromBlock: bigint, toBlock: bigint): Promise<string[]> {
+      if (toBlock < fromBlock) return [];
+      return serviceUriUpdates
+        .filter((e) => e.block >= fromBlock && e.block <= toBlock)
+        .map((e) => e.uri);
     },
     async vaultPendingBalances(_vaultAddress: string): Promise<{ pendingDepositAssets: bigint; pendingRedeemShares: bigint }> {
       return { pendingDepositAssets: pendingDepositAssets, pendingRedeemShares: pendingRedeemShares };
@@ -114,6 +146,11 @@ function makeFakes(): Fakes {
       return text;
     },
     async pinText(content: string): Promise<string> {
+      if (beforeNextPinHook !== null) {
+        const fire = beforeNextPinHook;
+        beforeNextPinHook = null;
+        await fire();
+      }
       if (pinShouldFail) {
         pinShouldFail = false;
         throw new Error("ipfs down");
@@ -141,6 +178,9 @@ function makeFakes(): Fakes {
       pendingRedeemShares = redeems;
     },
     currentDoc: () => parseLossless(store.get(uri) ?? "null"),
+    beforeNextPin: (fn) => {
+      beforeNextPinHook = fn;
+    },
   };
 }
 
@@ -419,5 +459,64 @@ describe("LoopDeployer", () => {
     expect(resumed.step).toBe("active");
     // No second setServiceUri: the mutation queue detected the no-op.
     expect(fakes.counters.setUri).toBe(setUriBefore);
+  });
+
+  it("mid-mutation setServiceURI by another writer is detected and mutation retries without dropping any workflow", async () => {
+    /* Simulates a second loop-server instance (or any out-of-band
+       `setServiceURI` caller) landing a write between our doc fetch
+       and our own tx. Under the pre-fix code the loop-server's
+       in-process mutation tail was the only lock, so the racing write
+       silently dropped the workflow the deployer was adding. The
+       optimistic-concurrency loop must detect the overlap via
+       `ServiceURIUpdated` event scan, re-fetch, re-apply, and land a
+       final doc that contains BOTH workflows. */
+    const { deployer, fakes } = makeDeployer();
+
+    // Prime: land loop A normally so we have a real workflow shape to
+    // splice into the "other writer" doc.
+    const aInput = { ...validLoopResolveInput(), name: "loop A", strategist: "0xaaaa00000000000000000000000000000000aaaa" };
+    const loopA = await deployer.createLoop(aInput);
+    const docWithA = fakes.currentDoc();
+    expect(workflowIds(docWithA)).toContain(loopA.workflowId);
+
+    // Land loop B, but inject a "concurrent writer" that adds its own
+    // pretend-workflow ("loop C") the instant loop B's mutation reads
+    // the base doc. If the retry loop is wired correctly, loop B's
+    // final on-chain doc must contain A, C, AND B; if the retry loop
+    // is missing, loop B's write silently clobbers C.
+    const bInput = { ...validLoopResolveInput(), name: "loop B", strategist: "0xbbbb00000000000000000000000000000000bbbb" };
+    fakes.beforeNextPin(async () => {
+      // Build a doc that mimics an interfering setServiceURI writer:
+      // clone current on-chain doc and add a workflow named "loop-c"
+      // by hand. The exact shape doesn't matter for the test — what
+      // matters is that its workflowIds set is a superset the deployer
+      // must preserve.
+      const current = fakes.currentDoc();
+      const clone = parseLossless(stringifyLossless(current, 0));
+      if (clone === null || typeof clone !== "object" || !("workflows" in clone)) {
+        throw new Error("test setup: expected workflows key");
+      }
+      const workflows = clone.workflows;
+      if (workflows === null || typeof workflows !== "object") {
+        throw new Error("test setup: workflows is not an object");
+      }
+      // Copy loopA's workflow onto a fresh id — represents whatever
+      // the racing writer inserted.
+      const templateWorkflow = Object.entries(workflows).find(([k]) => k === loopA.workflowId)?.[1];
+      if (templateWorkflow === undefined) throw new Error("test setup: loopA workflow missing");
+      Object.assign(workflows, { "loop-c000000000000000000c": templateWorkflow });
+      const forkedText = stringifyLossless(clone, 0);
+      const forkedUri = await fakes.ipfs.pinText(forkedText, "service.json");
+      await fakes.chain.setServiceUri(forkedUri);
+    });
+
+    const loopB = await deployer.createLoop(bInput);
+    expect(loopB.status).toBe("active");
+
+    const finalIds = workflowIds(fakes.currentDoc());
+    // Both raced-in workflows survive: nothing was silently dropped.
+    expect(finalIds).toContain(loopA.workflowId);
+    expect(finalIds).toContain(loopB.workflowId);
+    expect(finalIds).toContain("loop-c000000000000000000c");
   });
 });

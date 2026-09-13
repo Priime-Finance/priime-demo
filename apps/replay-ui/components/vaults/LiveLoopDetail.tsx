@@ -119,7 +119,7 @@ const NO_EXECUTIONS =
 type LoadState =
   | { kind: "loading" }
   | { kind: "unreachable"; message: string }
-  | { kind: "ready"; loop: LoopRecord; journals: StrikeRecord[] };
+  | { kind: "ready"; loop: LoopRecord; journals: StrikeRecord[]; chainStrikeCount: bigint | null };
 
 export default function LiveLoopDetail({ id }: { id: string }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
@@ -135,7 +135,12 @@ export default function LiveLoopDetail({ id }: { id: string }) {
     const load = () => {
       Promise.all([fetchLoop(id), fetchLoopJournals(id, JOURNAL_WINDOW)])
         .then(([detail, feed]) => {
-          if (alive) setState({ kind: "ready", loop: detail.loop, journals: feed.journals });
+          if (alive) setState({
+            kind: "ready",
+            loop: detail.loop,
+            journals: feed.journals,
+            chainStrikeCount: feed.chainStrikeCount === null ? null : BigInt(feed.chainStrikeCount),
+          });
         })
         .catch((e: unknown) => {
           // A refresh that fails leaves the page as it was: the last payload
@@ -182,7 +187,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
     );
   }
 
-  const { loop, journals } = state;
+  const { loop, journals, chainStrikeCount } = state;
   const config = readLoopConfig(loop.configJson);
   const quorum = liveQuorum(journals);
   const nav = attestedNavReading(journals);
@@ -263,9 +268,16 @@ export default function LiveLoopDetail({ id }: { id: string }) {
         </div>
         <div className="vx-stat" style={{ "--i": 1 } as CSSProperties}>
           <i>Strikes</i>
-          <b>{settled}</b>
+          {/* `settled` is what our window contains AND has settled.
+              `chainStrikeCount` is the vault's own on-chain counter and
+              is authoritative for "how many strikes exist at all". A
+              gap between the two is the "stalled window" state that
+              used to render as an idle vault. */}
+          <b>{chainStrikeCount === null ? settled : chainStrikeCount.toString()}</b>
           <small>
-            settled of {journals.length} recorded
+            {chainStrikeCount !== null && BigInt(journals.length) < chainStrikeCount
+              ? `${String(settled)} settled of ${String(journals.length)} in window · ${(chainStrikeCount - BigInt(journals.length)).toString()} older strikes not fetched`
+              : `${String(settled)} settled of ${String(journals.length)} recorded`}
           </small>
         </div>
         <div className="vx-stat" style={{ "--i": 2 } as CSSProperties}>
