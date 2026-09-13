@@ -31,7 +31,7 @@ export interface LoopConfigInput {
   name?: string;
   /** User address; becomes the handler's strategist (Priime-independent exit). */
   strategist: string;
-  /** Strike cadence in seconds. 5..59, or a multiple of 60 up to 3600. */
+  /** Strike cadence in seconds. Whole minutes only: 60..3600, `cronSeconds % 60 === 0`. Enforced by `cronField`. */
   cronSeconds: number;
   /** Market picked on the composer. Must be in `catalog.ts`. */
   candidateId: string;
@@ -54,7 +54,7 @@ export interface LoopConfig {
   name: string;
   /** User address; becomes the handler's strategist (Priime-independent exit). */
   strategist: string;
-  /** Strike cadence in seconds. 5..59, or a multiple of 60 up to 3600. */
+  /** Strike cadence in seconds. Whole minutes only: 60..3600, `cronSeconds % 60 === 0`. Enforced by `cronField`. */
   cronSeconds: number;
   /** Composer candidate id, resolved against the catalog on create. */
   candidateId: string;
