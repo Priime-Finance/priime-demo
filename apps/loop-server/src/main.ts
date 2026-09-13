@@ -24,6 +24,8 @@ import {
   LoopNotFoundError,
   LoopRegistry,
   PauseGuardError,
+  ReplayCache,
+  ReplayedIntentError,
   isRecord,
   ServiceDocError,
   StaleIntentError,
@@ -32,6 +34,7 @@ import {
   makeChain,
   makeIpfs,
   makeJournalReader,
+  INTENT_MAX_AGE_SECONDS,
   verifyLoopPause,
   verifyLoopPublish,
   type JournalReader,
@@ -110,6 +113,9 @@ function isAuthorized(req: IncomingMessage): boolean {
  *  this deployment's service manager so a signature from one deployment
  *  cannot be replayed on another. */
 const authDomain = { chainId: env.chainId, verifyingContract: env.managerAddress as `0x${string}` };
+
+/** Single-use guard for the signatures the mutating routes accept. Bounded in memory: entries evict once past the same freshness window `verifyLoop*` refuses on its own, so the map never outgrows one TTL of traffic. */
+const replayCache = new ReplayCache(INTENT_MAX_AGE_SECONDS);
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
@@ -223,6 +229,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const signature = expectHex(body.signature, "signature");
     const intent = extractPublishIntent(body);
     await verifyLoopPublish(intent, signature, authDomain, nowSeconds());
+    replayCache.observe(signature, nowSeconds());
     // Body sans-signature is the LoopConfigInput createLoop already validates.
     const configInput: Record<string, unknown> = { ...body };
     delete configInput.signature;
@@ -274,6 +281,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       const record = registry.get(id);
       if (record === null) throw new LoopNotFoundError(id);
       const recovered = await verifyLoopPause(intent, signature, authDomain, nowSeconds());
+      replayCache.observe(signature, nowSeconds());
       if (recovered.toLowerCase() !== record.strategist.toLowerCase()) {
         throw new UnauthorizedIntentError(record.strategist as `0x${string}`, recovered);
       }
@@ -296,6 +304,10 @@ const server = createServer((req, res) => {
       sendJson(res, 401, { error: err.message, signedAt: err.signedAt, nowSeconds: err.nowSeconds });
     } else if (err instanceof UnauthorizedIntentError) {
       sendJson(res, 403, { error: err.message, expected: err.expected, recovered: err.recovered });
+    } else if (err instanceof ReplayedIntentError) {
+      // 409 Conflict: a legitimate signature that had already been consumed.
+      // Caller re-signs with a fresh signedAt and retries.
+      sendJson(res, 409, { error: err.message });
     } else if (err instanceof PauseGuardError) {
       // 409 Conflict: pause refused because the on-chain vault has escrow
       // mid-flight. Ship the raw base-unit balances so the caller can render
