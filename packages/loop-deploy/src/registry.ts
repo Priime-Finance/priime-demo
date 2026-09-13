@@ -17,6 +17,13 @@ export interface LoopRecord {
   /** Validated LoopConfig, JSON-encoded. */
   configJson: string;
   handlerAddress: string | null;
+  /**
+   * Hash of the pending `deployVault` tx, if we have sent one and not yet
+   * decoded its receipt. Persisted BEFORE the confirmation wait so a crash
+   * mid-wait resumes on the same tx (decoding `VaultCreated` from its
+   * receipt), never a second deploy. `null` once `handlerAddress` is set.
+   */
+  deployTxHash: string | null;
   /** CID of the last service.json this loop's mutation was pinned in. */
   serviceCid: string | null;
   status: LoopStatus;
@@ -27,7 +34,8 @@ export interface LoopRecord {
 }
 
 interface LoopPatch {
-  handlerAddress?: string;
+  handlerAddress?: string | null;
+  deployTxHash?: string | null;
   serviceCid?: string;
   status?: LoopStatus;
   step?: LoopStep;
@@ -42,6 +50,7 @@ CREATE TABLE IF NOT EXISTS loops (
   strategist TEXT NOT NULL,
   config_json TEXT NOT NULL,
   handler_address TEXT,
+  deploy_tx_hash TEXT,
   service_cid TEXT,
   status TEXT NOT NULL,
   step TEXT NOT NULL,
@@ -59,6 +68,7 @@ interface LoopRow {
   strategist: string;
   config_json: string;
   handler_address: string | null;
+  deploy_tx_hash: string | null;
   service_cid: string | null;
   status: string;
   step: string;
@@ -75,6 +85,7 @@ function recordOf(row: LoopRow): LoopRecord {
     strategist: row.strategist,
     configJson: row.config_json,
     handlerAddress: row.handler_address,
+    deployTxHash: row.deploy_tx_hash,
     serviceCid: row.service_cid,
     // Stored values only ever come from the typed setters below.
     status: row.status as LoopStatus,
@@ -92,6 +103,15 @@ export class LoopRegistry {
     this.db = new DatabaseSync(path);
     this.db.exec("PRAGMA journal_mode = WAL;");
     this.db.exec(SCHEMA);
+    // Idempotent migration for DBs created before the deploy_tx_hash
+    // column existed. SQLite has no `ADD COLUMN IF NOT EXISTS`, so we
+    // ignore the duplicate-column error explicitly.
+    try {
+      this.db.exec("ALTER TABLE loops ADD COLUMN deploy_tx_hash TEXT");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("duplicate column name")) throw err;
+    }
   }
 
   create(input: { id: string; name: string; workflowId: string; strategist: string; configJson: string }): LoopRecord {
@@ -128,6 +148,10 @@ export class LoopRegistry {
     if (patch.handlerAddress !== undefined) {
       sets.push("handler_address = ?");
       args.push(patch.handlerAddress);
+    }
+    if (patch.deployTxHash !== undefined) {
+      sets.push("deploy_tx_hash = ?");
+      args.push(patch.deployTxHash);
     }
     if (patch.serviceCid !== undefined) {
       sets.push("service_cid = ?");

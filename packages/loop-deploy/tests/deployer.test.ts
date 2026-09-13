@@ -73,11 +73,20 @@ function makeFakes(): Fakes {
   let pendingRedeemShares = 0n;
   let poolShouldFail = false;
 
+  const pendingDeploys = new Map<string, string>();
   const chain: ChainPort = {
-    async deployHandler(strategist: string): Promise<string> {
+    async submitDeployHandler(strategist: string): Promise<string> {
       counters.deploys += 1;
       deployCounter += 1;
-      return `0x${(deployCounter + 0xd000).toString(16).padStart(4, "0")}${strategist.slice(6, 42)}`.toLowerCase();
+      const vault = `0x${(deployCounter + 0xd000).toString(16).padStart(4, "0")}${strategist.slice(6, 42)}`.toLowerCase();
+      const txHash = `0x${"tx".padStart(2, "0")}${deployCounter.toString(16).padStart(62, "0")}`;
+      pendingDeploys.set(txHash, vault);
+      return txHash;
+    },
+    async finalizeDeployHandler(txHash: string): Promise<string> {
+      const vault = pendingDeploys.get(txHash);
+      if (vault === undefined) throw new Error(`test fake has no pending deploy for ${txHash}`);
+      return vault;
     },
     async getServiceUri(): Promise<string> {
       return uri;
@@ -337,5 +346,78 @@ describe("LoopDeployer", () => {
     const config = componentConfigOf(fakes.currentDoc(), resumed.workflowId);
     expect(config.swap_router).toBe("0x2626664c2603336e57b271c5c0b26f421741e481");
     expect(config.pool_fee).toBe("500");
+  });
+
+  it("concurrent publishes get distinct vaults (finding: predict-only was collision-prone)", async () => {
+    /* Two simultaneous createLoop calls used to both persist the same
+       eth_call-predicted CREATE address; the second submission would
+       actually deploy at nonce+1 while the registry pointed at the
+       first caller's vault. `finalizeDeployHandler` decodes VaultCreated
+       from the tx's own receipt, so two publishes with distinct hashes
+       land at distinct addresses. */
+    const { deployer } = makeDeployer();
+    const aInput = { ...validLoopResolveInput(), name: "A", strategist: "0xaaaa00000000000000000000000000000000aaaa" };
+    const bInput = { ...validLoopResolveInput(), name: "B", strategist: "0xbbbb00000000000000000000000000000000bbbb" };
+    const [a, b] = await Promise.all([deployer.createLoop(aInput), deployer.createLoop(bInput)]);
+    expect(a.handlerAddress).not.toBe(b.handlerAddress);
+    expect(a.strategist).not.toBe(b.strategist);
+  });
+
+  it("crash between submit and confirm resumes on the same tx hash (no second vault)", async () => {
+    /* Simulates a crash inside `finalizeDeployHandler`'s receipt wait.
+       The registry already carries the persisted tx hash from
+       `submitDeployHandler`; on resume, the deployer MUST reuse that
+       hash (idempotent decode) instead of submitting a second tx. */
+    const { deployer, registry, fakes } = makeDeployer();
+    // Land a full loop, then rewind it to the "submit landed,
+    // finalize did not" state: forget the handler address, drop step
+    // back to `validated`, and re-inject a fresh unresolved tx hash so
+    // `resumeLoop` MUST call `finalizeDeployHandler` — never
+    // `submitDeployHandler` — to advance.
+    const loop = await deployer.createLoop(validLoopResolveInput());
+    const primeHash = await fakes.chain.submitDeployHandler(loop.strategist, {
+      collateralToken: "0x0000000000000000000000000000000000000001",
+      morpho: "0x0000000000000000000000000000000000000002",
+      morphoOracle: "0x0000000000000000000000000000000000000003",
+      morphoIrm: "0x0000000000000000000000000000000000000004",
+      morphoLltv: 1n,
+      swapRouter: "0x0000000000000000000000000000000000000005",
+      poolFee: 500,
+    });
+    const deploysBefore = fakes.counters.deploys;
+    registry.update(loop.id, {
+      handlerAddress: null,
+      deployTxHash: primeHash,
+      step: "validated",
+      status: "deploying",
+    });
+    const resumed = await deployer.resumeLoop(loop.id);
+    expect(resumed.status).toBe("active");
+    expect(resumed.handlerAddress).not.toBeNull();
+    // Deploys counter did not tick — only finalize was invoked.
+    expect(fakes.counters.deploys).toBe(deploysBefore);
+    // Hash cleared once the vault address landed.
+    expect(resumed.deployTxHash).toBeNull();
+  });
+
+  it("crash between setServiceURI and step=service_updated resumes without 'workflow already exists'", async () => {
+    /* Simulates a crash after the service-mutation half of the pipeline
+       succeeded (workflow already in service.json, vault already
+       attesting) but before the registry write. Under the pre-fix code
+       the resumed `addLoopWorkflow` would throw ServiceDocError and the
+       loop would be wedged forever. */
+    const { deployer, registry, fakes } = makeDeployer();
+    const loop = await deployer.createLoop(validLoopResolveInput());
+    // Snapshot the "landed" state and rewind the registry step to the
+    // pre-mark position while leaving service.json untouched.
+    const setUriBefore = fakes.counters.setUri;
+    registry.update(loop.id, { step: "handler_deployed", status: "deploying", error: null });
+    // Sanity: service.json still contains the workflow.
+    expect(workflowIds(fakes.currentDoc())).toContain(loop.workflowId);
+    const resumed = await deployer.resumeLoop(loop.id);
+    expect(resumed.status).toBe("active");
+    expect(resumed.step).toBe("active");
+    // No second setServiceUri: the mutation queue detected the no-op.
+    expect(fakes.counters.setUri).toBe(setUriBefore);
   });
 });

@@ -11,7 +11,7 @@
  *   handler or the workflow.
  */
 
-import { addLoopWorkflow, newWorkflowId, removeLoopWorkflow } from "./builder.ts";
+import { addLoopWorkflow, newWorkflowId, removeLoopWorkflow, workflowIds } from "./builder.ts";
 import { lookupMarket } from "./catalog.ts";
 import type { ChainPort } from "./chain.ts";
 import { componentConfigFor, cronFromSeconds, resolveLoopConfig, ValidationError, validateLoopConfig, type LoopConfig } from "./config.ts";
@@ -180,24 +180,53 @@ export class LoopDeployer {
         if (market === null) {
           throw new Error(`market catalog missing entry for ${config.candidateId}`);
         }
-        const handler = await this.chain.deployHandler(config.strategist, {
-          collateralToken: market.usdeAddress,
-          morpho: market.morphoAddress,
-          morphoOracle: market.oracleAddress,
-          morphoIrm: market.irmAddress,
-          morphoLltv: BigInt(market.lltv),
-          swapRouter: market.swapRouter,
-          poolFee: market.poolFee,
+        // Two windows to close on crash-resume:
+        //   1. Between submitting the deploy tx and reading its receipt.
+        //      Pre-persisting the tx hash lets a resumed run wait on the
+        //      same tx (idempotent via `waitForTransactionReceipt`) and
+        //      decode `VaultCreated` from its logs, so we never deploy
+        //      a second vault while the first one already landed.
+        //   2. Between decoding the vault address and writing it to the
+        //      registry. Same tx hash still on file: resume just re-runs
+        //      the (cheap) receipt decode and stores the address.
+        let txHash = record.deployTxHash;
+        if (txHash === null) {
+          txHash = await this.chain.submitDeployHandler(config.strategist, {
+            collateralToken: market.usdeAddress,
+            morpho: market.morphoAddress,
+            morphoOracle: market.oracleAddress,
+            morphoIrm: market.irmAddress,
+            morphoLltv: BigInt(market.lltv),
+            swapRouter: market.swapRouter,
+            poolFee: market.poolFee,
+          });
+          record = this.registry.update(id, { deployTxHash: txHash });
+        }
+        const handler = await this.chain.finalizeDeployHandler(txHash);
+        record = this.registry.update(id, {
+          handlerAddress: handler,
+          deployTxHash: null,
+          step: "handler_deployed",
+          status: "deploying",
+          error: null,
         });
-        record = this.registry.update(id, { handlerAddress: handler, step: "handler_deployed", status: "deploying", error: null });
       }
 
       if (record.step !== "service_updated" && record.step !== "active") {
         const handlerAddress = record.handlerAddress;
         if (handlerAddress === null) throw new Error(`loop ${id} reached ${record.step} without a handler`);
         const now = this.nowNanos();
-        const cid = await this.mutateService((doc) =>
-          addLoopWorkflow(
+        const cid = await this.mutateService((doc) => {
+          // Crash-resume idempotency: if the workflow already landed in
+          // service.json (setServiceURI succeeded, then we crashed before
+          // marking step="service_updated"), the second `addLoopWorkflow`
+          // would throw "workflow already exists" and wedge the loop
+          // forever while its vault keeps attesting. Detect the
+          // already-present case and return the doc unchanged; the outer
+          // `mutateService` treats reference-identical output as a no-op
+          // and reuses the current URI.
+          if (workflowIds(doc).includes(record.workflowId)) return doc;
+          return addLoopWorkflow(
             doc,
             {
               workflowId: record.workflowId,
@@ -214,8 +243,8 @@ export class LoopDeployer {
               },
             },
             this.templateWorkflowId,
-          ),
-        );
+          );
+        });
         record = this.registry.update(id, { serviceCid: cid, step: "service_updated" });
       }
 
@@ -243,6 +272,12 @@ export class LoopDeployer {
       const currentText = await this.ipfs.fetchText(currentUri);
       const doc = parseLossless(currentText);
       const edited = edit(doc);
+      if (edited === doc) {
+        // Edit was a no-op (see the resume-safe check in `runPipeline`
+        // for the handler-deploy branch): skip the pin+setServiceUri
+        // round trip and return the current URI as this loop's cid.
+        return currentUri;
+      }
       const nextText = stringifyLossless(edited, 2);
       const nextUri = await this.ipfs.pinText(nextText, "service.json");
       await this.chain.setServiceUri(nextUri);

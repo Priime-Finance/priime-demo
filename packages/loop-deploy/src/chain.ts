@@ -12,6 +12,7 @@ import {
   createWalletClient,
   defineChain,
   http,
+  parseEventLogs,
   type Address,
   type Hex,
 } from "viem";
@@ -99,6 +100,19 @@ const FACTORY_ABI = [
     outputs: [{ type: "address" }],
     stateMutability: "nonpayable",
   },
+  {
+    type: "event",
+    name: "VaultCreated",
+    inputs: [
+      { name: "vault", type: "address", indexed: true },
+      { name: "strategist", type: "address", indexed: true },
+      { name: "serviceManager", type: "address", indexed: true },
+      { name: "asset", type: "address", indexed: false },
+      { name: "deployer", type: "address", indexed: false },
+      { name: "index", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
 ] as const;
 
 export interface StrategyConfig {
@@ -119,8 +133,20 @@ export interface VaultPendingBalances {
 }
 
 export interface ChainPort {
-  /** Deploy a PriimeVault(serviceManager, asset, strategist, StrategyConfig). Returns the address. */
-  deployHandler(strategist: string, strategy: StrategyConfig): Promise<string>;
+  /**
+   * Submit a `factory.deployVault(serviceManager, asset, strategist, strategy)`
+   * transaction and return its hash WITHOUT waiting for confirmation. The
+   * caller must persist the hash before invoking `finalizeDeployHandler`
+   * so a crash mid-wait can resume on the same tx.
+   */
+  submitDeployHandler(strategist: string, strategy: StrategyConfig): Promise<string>;
+  /**
+   * Wait for a previously-submitted deployVault tx to land, decode its
+   * `VaultCreated` receipt log, and return the vault address. Idempotent
+   * on the tx hash: safe to call once the receipt is known or on resume
+   * from a crash whose registry retained the hash.
+   */
+  finalizeDeployHandler(txHash: string): Promise<string>;
   getServiceUri(): Promise<string>;
   /** Set the manager's service URI and wait for inclusion. Returns the tx hash. */
   setServiceUri(uri: string): Promise<string>;
@@ -191,13 +217,14 @@ export function makeChain(options: ChainOptions): ChainPort {
   };
 
   return {
-    async deployHandler(strategist: string, strategy: StrategyConfig): Promise<string> {
+    async submitDeployHandler(strategist: string, strategy: StrategyConfig): Promise<string> {
       // Every deploy goes through the factory so the subgraph auto-indexes
       // the new vault via its VaultCreated event + data-source template.
-      const nonceBefore = await publicClient.getTransactionCount({
-        address: account.address,
-        blockTag: "pending",
-      });
+      // This method ONLY submits the tx and returns its hash. The caller
+      // MUST persist that hash BEFORE awaiting `finalizeDeployHandler`;
+      // otherwise a crash inside the confirmation wait would leak a
+      // deployed vault (registry lost the pointer) and the next resume
+      // would deploy a second one.
       const args = [
         manager,
         asset,
@@ -212,27 +239,45 @@ export function makeChain(options: ChainOptions): ChainPort {
           poolFee: strategy.poolFee,
         },
       ] as const;
-      // Predict the vault address up-front so we do not need to parse
-      // VaultCreated back out of the receipt.
-      const predicted = await publicClient.readContract({
-        address: factory,
-        abi: FACTORY_ABI,
-        functionName: "deployVault",
-        args,
-        account,
-      });
-      const hash = await walletClient.writeContract({
+      return await walletClient.writeContract({
         address: factory,
         abi: FACTORY_ABI,
         functionName: "deployVault",
         args,
       });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    },
+    async finalizeDeployHandler(txHash: string): Promise<string> {
+      // Idempotent: `waitForTransactionReceipt` returns the same receipt
+      // for every call once the tx is mined, so this both drives the
+      // happy path AND resumes a crashed loop whose registry already
+      // carries a tx hash.
+      const nonceBefore = await publicClient.getTransactionCount({
+        address: account.address,
+        blockTag: "pending",
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as Hex });
       if (receipt.status !== "success") {
-        throw new Error(`factory.deployVault reverted (tx ${hash})`);
+        throw new Error(`factory.deployVault reverted (tx ${txHash})`);
       }
-      await waitForNonce(nonceBefore + 1, 10_000);
-      return (predicted as Address).toLowerCase();
+      // Do NOT rely on `eth_call` at latest to predict the CREATE
+      // address: two concurrent deploys both see the same "next" address
+      // and would BOTH persist it. Decode `VaultCreated` out of the
+      // receipt logs — the event carries the vault address on
+      // `topics[1]` and is emitted at construction time inside the same
+      // tx, so it is the one source of truth every path agrees on.
+      const events = parseEventLogs({
+        abi: FACTORY_ABI,
+        eventName: "VaultCreated",
+        logs: receipt.logs,
+      });
+      const emitted = events.find((e) => e.address.toLowerCase() === factory.toLowerCase());
+      if (emitted === undefined) {
+        throw new Error(`factory.deployVault (tx ${txHash}) did not emit VaultCreated`);
+      }
+      // Bounded wait so a stale mempool view (nonce not yet advanced on
+      // this rpc) doesn't wedge the follow-up setServiceUri submission.
+      await waitForNonce(nonceBefore, 10_000);
+      return emitted.args.vault.toLowerCase();
     },
 
     async getServiceUri(): Promise<string> {
