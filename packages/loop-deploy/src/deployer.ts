@@ -12,6 +12,7 @@
  */
 
 import { addLoopWorkflow, mergeMissingWorkflows, newWorkflowId, removeLoopWorkflow, workflowIds } from "./builder.ts";
+import { friendlyErrorMessage } from "./friendly-error.ts";
 import { lookupMarket } from "./catalog.ts";
 import type { ChainPort } from "./chain.ts";
 import { componentConfigFor, cronFromSeconds, resolveLoopConfig, ValidationError, validateLoopConfig, type LoopConfig } from "./config.ts";
@@ -102,7 +103,7 @@ export class LoopDeployer {
       await this.chain.verifyUniswapV3Pool(config.poolAddress, { minObservableSecs: 300 });
     } catch (err) {
       throw new ValidationError([
-        `poolAddress "${config.poolAddress}" does not respond as a Uniswap V3 pool: ${err instanceof Error ? err.message : String(err)}`,
+        `poolAddress "${config.poolAddress}" does not respond as a Uniswap V3 pool: ${friendlyErrorMessage(err)}`,
       ]);
     }
     const record = this.registry.create({
@@ -149,7 +150,7 @@ export class LoopDeployer {
       }
       return this.registry.update(id, { status: "inactive", error: null });
     } catch (err) {
-      this.registry.update(id, { status: "failed", error: err instanceof Error ? err.message : String(err) });
+      this.registry.update(id, { status: "failed", error: friendlyErrorMessage(err) });
       throw err;
     }
   }
@@ -250,7 +251,7 @@ export class LoopDeployer {
 
       return this.registry.update(id, { step: "active", status: "active", error: null });
     } catch (err) {
-      this.registry.update(id, { status: "failed", error: err instanceof Error ? err.message : String(err) });
+      this.registry.update(id, { status: "failed", error: friendlyErrorMessage(err) });
       throw err;
     }
   }

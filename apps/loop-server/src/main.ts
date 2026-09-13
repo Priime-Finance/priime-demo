@@ -28,6 +28,7 @@ import {
   ReplayedIntentError,
   isRecord,
   ServiceDocError,
+  friendlyErrorMessage,
   StaleIntentError,
   UnauthorizedIntentError,
   ValidationError,
@@ -357,8 +358,11 @@ const server = createServer((req, res) => {
     } else if (err instanceof ServiceDocError) {
       sendJson(res, 409, { error: err.message });
     } else {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`[loop-server] ${req.method} ${req.url} failed:`, message);
+      const message = friendlyErrorMessage(err);
+      // Log the RAW message locally so an operator debugging on the host
+      // still sees the transport URL and any keyed detail. Only the
+      // outbound response is scrubbed.
+      console.error(`[loop-server] ${req.method} ${req.url} failed:`, err instanceof Error ? err.message : String(err));
       sendJson(res, 500, { error: message });
     }
   });

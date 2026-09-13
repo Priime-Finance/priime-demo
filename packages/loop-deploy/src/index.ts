@@ -64,4 +64,5 @@ export {
   type LoopPublishIntent,
   type LoopPublishTypedData,
 } from "./auth.ts";
+export { friendlyErrorMessage } from "./friendly-error.ts";
 export { ReplayCache, ReplayedIntentError } from "./replay-cache.ts";

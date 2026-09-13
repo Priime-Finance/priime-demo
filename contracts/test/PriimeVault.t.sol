@@ -20,6 +20,7 @@ interface Vm {
 /// @dev Mintable 6-decimal stand-in for USDC. Test-only.
 contract TestUSDC {
     mapping(address => uint256) public balanceOf;
+    mapping(address => bool) public blacklisted;
     mapping(address => mapping(address => uint256)) public allowance;
 
     function decimals() external pure returns (uint8) {
@@ -44,7 +45,16 @@ contract TestUSDC {
         return true;
     }
 
+    /// @dev Real USDC on mainnet blocks transfers to/from blacklisted
+    ///      addresses. The brick-attack regression sets a controller
+    ///      address on this list; the vault's strike refund path must
+    ///      NOT push into it (a push would revert the whole strike).
+    function setBlacklisted(address who, bool on) external {
+        blacklisted[who] = on;
+    }
+
     function transfer(address to, uint256 amount) external returns (bool) {
+        require(!blacklisted[msg.sender] && !blacklisted[to], "USDC blacklist");
         require(balanceOf[msg.sender] >= amount, "balance");
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
@@ -52,6 +62,7 @@ contract TestUSDC {
     }
 
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        require(!blacklisted[from] && !blacklisted[to], "USDC blacklist");
         require(balanceOf[from] >= amount, "balance");
         require(allowance[from][msg.sender] >= amount, "allowance");
         allowance[from][msg.sender] -= amount;
@@ -1953,50 +1964,160 @@ contract PriimeVaultTest {
 
     // --- unpriceable deposits: refund instead of revert or zero-share mint ----
 
-    function test_ZeroNavStrikeRefundsPendingDepositAndKeepsUpdatesFlowing() public {
+    function test_ZeroNavStrikeCreditsPendingDepositRefundAndKeepsUpdatesFlowing() public {
         _bootstrapAlice(); // supply 1,000 shares, nav 1,000
 
         vm.prank(BOB);
         vault.requestDeposit(500 * ONE_USDC, BOB, BOB);
-        uint256 bobBefore = usdc.balanceOf(BOB);
 
-        // Total loss: the attested NAV is zero while shares are still
-        // outstanding, so Bob's deposit has no price. It must be refunded, not
-        // reverted (a revert would brick every future strike) and not folded in
-        // at zero shares (that would donate it to Alice).
+        // Total loss: attested NAV is zero while shares are still
+        // outstanding, so Bob's deposit has no price. It must be REFUND
+        // credited (not push-transferred: that would let a broken/
+        // blacklisted controller brick every future strike), not
+        // reverted, and not folded in at zero shares.
         _attest(bytes20(uint160(0xF00D03)), 0, 2);
 
-        require(usdc.balanceOf(BOB) - bobBefore == 500 * ONE_USDC, "deposit refunded to controller");
         require(vault.pendingDepositRequest(0, BOB) == 0, "pending cleared");
-        require(vault.claimableDepositRequest(0, BOB) == 0, "nothing claimable");
+        require(vault.refundableDepositAssets(BOB) == 500 * ONE_USDC, "refund credited to controller");
+        require(vault.totalRefundableDepositAssets() == 500 * ONE_USDC, "aggregate refundable tracked");
+        require(vault.claimableDepositRequest(0, BOB) == 0, "nothing claimable as deposit");
         require(vault.maxMint(BOB) == 0, "no shares minted");
-        require(vault.totalPendingDepositAssets() == 0, "escrow released");
+        require(vault.totalPendingDepositAssets() == 0, "pending escrow released");
         require(vault.totalAssets() == 0, "refund not folded into NAV");
         require(vault.totalSupply() == 1_000 * ONE_USDC, "supply untouched");
         require(vault.updateCount() == 2, "strike accepted");
 
-        // The vault is not bricked: a later strike still lands and prices.
+        // Bob pulls the refund to his own wallet.
+        uint256 bobBefore = usdc.balanceOf(BOB);
+        vm.prank(BOB);
+        uint256 got = vault.claimDepositRefund(BOB, BOB);
+        require(got == 500 * ONE_USDC, "pulled full refund");
+        require(usdc.balanceOf(BOB) - bobBefore == 500 * ONE_USDC, "refund delivered");
+        require(vault.refundableDepositAssets(BOB) == 0, "refund book cleared");
+        require(vault.totalRefundableDepositAssets() == 0, "aggregate cleared");
+
+        // A later strike still lands and prices — the vault is not bricked.
         _attest(bytes20(uint160(0xF00D04)), 800 * ONE_USDC, 3);
         require(vault.totalAssets() == 800 * ONE_USDC, "later strike still works");
         require(vault.updateCount() == 3, "later strike counted");
     }
 
-    function test_ZeroShareDustDepositIsRefunded() public {
+    function test_ZeroShareDustDepositIsCreditedAsRefund() public {
         _bootstrapAlice();
 
-        // Share price is 10,000 USDC/share after the strike below, so a 1-base-unit
-        // deposit prices to zero shares: refund rather than donate it to Alice.
+        // Share price is 10,000 USDC/share after the strike below, so a
+        // 1-base-unit deposit prices to zero shares.
         vm.prank(BOB);
         vault.requestDeposit(1, BOB, BOB);
-        uint256 bobBefore = usdc.balanceOf(BOB);
 
         _attest(bytes20(uint160(0xF00D05)), 10_000_000 * ONE_USDC, 2);
 
-        require(usdc.balanceOf(BOB) - bobBefore == 1, "dust refunded");
+        require(vault.refundableDepositAssets(BOB) == 1, "dust credited as refund");
+        require(vault.totalRefundableDepositAssets() == 1, "aggregate refundable = 1");
         require(vault.maxMint(BOB) == 0, "no shares for dust");
-        require(vault.maxDeposit(BOB) == 0, "nothing claimable");
+        require(vault.maxDeposit(BOB) == 0, "nothing claimable as deposit");
         require(vault.totalAssets() == 10_000_000 * ONE_USDC, "dust not folded into NAV");
         require(vault.totalSupply() == 1_000 * ONE_USDC, "supply untouched");
+
+        uint256 bobBefore = usdc.balanceOf(BOB);
+        vm.prank(BOB);
+        vault.claimDepositRefund(BOB, BOB);
+        require(usdc.balanceOf(BOB) - bobBefore == 1, "pulled dust");
+    }
+
+    function test_BlacklistedControllerCannotBrickFutureStrikes() public {
+        /* Regression pin for the 1-unit-deposit-with-blacklisted-controller
+           brick vector: pre-fix, `_fulfillDeposits`'s inline
+           `safeTransfer(controller, ...)` on the refund branch would
+           revert on a USDC-blacklisted controller and take EVERY future
+           strike down with it. NAV frozen, redemptions blocked,
+           everyone's escrow stuck.
+
+           TestUSDC exposes `setBlacklisted(address, bool)` so the test
+           can simulate the "controller cannot receive USDC" outcome; the
+           attacker's dust deposit sits in the refund book, cannot be
+           claimed by the blacklisted controller directly, but the strike
+           accepts and everyone else keeps flowing. */
+        _bootstrapAlice();
+
+        address attacker = address(0xBAD1);
+        usdc.mint(attacker, 1);
+        vm.prank(attacker);
+        usdc.approve(address(vault), 1);
+        vm.prank(attacker);
+        vault.requestDeposit(1, attacker, attacker);
+
+        // USDC blacklist lands AFTER the escrow is pulled but BEFORE the
+        // strike would push the refund. Real-world equivalent: the
+        // controller was blacklisted between requestDeposit and the
+        // strike, or the controller is a contract without a receive path.
+        usdc.setBlacklisted(attacker, true);
+
+        // The strike PROCEEDS, credits the refund, and updateCount ticks.
+        _attest(bytes20(uint160(0xB000E01)), 10_000_000 * ONE_USDC, 2);
+        require(vault.updateCount() == 2, "strike accepted despite blacklisted controller");
+        require(vault.refundableDepositAssets(attacker) == 1, "refund credited, not pushed");
+
+        // Every future strike keeps landing.
+        _attest(bytes20(uint160(0xB000E02)), 12_000_000 * ONE_USDC, 3);
+        require(vault.updateCount() == 3, "vault not bricked");
+
+        // The attacker's own pull reverts on the blacklist — as it must:
+        // the USDC contract itself refuses. Their escrow is stuck for
+        // them, not for anyone else.
+        vm.prank(attacker);
+        vm.expectRevert(bytes("USDC blacklist"));
+        vault.claimDepositRefund(attacker, attacker);
+    }
+
+    function test_FirstDepositorInflationAttackRefusedByMinimumBootstrap() public {
+        /* Regression pin for the classic first-depositor inflation
+           attack. Pre-fix: attacker deposits 1 wei, gets 1 share via
+           the bootstrap branch, then direct-transfers a fat donation
+           to the vault. The next strike counts idle USDC into NAV, so
+           supply=1, nav=big; subsequent depositors are diluted to
+           zero (or, after the refund fix, refunded — but the attacker
+           still walks the donation.). `MIN_BOOTSTRAP_ASSETS` closes
+           this: the first depositor MUST escrow at least the floor,
+           so an attack's break-even sits at or above the required
+           bootstrap and no fresh deposit can be diluted below cost. */
+        uint256 floor = vault.MIN_BOOTSTRAP_ASSETS();
+        address attacker = address(0xBAADF00D);
+        usdc.mint(attacker, 100 * ONE_USDC);
+        vm.prank(attacker);
+        usdc.approve(address(vault), 100 * ONE_USDC);
+
+        // Zero-supply, sub-floor deposit — refused (with 1 wei).
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(PriimeVault.MinimumBootstrapNotMet.selector, uint256(1), floor)
+        );
+        vault.requestDeposit(1, attacker, attacker);
+
+        // Zero-supply, one-wei-below-floor — still refused.
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(PriimeVault.MinimumBootstrapNotMet.selector, floor - 1, floor)
+        );
+        vault.requestDeposit(floor - 1, attacker, attacker);
+
+        // Exactly the floor — accepted.
+        vm.prank(attacker);
+        uint256 got = vault.requestDeposit(floor, attacker, attacker);
+        require(got == 0, "requestId 0");
+
+        // With shares now outstanding (next strike will mint), tiny
+        // top-ups from a different depositor are permitted again — the
+        // gate is bootstrap-only.
+        _attest(bytes20(uint160(0xB007401)), floor, 1);
+        require(vault.totalSupply() > 0, "bootstrap fulfilled");
+
+        address bob = address(0xB0B);
+        usdc.mint(bob, 1);
+        vm.prank(bob);
+        usdc.approve(address(vault), 1);
+        vm.prank(bob);
+        vault.requestDeposit(1, bob, bob); // no revert
     }
 
     // --- event surface -------------------------------------------------------

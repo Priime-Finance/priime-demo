@@ -39,6 +39,7 @@ import {
 import { sseFrame } from "@/lib/canvas/copilot/sse";
 import { validateExplain, validateProposal } from "@/lib/canvas/copilot/tools";
 import type { PortfolioGraph } from "@/lib/canvas/types";
+import { clientIdentity } from "@/lib/request-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -133,7 +134,13 @@ export function GET() {
 }
 
 export async function POST(req: Request) {
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "local";
+  // Spoof-resistant client identity. See lib/request-identity.ts for
+  // the header hierarchy; using the FIRST hop of `x-forwarded-for`
+  // (the pre-fix behaviour) lets a browser client rotate identity by
+  // prepending arbitrary values, so a single caller could mint
+  // unlimited buckets and empty ANTHROPIC_API_KEY quota through us.
+  const ip = clientIdentity(req);
+
 
   // 1. Size guard
   const raw = await req.text();
@@ -146,7 +153,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, offline: true }, { status: 503 });
   }
 
-  // 3. Rate limit (first hop of x-forwarded-for, else "local")
+  // 3. Rate limit (spoof-resistant client identity, see lib/request-identity.ts)
   const take = takeToken(buckets, ip, Date.now());
   if (!take.ok) {
     return NextResponse.json(

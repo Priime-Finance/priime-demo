@@ -16,6 +16,9 @@
 
 import { NextResponse } from "next/server";
 
+import { clientIdentity } from "@/lib/request-identity";
+import { type Bucket, takeToken } from "@/lib/canvas/copilot/rate-limit";
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -72,11 +75,55 @@ function idOf(body: unknown): string | number | null {
   return typeof raw === "string" || typeof raw === "number" ? raw : null;
 }
 
+/**
+ * Rate-limit buckets keyed by spoof-resistant client identity. `wagmi.ts`
+ * documents this as promised behaviour — a same-origin browser client
+ * gets a token bucket per identity; a rogue caller with `curl -X POST`
+ * cannot burn our upstream RPC quota faster than the bucket allows.
+ * Kept module-level so buckets survive across route invocations inside
+ * the same Node process.
+ */
+const rpcBuckets = new Map<string, Bucket>();
+
+/** Same-origin gate: this endpoint only exists to serve our own
+ *  wallet + wagmi + subgraph reads. A `curl` from a foreign origin
+ *  has no reason to reach it; a cross-site JS caller (via a
+ *  compromised third-party embed) has none either. Missing origin
+ *  or missing host: reject. Mirrors `apps/replay-ui/app/api/loops/route.ts`
+ *  guard shape. */
+function sameOrigin(req: Request): boolean {
+  const originHeader = req.headers.get("origin");
+  const hostHeader = req.headers.get("host");
+  if (originHeader === null || hostHeader === null) return false;
+  let originUrl: URL;
+  try {
+    originUrl = new URL(originHeader);
+  } catch {
+    return false;
+  }
+  return originUrl.host.toLowerCase() === hostHeader.toLowerCase();
+}
+
+/** Scrub URL-shaped substrings and long hex blobs from upstream error
+ *  messages: `viem`/`fetch` wrap the full RPC URL (Alchemy key path
+ *  included) inside transport-error strings, and this endpoint is
+ *  reachable by any browser session. Cheap parity with the
+ *  `friendlyErrorMessage` helper on the loop-server side. */
+const URL_RE = /\b[a-zA-Z][a-zA-Z0-9+.-]*:\/\/\S+/g;
+function scrubUpstreamMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw.replace(URL_RE, "[url redacted]");
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ chainId: string }> },
 ): Promise<NextResponse> {
   const { chainId } = await params;
+  if (!sameOrigin(req)) {
+    // No JSON-RPC id at this point — the body hasn't been parsed yet.
+    return rpcError(null, -32000, "cross-origin request refused");
+  }
   if (ALLOWED_CHAIN_IDS[chainId] !== true) {
     return rpcError(null, -32601, `chain ${chainId} not proxied`);
   }
@@ -107,6 +154,10 @@ export async function POST(
   if (ALLOWED_METHODS[method] !== true) {
     return rpcError(id, -32601, `method ${method} not allowed`);
   }
+  const take = takeToken(rpcBuckets, clientIdentity(req), Date.now());
+  if (!take.ok) {
+    return rpcError(id, -32005, `rate limited, retry in ${String(take.retryAfterMs)}ms`);
+  }
 
   try {
     const upstreamRes = await fetch(upstream, {
@@ -125,7 +176,6 @@ export async function POST(
       headers: { "content-type": upstreamRes.headers.get("content-type") ?? "application/json" },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return rpcError(id, -32603, `upstream unreachable: ${message}`);
+    return rpcError(id, -32603, `upstream unreachable: ${scrubUpstreamMessage(err)}`);
   }
 }
