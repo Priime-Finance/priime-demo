@@ -9,6 +9,7 @@ import { HERO_SLUG } from "@/lib/demo-scope";
 import { explorerTxUrl } from "@/lib/format";
 import {
   EXECUTION_CHAIN_ID,
+  handlerCaptureEvidence,
   ONCHAIN_EXECUTIONS,
   OPERATOR_SIGNER,
   SERVICE_HANDLER,
@@ -38,10 +39,23 @@ describe("on-chain executions", () => {
     }
   });
 
-  it("only the attested record has a chain ledger", () => {
-    expect(onchainExecutionsFor(HERO_SLUG)).toBe(ONCHAIN_EXECUTIONS);
+  it("does NOT wire the captured handler ledger onto any vault page", () => {
+    /* Prior behaviour: hero slug received `ONCHAIN_EXECUTIONS`, mixing
+       real Base handler txs (`SERVICE_HANDLER`) with the hero's sample
+       fixture attestation vault (0x21844A…cb42). Verify clicks landed
+       on the wrong contract. `onchainExecutionsFor` now returns `[]`
+       for every slug; the captured evidence is exposed as
+       `handlerCaptureEvidence()` for a dedicated proof surface. See
+       the file-level warning block in `onchain-executions.ts`. */
+    expect(onchainExecutionsFor(HERO_SLUG)).toEqual([]);
     expect(onchainExecutionsFor("steady-eth-loop")).toEqual([]);
     expect(onchainExecutionsFor("")).toEqual([]);
+  });
+
+  it("still exposes the captured handler ledger under its honest name", () => {
+    /* Same rows, addressable as evidence about the mechanism rather
+       than as any one vault's history. */
+    expect(handlerCaptureEvidence()).toBe(ONCHAIN_EXECUTIONS);
   });
 
   it("every row links to its Basescan transaction page", () => {

@@ -1,12 +1,13 @@
 /**
  * ON-CHAIN EXECUTIONS OF THE LIVE LOOP, read off Base.
  *
- * Every run of the loop's Priime component that ends in an on-chain action lands
- * as one `handleSignedEnvelope` call on the service handler: the operator
- * signs the packet, the handler checks that signature against the operator
- * registry, and only then acts. The transaction is the proof a depositor can
- * open: the Basescan tx page, its input decoded, the `signatureData` tuple at
- * the end with the signer address and the signature bytes.
+ * Every run of the loop's Priime component that ends in an on-chain action
+ * lands as one `handleSignedEnvelope` call on the service handler: the
+ * operator signs the packet, the handler checks that signature against the
+ * operator registry, and only then acts. The transaction is the proof a
+ * depositor can open: the Basescan tx page, its input decoded, the
+ * `signatureData` tuple at the end with the signer address and the
+ * signature bytes.
  *
  * This list is a CAPTURE, not a feed. Each row below was read from Base on
  * 2026-09-07 through `eth_getTransactionByHash` / `eth_getTransactionReceipt`
@@ -16,12 +17,29 @@
  * hand. The handler has 472 such calls at capture time; these are the eight
  * most recent plus the one the backend walkthrough cited on 2026-08-27.
  *
- * The live backend (loop-server, PR "Wire frontend to server") replaces this
- * capture with the journal's own `tx_hash` per execution. The renderer never
- * knows the difference: it reads `OnchainExecution` rows and prints a link.
+ * ⚠ THESE ROWS DO NOT BELONG TO THE HERO VAULT PAGE.
+ *
+ * The captures target the REAL Priime service handler at `SERVICE_HANDLER`
+ * (a live Base contract with real strikes). The hero record's own
+ * Attestation panel names a SYNTHETIC FIXTURE vault
+ * (`0x21844Ad9343AC9Aac3d9bD951DD74e95dBcccb42`, from
+ * `schema/samples/strike-settled.json`) — those are unrelated addresses.
+ * Mixing both on one page produced a "Verify" click that landed a viewer
+ * on real Base transactions for a contract the page never names.
+ *
+ * `onchainExecutionsFor` therefore returns `[]` on the hero slug: no
+ * handler rows on the sample-attested page, no misleading Verify links.
+ * The captured evidence is exposed as `handlerCaptureEvidence()` for a
+ * future dedicated proof-of-mechanism surface (a `/proof` route or a
+ * modal), where the two subjects — mechanism captures vs vault fixture
+ * — cannot be confused.
+ *
+ * The live backend (loop-server, PR "Wire frontend to server") replaces
+ * this capture with the journal's own `tx_hash` per execution. Real
+ * published loops emit their own tx hashes and read them through the
+ * SAME `OnchainExecution` shape; the renderer never knows the difference
+ * once real capture data lands on a real (not-fixture) vault page.
  */
-
-import { HERO_SLUG } from "@/lib/demo-scope";
 
 /** Base mainnet. The only chain the live loop settles on. */
 export const EXECUTION_CHAIN_ID = 8453;
@@ -91,10 +109,25 @@ export const ONCHAIN_EXECUTIONS: readonly OnchainExecution[] = [
 ];
 
 /**
- * The executions a vault page may print. Only the attested record has any:
- * a published composition lands on that one record, so its ledger is the
- * handler's, and no other slug on this build has ever sent a packet.
+ * The executions a vault page may print.
+ *
+ * Returns `[]` on EVERY slug in this build — no vault currently has its
+ * own capture. The hero page used to receive `ONCHAIN_EXECUTIONS` here,
+ * but those rows target the real service handler (see the file's
+ * warning block above), not the hero's fixture vault. A published real
+ * loop will land its own capture through the live backend and get rows
+ * that actually correspond to its own handler address.
  */
-export function onchainExecutionsFor(slug: string): readonly OnchainExecution[] {
-  return slug === HERO_SLUG ? ONCHAIN_EXECUTIONS : [];
+export function onchainExecutionsFor(_slug: string): readonly OnchainExecution[] {
+  return [];
+}
+
+/**
+ * The captured real-Base handler ledger, as evidence about the
+ * mechanism (not any one vault). Consumers building a dedicated
+ * proof-of-mechanism surface can read this directly; it MUST NOT be
+ * co-located with any fixture-attested vault content.
+ */
+export function handlerCaptureEvidence(): readonly OnchainExecution[] {
+  return ONCHAIN_EXECUTIONS;
 }
