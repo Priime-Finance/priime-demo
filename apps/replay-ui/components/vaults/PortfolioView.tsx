@@ -544,7 +544,7 @@ export default function PortfolioView() {
           explicitly rather than let the empty/attested surface pose as
           a wallet read. */}
       <p className="vx-sub" style={{ marginTop: 12, marginBottom: 0 }}>
-        Positions on this page are read from the browser's own storage — deposits made through this session — not from your connected wallet on chain. Vault values marked <em>attested</em> use the sample fixtures in <code>schema/samples/</code>; every other figure is modeled.
+        Positions on this page are read from the browser&apos;s own storage — deposits made through this session — not from your connected wallet on chain. Vault values marked <em>attested</em> use the sample fixtures in <code>schema/samples/</code>; every other figure is modeled.
       </p>
 
 

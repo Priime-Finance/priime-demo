@@ -28,7 +28,10 @@
  */
 export function clientIdentity(req: Request): string {
   const vercel = req.headers.get("x-vercel-forwarded-for");
-  if (vercel !== null && vercel.length > 0) return vercel.split(",")[0]!.trim();
+  if (vercel !== null && vercel.length > 0) {
+    const first = vercel.split(",")[0];
+    if (first !== undefined) return first.trim();
+  }
 
   const real = req.headers.get("x-real-ip");
   if (real !== null && real.length > 0) return real.trim();
