@@ -124,6 +124,30 @@ export class LoopDeployer {
     return await this.runPipeline(id);
   }
 
+  /**
+   * Re-emit `ServiceURIUpdated` on the manager without changing content —
+   * a keep-alive that runs through the same serialized mutation tail as
+   * `createLoop` / `deactivateLoop` so it can never land inside another
+   * mutation's block window and trip that mutation's concurrent-writer
+   * check. Returns the URI that was re-emitted (unchanged from the
+   * current on-chain URI).
+   *
+   * Firing this every ~4 min keeps the operators' log subscription warm
+   * against Alchemy's silent idle decay: nodes see a `ServiceURIUpdated`
+   * event, re-fetch the doc, hash it to the same value as before, and
+   * no-op — but the subscription received traffic and stays alive.
+   */
+  async nudgeService(): Promise<string> {
+    const run = async (): Promise<string> => {
+      const uri = await this.chain.getServiceUri();
+      await this.chain.setServiceUri(uri);
+      return uri;
+    };
+    const next = this.mutationTail.then(run, run);
+    this.mutationTail = next.catch(() => undefined);
+    return next;
+  }
+
   /** Remove the loop's workflow from the service. The handler stays on chain. */
   async deactivateLoop(id: string): Promise<LoopRecord> {
     const record = this.registry.get(id);

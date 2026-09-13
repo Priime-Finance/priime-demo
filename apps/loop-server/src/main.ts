@@ -87,8 +87,7 @@ const deployer = new LoopDeployer({
  */
 async function nudgeServiceUri(reason: string): Promise<void> {
   try {
-    const uri = await chain.getServiceUri();
-    await chain.setServiceUri(uri);
+    const uri = await deployer.nudgeService();
     console.log(`[loop-server] nudge (${reason}) re-emitted ServiceURIUpdated for ${uri}`);
   } catch (err) {
     console.error(
