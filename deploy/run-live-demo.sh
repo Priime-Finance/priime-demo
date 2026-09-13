@@ -120,6 +120,17 @@ if [ "$IS_FORK" = "1" ]; then
   SERVER_RPC="http://127.0.0.1:$RPC_PORT"
   PUBLIC_RPC="${NEXT_PUBLIC_RPC_URL:-$SERVER_RPC}"
   DB_FILE="${DB_PATH:-/tmp/loop-demo.db}"
+  # Every fork rerun redeploys the service manager via vault-service.sh.
+  # An earlier run's loops.db would then hold loop records pinned to a
+  # dead manager (`asset()` on a no-code address 500s every
+  # /loops/:id/journals hit) while their workflow lives on a service
+  # manager the browser can never reach. Wipe the DB unless the caller
+  # explicitly opted into preservation via KEEP_LOOP_DB=1 or a custom
+  # DB_PATH they own.
+  if [ -z "${DB_PATH:-}" ] && [ "${KEEP_LOOP_DB:-0}" != "1" ] && [ -e "$DB_FILE" ]; then
+    rm -f "$DB_FILE" "$DB_FILE"-wal "$DB_FILE"-shm
+    echo "wiped stale loops.db (manager address changed on fork rerun)"
+  fi
 else
   SERVER_RPC="$RPC"
   # The browser-facing URL is separate and required: $RPC usually carries a

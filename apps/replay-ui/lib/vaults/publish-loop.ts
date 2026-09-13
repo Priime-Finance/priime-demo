@@ -34,6 +34,36 @@ import { createLoop, LoopValidationError, type CreateLoopInput } from "./live-so
  */
 const DEFAULT_CRON_SECONDS = 60;
 
+/**
+ * Chain-scoped remaps for the composer's static market slugs.
+ *
+ * The composer hard-codes `HERO_MARKET_ID` at the mainnet-Base slug
+ * ("morpho-blue-base:8453:USDe-USDC:0x54cf9be5") — see `demo-scope.ts`
+ * for why the constant is not chain-dependent (tests pin it). When the
+ * connected wallet's chainId targets the local fork (31337), the fork
+ * IS Base at a pinned block, so every underlying contract address is
+ * identical; only the `chainKey` / `chainId` / `candidateId` change.
+ * Rewriting the slug here lets the composer stay chain-agnostic while
+ * the fork loop-server accepts its own catalog entry (see
+ * `packages/loop-deploy/src/catalog.ts::USDE_USDC_MORPHO_BASE_FORK`).
+ *
+ * Without this remap every fork publish 400s with "not deployable on
+ * this server's chain".
+ */
+const CANDIDATE_REMAP_BY_CHAIN: Record<number, Record<string, string>> = {
+  31337: {
+    "morpho-blue-base:8453:USDe-USDC:0x54cf9be5":
+      "morpho-blue-base-fork:31337:USDe-USDC:0x54cf9be5",
+  },
+};
+
+/** Pure, easily-tested remap: identity when no rule applies. */
+export function remapCandidateForChain(candidateId: string, chainId: number): string {
+  const perChain = CANDIDATE_REMAP_BY_CHAIN[chainId];
+  if (perChain === undefined) return candidateId;
+  return perChain[candidateId] ?? candidateId;
+}
+
 export interface PublishInput {
   /** User-picked vault name from the Review card. */
   name: string;
@@ -71,10 +101,15 @@ export interface PublishResult {
 
 /** Turn the composer's inputs into a real deployment. */
 export async function publishLoopToServer(input: PublishInput): Promise<PublishResult> {
+  // Remap BEFORE the intent is signed: the EIP-712 typed-data hash
+  // covers `candidateId`, so signing the mainnet slug and sending the
+  // fork slug (or vice versa) would fail signature recovery on the
+  // server.
+  const candidateId = remapCandidateForChain(input.candidateId, input.intentDomain.chainId);
   const intent: LoopPublishIntent = {
     strategist: input.strategist as Address,
     name: input.name,
-    candidateId: input.candidateId,
+    candidateId,
     cronSeconds: DEFAULT_CRON_SECONDS,
     targetLeverage: input.targetLeverage,
     signedAt: Math.floor(Date.now() / 1000),
@@ -84,7 +119,7 @@ export async function publishLoopToServer(input: PublishInput): Promise<PublishR
     name: input.name,
     strategist: input.strategist,
     cronSeconds: DEFAULT_CRON_SECONDS,
-    candidateId: input.candidateId,
+    candidateId,
     targetLeverage: input.targetLeverage,
     signedAt: intent.signedAt,
     signature,

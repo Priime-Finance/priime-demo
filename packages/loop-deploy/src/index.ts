@@ -14,6 +14,7 @@ export {
   listMarketsForChainId,
   lookupMarket,
   USDE_USDC_MORPHO_BASE,
+  USDE_USDC_MORPHO_BASE_FORK,
   USDE_USDC_MORPHO_SEPOLIA,
   type MarketSpec,
 } from "./catalog.ts";

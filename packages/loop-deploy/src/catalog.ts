@@ -82,6 +82,37 @@ export const USDE_USDC_MORPHO_BASE: MarketSpec = {
 };
 
 /**
+ * USDe/USDC on Morpho Blue — the LOCAL FORK of Base (anvil at chain id
+ * 31337, pinned to `deploy/fork.sh`'s block). The fork inherits every
+ * Base contract in place, so the token / oracle / IRM / pool / router
+ * addresses are byte-identical to `USDE_USDC_MORPHO_BASE`; only the
+ * `chainKey`, `chainId` and `candidateId` differ so a composer running
+ * against `CHAIN_KEY=evm:31337` (the loop-server default on the fork)
+ * can pick a market whose `chainKey` matches its own.
+ *
+ * Without this entry `POST /loops` refuses every fork publish with a
+ * "chain does not match" 400 (`deployer.ts::createLoop`), because the
+ * only Base-flavoured candidate advertises `evm:8453`.
+ */
+export const USDE_USDC_MORPHO_BASE_FORK: MarketSpec = {
+  candidateId: "morpho-blue-base-fork:31337:USDe-USDC:0x54cf9be5",
+  chainKey: "evm:31337",
+  chainId: 31337,
+  label: "USDe/USDC on Morpho Blue — Base fork (anvil, 91.5% LLTV)",
+  marketId: USDE_USDC_MORPHO_BASE.marketId,
+  lltv: USDE_USDC_MORPHO_BASE.lltv,
+  usdeAddress: USDE_USDC_MORPHO_BASE.usdeAddress,
+  oracleAddress: USDE_USDC_MORPHO_BASE.oracleAddress,
+  irmAddress: USDE_USDC_MORPHO_BASE.irmAddress,
+  morphoAddress: USDE_USDC_MORPHO_BASE.morphoAddress,
+  poolAddress: USDE_USDC_MORPHO_BASE.poolAddress,
+  twapWindowSecs: USDE_USDC_MORPHO_BASE.twapWindowSecs,
+  inputsBlockLag: USDE_USDC_MORPHO_BASE.inputsBlockLag,
+  swapRouter: USDE_USDC_MORPHO_BASE.swapRouter,
+  poolFee: USDE_USDC_MORPHO_BASE.poolFee,
+};
+
+/**
  * USDe/USDC on our permissionless Morpho market  -  Ethereum Sepolia. The
  * chain-11155111 counterpart to the mainnet entry above. Tokens (Ethena's
  * USDe, Circle's USDC) are REAL canonical testnet deployments; Morpho Blue,
@@ -116,6 +147,7 @@ export const USDE_USDC_MORPHO_SEPOLIA: MarketSpec = {
 
 const MARKET_CATALOG: Record<string, MarketSpec> = {
   [USDE_USDC_MORPHO_BASE.candidateId]: USDE_USDC_MORPHO_BASE,
+  [USDE_USDC_MORPHO_BASE_FORK.candidateId]: USDE_USDC_MORPHO_BASE_FORK,
   [USDE_USDC_MORPHO_SEPOLIA.candidateId]: USDE_USDC_MORPHO_SEPOLIA,
 };
 
