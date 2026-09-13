@@ -1,8 +1,16 @@
-# priime-demo
+# priime-demo, The onchain vault structuring platform
 
-Monorepo for the **verifiable vaults** demo: *the vault that cannot lie about its NAV*.
+Compose, test, Scale and distribute vaults, in one verifiable venue.
 
-Three independent operators re-execute a NAV computation, agree on identical result hashes, reach quorum, and attest the number on-chain. Corrupt one operator and its lie is rejected while the honest quorum settles the truth.
+Problem.
+A vault has an infrastructure problem: a smart contract cannot react to markets, and it cannot compute the math a strategy needs, so the work that actually operates a vault sits on private servers, and that breaks composability, growth and trust.
+
+Solution.
+Priime is where a strategy becomes a verifiable, automated onchain vault. A strategy is composed on a canvas, backtested and launched as a vault, and the off-chain work it needs runs as decentralized compute on the Trustless Execution Network.
+
+At ETHOnline we built the first strategy on Priime Build, composed from its first modules, with a floor and a router between its lanes.
+
+Discover all hackathon demo info here: https://priime.finance/ETHOnline-Priime-Hackathon
 
 ## Uniswap V3 integration
 
