@@ -4,10 +4,22 @@
  *
  * The draft carries the composer's actual choices (candidate id + target
  * leverage from the graph, name from the Review card, cadence from the
- * server's demo default). loop-server resolves the candidate against its
- * market catalog and rejects anything it cannot deploy; the caller renders
- * the resulting issues in the error phase.
+ * server's demo default). Before the POST, the wallet is prompted to sign
+ * an EIP-712 `LoopPublish` intent; loop-server refuses the request if the
+ * signature does not recover to the strategist address the body claims,
+ * which is what stops the shared bearer from being usable by anyone but
+ * the strategist. `signPublishIntent` is a factory injected from the UI so
+ * this module stays framework-agnostic (Node-only tests never touch wagmi).
  */
+
+import type { Address } from "viem";
+
+import {
+  loopPublishTypedData,
+  type IntentDomain,
+  type LoopPublishIntent,
+  type LoopPublishTypedData,
+} from "@priime-demo/loop-deploy";
 
 import { createLoop, LoopValidationError, type CreateLoopInput } from "./live-source";
 
@@ -41,6 +53,15 @@ export interface PublishInput {
    * in. Absent -> `{}`, which loop-server treats as no extra knobs.
    */
   strategyParams?: Record<string, string>;
+  /** EIP-712 domain the client and server both hash against. */
+  intentDomain: IntentDomain;
+  /**
+   * Prompt the connected wallet to sign a typed-data payload and return the
+   * `0x`-prefixed secp256k1 signature. In production this wraps wagmi's
+   * `signTypedData`; a test double can return a precomputed signature so
+   * the test never opens a wallet.
+   */
+  signTypedData: (payload: LoopPublishTypedData) => Promise<`0x${string}`>;
 }
 
 export interface PublishResult {
@@ -50,12 +71,23 @@ export interface PublishResult {
 
 /** Turn the composer's inputs into a real deployment. */
 export async function publishLoopToServer(input: PublishInput): Promise<PublishResult> {
+  const intent: LoopPublishIntent = {
+    strategist: input.strategist as Address,
+    name: input.name,
+    candidateId: input.candidateId,
+    cronSeconds: DEFAULT_CRON_SECONDS,
+    targetLeverage: input.targetLeverage,
+    signedAt: Math.floor(Date.now() / 1000),
+  };
+  const signature = await input.signTypedData(loopPublishTypedData(intent, input.intentDomain));
   const body: CreateLoopInput = {
     name: input.name,
     strategist: input.strategist,
     cronSeconds: DEFAULT_CRON_SECONDS,
     candidateId: input.candidateId,
     targetLeverage: input.targetLeverage,
+    signedAt: intent.signedAt,
+    signature,
     strategyParams: input.strategyParams ?? {},
   };
   const { loop } = await createLoop(body);

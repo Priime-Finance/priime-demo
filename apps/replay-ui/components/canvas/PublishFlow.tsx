@@ -54,6 +54,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useChainId, useSignTypedData } from "wagmi";
+import type { Address } from "viem";
 import { shortAddress, useAccount, useConnectModal } from "@/lib/wallet";
 /* THE DRAFT'S FIELD VOCABULARY, STILL THE STORE'S. Nothing is written to the
    store any more (see the header), but `PublishDraft` is still spelled as the
@@ -264,6 +266,14 @@ export default function PublishFlow({
      deployed vault as the role that holds the exit key. That is what turned
      connecting from a courtesy into a precondition. */
   const { address, isConnected } = useAccount();
+  /* THE STRATEGIST'S SIGNATURE, not their bearer, is what authorizes a
+     publish on the loop-server side. `useSignTypedData` prompts the
+     connected wallet; `useChainId` binds the signature to the same chain
+     the server verifies against; the manager address is baked into the
+     bundle from `NEXT_PUBLIC_SERVICE_MANAGER` so a signature harvested on
+     one deployment cannot be replayed on another. */
+  const { signTypedDataAsync } = useSignTypedData();
+  const chainId = useChainId();
   /* THE VAULT PAGE IS WHERE A PUBLISH ENDS (founder, 2026-09-07: "publish it
      and arrive on the vault page automatically"). The done beat used to sit
      on the canvas behind a card with an "Open your vault" key, and closing
@@ -424,12 +434,18 @@ export default function PublishFlow({
         // emit("exit_route_id", draft.exitRouteId);
         // emit("exit_settlement_days", draft.exitSettlementDays);
         emit("capacity_binding", draft.capacityBinding);
+        const managerAddress = process.env.NEXT_PUBLIC_SERVICE_MANAGER;
+        if (managerAddress === undefined || managerAddress.length === 0) {
+          throw new Error("NEXT_PUBLIC_SERVICE_MANAGER is not set; publish cannot be signed");
+        }
         const { loopId, handler } = await publishLoopToServer({
           name: finalName,
           strategist: address,
           candidateId: draft.candidateId,
           targetLeverage: draft.targetLeverage,
           strategyParams: sp,
+          intentDomain: { chainId, verifyingContract: managerAddress as Address },
+          signTypedData: (payload) => signTypedDataAsync(payload),
         });
         if (!alive.current) return;
         setDeployed({ name: finalName, loopId, handler });

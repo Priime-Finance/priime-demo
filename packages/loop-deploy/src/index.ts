@@ -43,3 +43,21 @@ export {
   type Observations,
   type StrikeRecord,
 } from "./journal-source.ts";
+export {
+  StaleIntentError,
+  UnauthorizedIntentError,
+  INTENT_MAX_AGE_SECONDS,
+  INTENT_MAX_SKEW_SECONDS,
+  assertFreshIntent,
+  encodeTargetLeverage,
+  loopPauseTypedData,
+  loopPublishTypedData,
+  verifyLoopPause,
+  verifyLoopPublish,
+  type Eip712Domain,
+  type IntentDomain,
+  type LoopPauseIntent,
+  type LoopPauseTypedData,
+  type LoopPublishIntent,
+  type LoopPublishTypedData,
+} from "./auth.ts";

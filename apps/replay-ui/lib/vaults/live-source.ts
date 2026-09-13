@@ -71,6 +71,10 @@ export interface CreateLoopInput {
   cronSeconds: number;
   candidateId: string;
   targetLeverage: number;
+  /** Unix seconds; the strategist's signature is over this value + the rest of the fields above. */
+  signedAt: number;
+  /** EIP-712 signature over `LoopPublish`. Loop-server refuses the request when the recovered address does not equal `strategist`. */
+  signature: `0x${string}`;
   /**
    * Composer knobs, string-encoded. Merged into the workflow's
    * `componentConfig` verbatim so every user choice lands on IPFS.

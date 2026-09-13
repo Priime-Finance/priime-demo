@@ -24,12 +24,19 @@ import {
   LoopNotFoundError,
   LoopRegistry,
   PauseGuardError,
+  isRecord,
   ServiceDocError,
+  StaleIntentError,
+  UnauthorizedIntentError,
   ValidationError,
   makeChain,
   makeIpfs,
   makeJournalReader,
+  verifyLoopPause,
+  verifyLoopPublish,
   type JournalReader,
+  type LoopPauseIntent,
+  type LoopPublishIntent,
   type LoopRecord,
 } from "@priime-demo/loop-deploy";
 
@@ -99,6 +106,64 @@ function isAuthorized(req: IncomingMessage): boolean {
   return presented.length === expected.length && timingSafeEqual(presented, expected);
 }
 
+/** The EIP-712 domain the mutating routes verify against. Chain-scoped to
+ *  this deployment's service manager so a signature from one deployment
+ *  cannot be replayed on another. */
+const authDomain = { chainId: env.chainId, verifyingContract: env.managerAddress as `0x${string}` };
+
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+/** Extract a `0x`-prefixed hex string from an untyped source, raising a
+ *  `ValidationError` on any shape drift. */
+function expectHex(value: unknown, label: string): `0x${string}` {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]+$/.test(value)) {
+    throw new ValidationError([`${label} must be a 0x-prefixed hex string`]);
+  }
+  return value as `0x${string}`;
+}
+
+/** Extract a strict `LoopPublishIntent` from the request body. Every field
+ *  the strategist signed must be present, in the right shape, on the wire
+ *  the server verifies against. Missing or malformed fields → 400. */
+function extractPublishIntent(body: Record<string, unknown>): LoopPublishIntent {
+  const strategist = body.strategist;
+  const name = body.name;
+  const candidateId = body.candidateId;
+  const cronSeconds = body.cronSeconds;
+  const targetLeverage = body.targetLeverage;
+  const signedAt = body.signedAt;
+  const issues: string[] = [];
+  if (typeof strategist !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(strategist)) {
+    issues.push("strategist must be a 0x-prefixed 20-byte hex address");
+  }
+  if (typeof name !== "string" || name.length === 0) {
+    issues.push("name must be a non-empty string");
+  }
+  if (typeof candidateId !== "string" || candidateId.length === 0) {
+    issues.push("candidateId must be a non-empty string");
+  }
+  if (!Number.isInteger(cronSeconds) || (cronSeconds as number) <= 0) {
+    issues.push("cronSeconds must be a positive integer");
+  }
+  if (typeof targetLeverage !== "number" || !Number.isFinite(targetLeverage) || targetLeverage <= 0) {
+    issues.push("targetLeverage must be a positive finite number");
+  }
+  if (!Number.isInteger(signedAt) || (signedAt as number) <= 0) {
+    issues.push("signedAt must be a positive integer (unix seconds)");
+  }
+  if (issues.length > 0) throw new ValidationError(issues);
+  return {
+    strategist: strategist as `0x${string}`,
+    name: name as string,
+    candidateId: candidateId as string,
+    cronSeconds: cronSeconds as number,
+    targetLeverage: targetLeverage as number,
+    signedAt: signedAt as number,
+  };
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body);
   res.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(text) });
@@ -152,7 +217,17 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
 
   if (req.method === "POST" && path === "/loops") {
     const body = await readJsonBody(req);
-    const loop = await deployer.createLoop(body);
+    if (!isRecord(body)) {
+      throw new ValidationError(["request body must be a JSON object"]);
+    }
+    const signature = expectHex(body.signature, "signature");
+    const intent = extractPublishIntent(body);
+    await verifyLoopPublish(intent, signature, authDomain, nowSeconds());
+    // Body sans-signature is the LoopConfigInput createLoop already validates.
+    const configInput: Record<string, unknown> = { ...body };
+    delete configInput.signature;
+    delete configInput.signedAt;
+    const loop = await deployer.createLoop(configInput);
     sendJson(res, 201, { loop: serializeLoop(loop) });
     return;
   }
@@ -190,6 +265,18 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       return;
     }
     if (req.method === "DELETE") {
+      const signature = expectHex(url.searchParams.get("signature"), "signature");
+      const signedAtStr = url.searchParams.get("signedAt");
+      if (signedAtStr === null || !/^\d+$/.test(signedAtStr)) {
+        throw new ValidationError(["signedAt query parameter is required (unix seconds)"]);
+      }
+      const intent: LoopPauseIntent = { loopId: id, signedAt: Number.parseInt(signedAtStr, 10) };
+      const record = registry.get(id);
+      if (record === null) throw new LoopNotFoundError(id);
+      const recovered = await verifyLoopPause(intent, signature, authDomain, nowSeconds());
+      if (recovered.toLowerCase() !== record.strategist.toLowerCase()) {
+        throw new UnauthorizedIntentError(record.strategist as `0x${string}`, recovered);
+      }
       const loop = await deployer.deactivateLoop(id);
       sendJson(res, 200, { loop: serializeLoop(loop) });
       return;
@@ -205,6 +292,10 @@ const server = createServer((req, res) => {
       sendJson(res, 400, { error: "invalid config", issues: err.issues });
     } else if (err instanceof LoopNotFoundError) {
       sendJson(res, 404, { error: err.message });
+    } else if (err instanceof StaleIntentError) {
+      sendJson(res, 401, { error: err.message, signedAt: err.signedAt, nowSeconds: err.nowSeconds });
+    } else if (err instanceof UnauthorizedIntentError) {
+      sendJson(res, 403, { error: err.message, expected: err.expected, recovered: err.recovered });
     } else if (err instanceof PauseGuardError) {
       // 409 Conflict: pause refused because the on-chain vault has escrow
       // mid-flight. Ship the raw base-unit balances so the caller can render

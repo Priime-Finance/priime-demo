@@ -161,7 +161,8 @@ LOOP_SERVER_URL="http://127.0.0.1:$LS_PORT" \
 LOOP_SERVER_TOKEN="$TOKEN" \
 NEXT_PUBLIC_RPC_URL="$PUBLIC_RPC" \
 NEXT_PUBLIC_CHAIN_ID="$CHAIN_ID" \
-  nohup pnpm dev -- -p "$UI_PORT" > "$LOGDIR/replay-ui.log" 2>&1 &
+NEXT_PUBLIC_SERVICE_MANAGER="$SM" \
+  nohup pnpm dev -- -p "$UI_PORT" -H 127.0.0.1 > "$LOGDIR/replay-ui.log" 2>&1 &
 echo $! > "$PIDFILE_UI"
 popd >/dev/null
 
