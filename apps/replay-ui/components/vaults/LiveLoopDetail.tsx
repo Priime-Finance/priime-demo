@@ -284,7 +284,16 @@ export default function LiveLoopDetail({ id }: { id: string }) {
           <i>Quorum</i>
           <b>{quorum === null ? AWAITING_LABEL : quorum.requiredLabel}</b>
           <small>
-            {quorum === null ? "no journal yet" : "registered on this deployment"}
+            {/* HONEST-LABELING. The `requiredLabel` here traces back
+                through `journal.ts::quorum.threshold/total` to
+                `apps/loop-server/src/env.ts`, which reads
+                `QUORUM_THRESHOLD` / `QUORUM_TOTAL` (defaults 2 and 3)
+                — not to a chain view. The manager exposes only
+                `QuorumThresholdUpdated(numerator, denominator)` as an
+                event, so this figure is authoritative only for what
+                THIS loop-server was booted with. Say so instead of
+                letting it read as "registered on chain". */}
+            {quorum === null ? "no journal yet" : "loop-server configuration (env)"}
           </small>
         </div>
         {cronSeconds === null ? null : (

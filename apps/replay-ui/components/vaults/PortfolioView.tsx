@@ -534,6 +534,19 @@ export default function PortfolioView() {
           </Link>
         ) : null}
       </div>
+      {/* HONEST-LABELING BANNER. This page renders from localStorage
+          `PositionRecord`s plus `SEED_VAULTS`; there is no
+          `balanceOf(handler, wallet)` read and no
+          `GET /api/loops?strategist=<wallet>` fetch. So even a
+          connected wallet with real on-chain positions in a published
+          loop-server vault sees an "empty" state here until the
+          localStorage record is written by the deposit flow. Say so
+          explicitly rather than let the empty/attested surface pose as
+          a wallet read. */}
+      <p className="vx-sub" style={{ marginTop: 12, marginBottom: 0 }}>
+        Positions on this page are read from the browser's own storage — deposits made through this session — not from your connected wallet on chain. Vault values marked <em>attested</em> use the sample fixtures in <code>schema/samples/</code>; every other figure is modeled.
+      </p>
+
 
       {!loaded ? null : empty ? (
         !isConnected ? (

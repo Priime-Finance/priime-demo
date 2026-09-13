@@ -241,7 +241,13 @@ export function liveAttestationNote(quorum: LiveQuorum): string {
   const who = one
     ? "One operator re-executes the component"
     : `${String(quorum.total)} operators re-execute the same component`;
-  return `${who} against one pinned input block, and the handler checks the signature before it acts. This deployment registers ${quorum.requiredLabel}, so a divergence has nothing to be outvoted by; an independent set is a registry change, not a code change.`;
+  // `requiredLabel` traces through the journal reader back to
+  // loop-server's `QUORUM_THRESHOLD` / `QUORUM_TOTAL` env vars, not
+  // to a manager view function (the interface only exposes
+  // `QuorumThresholdUpdated` as an event; a proper chain read would
+  // scan those). Attribute the number to its real source rather than
+  // let the sentence pose as a chain fact.
+  return `${who} against one pinned input block, and the handler checks the signature before it acts. loop-server is configured for ${quorum.requiredLabel} (from QUORUM_THRESHOLD / QUORUM_TOTAL in the server's env), so a divergence has nothing to be outvoted by; an independent set is a registry change, not a code change.`;
 }
 
 /**

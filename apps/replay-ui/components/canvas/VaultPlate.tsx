@@ -7,23 +7,24 @@
  */
 
 import { pct } from "@/lib/canvas/format";
-import { quorumFacts } from "@/lib/vaults/attested";
-import { heroSettlingJournal } from "@/lib/vaults/rows";
 import { useCountUp } from "./PlateScreen";
 
 /**
- * THE ATTESTATION LINE (docs/plans/LATEST_UI_PORT_SPEC.md A.3 #28). The
- * composition publishes onto the one attested record, so once the lane is
- * modeled the terminus states the fact the record carries: its NAV is read off
- * the captured journal and the quorum that settles it, from the journal's own
- * threshold. Inside the 34-char `.hm-sb` budget; nothing here is typed as a
- * figure. Null when no journal is captured, and then nothing prints.
+ * THE COMPOSER PLATE HAS NO ATTESTATION LINE.
+ *
+ * The prior implementation read `heroSettlingJournal()` and printed
+ * `nav attested · quorum N of M` whenever the plate was `live`
+ * (`props.laneReviewable`). But `live` here means "the draft is fully
+ * composed and reviewable", not "this vault has been published and its
+ * NAV has been attested by a quorum". A draft has never seen a strike;
+ * borrowing the hero fixture's quorum figure to fill the line printed
+ * a false factual claim on every unpublished composition.
+ *
+ * If a future companion line is added, it MUST be a fact about the
+ * draft itself (e.g. cadence, target leverage, market pair), not a
+ * borrowed value from any captured journal. The composer is not a
+ * ledger.
  */
-function attestedNote(): string | null {
-  const journal = heroSettlingJournal();
-  if (!journal) return null;
-  return `nav attested · quorum ${quorumFacts(journal).thresholdLabel}`;
-}
 
 export default function VaultPlate({
   laneLabel,
@@ -46,8 +47,7 @@ export default function VaultPlate({
   note?: readonly string[] | null;
 }) {
   const shown = useCountUp(netApy);
-  const attested = live ? attestedNote() : null;
-  const lines = [...(note ?? []), ...(attested ? [attested] : [])];
+  const lines = [...(note ?? [])];
   return (
     <div
       className={`rk-plate rk-vault${live ? " live" : ""}${dim ? " rk-vault--dim" : ""}${quoting ? " rk-plate--quoting" : ""}`}

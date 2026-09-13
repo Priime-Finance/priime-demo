@@ -126,7 +126,7 @@ export const OVERVIEW_NOTE =
 const VERIFICATION_PROSE =
   "Three operators on TEN, the trustless execution network, re-execute the NAV from one component digest and one input block. The quorum attests the number only when their result hashes agree, so a single operator cannot move the NAV it reports.";
 const REPLAYING_LINE =
-  "Replaying captured journal. These strikes were recorded on Base and are replayed here; the page is not polling a live chain.";
+  "Replaying synthetic sample fixtures. The strike shapes are the ones a real Base quorum would produce, but the hashes, digests and vault address on this page are placeholder byte patterns (see schema/samples/*.json), not values captured from chain.";
 
 /**
  * THE capacity instrument (founder call, 2026-08-22): how much of this
@@ -703,7 +703,20 @@ export default function VaultDetail({ slug }: { slug: string }) {
               keep `.vx-status` and its green dot; the incubating one takes
               the neutral `.vx-tag` pill instead. */}
           {stage === "attested" ? (
-            <span className="vx-status">{VAULT_STAGE_LABEL.attested}</span>
+            <>
+              <span className="vx-status">{VAULT_STAGE_LABEL.attested}</span>
+              {/* HONEST-LABELING CHIP: the "attested" stage on this
+                  page is backed by synthetic fixtures in `schema/samples/`,
+                  not by real Base captures — every hash, digest and
+                  vault address on the page is a placeholder byte pattern
+                  (see the block comment on `DEMO_JOURNALS`). Say so
+                  beside the Live · attested chip so the copyable digest
+                  in the Attestation panel and the Basescan links in the
+                  Activity table are not read as chain-attested facts. */}
+              <span className="vx-tag vx-tag--stage" title="Every hash, digest and vault address on this page is a placeholder from schema/samples/*.json, not a value captured from the Base chain.">
+                Sample fixture
+              </span>
+            </>
           ) : stage === "live" ? (
             <span className="vx-status">{VAULT_STAGE_LABEL.live}</span>
           ) : (

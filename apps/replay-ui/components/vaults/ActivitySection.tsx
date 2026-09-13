@@ -351,7 +351,7 @@ export default function ActivitySection({
   withdrawals?: WithdrawalRecord[];
   shareValue?: number | null;
 }) {
-  const rows = useMemo<LedgerRow[]>(() => {
+  const rows = useMemo<{ rows: LedgerRow[]; hasChain: boolean }>(() => {
     const deposits: LedgerRow[] = positions.map((p) => ({
       action: "Deposit",
       detail: fmtUsdFull(p.amountUsd),
@@ -421,13 +421,25 @@ export default function ActivitySection({
       }
     }
 
-    return [...deposits, ...exits, ...onchain, ...modeled, ...family].sort((a, b) => b.ms - a.ms);
+    return { rows: [...deposits, ...exits, ...onchain, ...modeled, ...family].sort((a, b) => b.ms - a.ms), hasChain };
   }, [vault, nowMs, tvlUsd, positions, withdrawals, shareValue]);
 
   return (
     <section id="activity" className="vxd-sec">
       <h2 className="vxd-sec-h">Activity</h2>
-      <ActivityTable rows={rows} nowMs={nowMs} />
+      {/* HONEST-LABELING NOTE: on the hero-slug rows the tx hashes point
+          at the Priime service handler (`SERVICE_HANDLER` in
+          onchain-executions.ts). That's a real Base contract with real
+          strikes — but the vault address the Attestation panel shows is
+          a synthetic fixture, so a viewer who clicks Verify does NOT
+          land on this vault's own history. Say so once above the ledger
+          instead of leaving the mismatch as a surprise. */}
+      {rows.hasChain ? (
+        <p className="vxd-note vxd-note--muted" style={{ marginBottom: 12 }}>
+          Verify links open the service handler (0xC3dc…B60f) on Basescan. The vault address in the Attestation panel above is a sample fixture, so these transactions are real but independent of the vault named on this page.
+        </p>
+      ) : null}
+      <ActivityTable rows={rows.rows} nowMs={nowMs} />
     </section>
   );
 }
