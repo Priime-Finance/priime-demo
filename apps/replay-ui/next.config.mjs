@@ -9,6 +9,10 @@ const nextConfig = {
   // NEXT_DIST_DIR (e.g. `.next-verify`) to build and serve from an isolated
   // directory while `pnpm dev` keeps running on port 3000.
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
+  // Ship a self-contained server bundle (`.next/standalone/`) so we can
+  // rsync just that directory + `.next/static/` + `public/` to the box
+  // and run `node server.js` without shipping full node_modules.
+  output: 'standalone',
   // Monorepo root is two levels up (apps/replay-ui -> apps -> priime-demo);
   // needed so file tracing covers schema/ and sibling packages.
   outputFileTracingRoot: path.join(__dirname, '../..'),
