@@ -934,6 +934,86 @@ contract PriimeVaultTest {
         vault.execute(address(target), abi.encodeCall(RevertingTarget.kaboom, ()));
     }
 
+    /// @dev The swap arm now pins `tokenIn`, `tokenOut`, and `fee` in
+    ///      addition to `recipient`. Without those pins, the sequence
+    ///
+    ///          execute(usdc, approve(swapRouter, x))
+    ///          execute(swapRouter, exactInputSingle({
+    ///              tokenIn: usdc, tokenOut: JUNK, fee: any,
+    ///              recipient: vault, amountOutMinimum: 0 }))
+    ///
+    ///      is accepted: the approve passes (spender allowlisted), the
+    ///      swap passes (recipient == vault), and the vault's non-escrow
+    ///      USDC lands in a strategist-controlled pool that returns
+    ///      strategist-controlled JUNK. The escrow floor still holds
+    ///      because USDC balance stays >= pending + claimable, but the
+    ///      folded-in share pool — the depositors' working capital — is
+    ///      gone. VAULT-04-shaped, same as the shape the flash-loan
+    ///      callback already hardcodes against.
+    function test_ExecuteAllowlistRefusesSwapToForeignTokenOut() public {
+        (PriimeVault muVault, MockUniswapV3SwapRouter02 muRouter,, TestUSDC muUsdc,) = _buildMorphoMockStack();
+        TestUSDe junk = new TestUSDe();
+
+        IUniswapV3SwapRouter02.ExactInputSingleParams memory p = IUniswapV3SwapRouter02.ExactInputSingleParams({
+            tokenIn: address(muUsdc),
+            tokenOut: address(junk),
+            fee: muVault.poolFee(),
+            recipient: address(muVault),
+            amountIn: 1,
+            amountOutMinimum: 0,
+            sqrtPriceLimitX96: 0
+        });
+        vm.prank(STRATEGIST);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.PlanSwapTokenRefused.selector, address(junk)));
+        muVault.execute(address(muRouter), abi.encodeCall(IUniswapV3SwapRouter02.exactInputSingle, (p)));
+    }
+
+    /// @dev Symmetric pin: a foreign `tokenIn` is refused the same way.
+    ///      Together the two pins constrain the swap surface to the exact
+    ///      `{asset(), collateralToken}` pair `onMorphoFlashLoan`
+    ///      hardcodes.
+    function test_ExecuteAllowlistRefusesSwapWithForeignTokenIn() public {
+        (PriimeVault muVault, MockUniswapV3SwapRouter02 muRouter,, TestUSDC muUsdc,) = _buildMorphoMockStack();
+        TestUSDe junk = new TestUSDe();
+
+        IUniswapV3SwapRouter02.ExactInputSingleParams memory p = IUniswapV3SwapRouter02.ExactInputSingleParams({
+            tokenIn: address(junk),
+            tokenOut: address(muUsdc),
+            fee: muVault.poolFee(),
+            recipient: address(muVault),
+            amountIn: 1,
+            amountOutMinimum: 0,
+            sqrtPriceLimitX96: 0
+        });
+        vm.prank(STRATEGIST);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.PlanSwapTokenRefused.selector, address(junk)));
+        muVault.execute(address(muRouter), abi.encodeCall(IUniswapV3SwapRouter02.exactInputSingle, (p)));
+    }
+
+    /// @dev Even with the right token pair, a foreign fee tier picks a
+    ///      DIFFERENT Uniswap V3 pool (fee is part of the pool key). A
+    ///      strategist-controlled pool at a foreign fee would route the
+    ///      swap through liquidity the pitch never priced. Pin the fee
+    ///      to `poolFee`.
+    function test_ExecuteAllowlistRefusesSwapAtForeignFeeTier() public {
+        (PriimeVault muVault, MockUniswapV3SwapRouter02 muRouter,, TestUSDC muUsdc, TestUSDe muUsde) =
+            _buildMorphoMockStack();
+        uint24 foreignFee = muVault.poolFee() + 500;
+
+        IUniswapV3SwapRouter02.ExactInputSingleParams memory p = IUniswapV3SwapRouter02.ExactInputSingleParams({
+            tokenIn: address(muUsdc),
+            tokenOut: address(muUsde),
+            fee: foreignFee,
+            recipient: address(muVault),
+            amountIn: 1,
+            amountOutMinimum: 0,
+            sqrtPriceLimitX96: 0
+        });
+        vm.prank(STRATEGIST);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.PlanSwapFeeRefused.selector, foreignFee));
+        muVault.execute(address(muRouter), abi.encodeCall(IUniswapV3SwapRouter02.exactInputSingle, (p)));
+    }
+
     /// @dev The `Executed` event fires exactly when the call passes both
     ///      guards: the allowlist accepts it, and the post-call floor
     ///      holds. Pin the legal shape (`asset.approve(swapRouter, …)`,

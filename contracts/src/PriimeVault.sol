@@ -316,6 +316,20 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///         any other flashloan denomination would leave the callback
     ///         approving / swapping the wrong balances.
     error PlanFlashLoanTokenRefused(address token);
+    /// @notice A `swapRouter.exactInputSingle` step named a `tokenIn` or
+    ///         `tokenOut` outside the vault's `{asset(), collateralToken}`
+    ///         pair. The recursive loop only swaps between those two, and
+    ///         `onMorphoFlashLoan` hardcodes that pair; every other swap
+    ///         shape would move value into a token the vault has no
+    ///         reason to hold, which is the drain vector the natspec
+    ///         already claimed was prevented.
+    error PlanSwapTokenRefused(address token);
+    /// @notice A `swapRouter.exactInputSingle` step named a fee tier that
+    ///         does not match the vault's pinned `poolFee`. Different fee
+    ///         tiers pick different Uniswap V3 pools, and a strategist-
+    ///         controlled pool at a foreign fee would route the swap
+    ///         through liquidity the pitch never priced.
+    error PlanSwapFeeRefused(uint24 fee);
     error SelfCallOnly();
     error AsyncFlowOnly();
     /// @notice `onMorphoFlashLoan` was invoked by a caller other than the
@@ -436,6 +450,18 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
             IUniswapV3SwapRouter02.ExactInputSingleParams memory p =
                 abi.decode(data[4:], (IUniswapV3SwapRouter02.ExactInputSingleParams));
             if (p.recipient != address(this)) revert PlanReceiverNotSelf(p.recipient);
+            // Pin the swap to the loop's two-asset surface. Without this, a
+            // strategist could route USDC → JUNK through a Uniswap V3 pool
+            // they control (recipient == vault, so the surface-only guard
+            // above lets it through), and skim value on the pool side; the
+            // vault's remaining USDC balance would still clear the escrow
+            // floor. The natspec on `poolFee` already claimed this shape
+            // was prevented; now the code matches the claim.
+            address usdc = asset();
+            address usde = collateralToken;
+            if (p.tokenIn != usdc && p.tokenIn != usde) revert PlanSwapTokenRefused(p.tokenIn);
+            if (p.tokenOut != usdc && p.tokenOut != usde) revert PlanSwapTokenRefused(p.tokenOut);
+            if (p.fee != poolFee) revert PlanSwapFeeRefused(p.fee);
         } else if (target == asset() || target == collateralToken) {
             if (sel != IERC20.approve.selector) revert PlanSelectorRefused(target, sel);
             (address spender,) = abi.decode(data[4:], (address, uint256));
