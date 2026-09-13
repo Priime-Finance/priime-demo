@@ -580,31 +580,56 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     // Strategist execution path
     // ------------------------------------------------------------------------
 
-    /// @notice Perform an arbitrary external call from the vault. This is how
-    ///         the deploy-time loop entry script drives the Morpho position
-    ///         (approvals, supply, borrow, swap) from the vault's own balance,
-    ///         so the vault itself holds the position the NAV component reads.
-    /// @dev Strategist-only; a trusted demo role (see `strategist`). Guards:
-    ///      (1) caller must be the strategist; (2) `target` must not be the
-    ///      vault itself, so `execute` can never re-enter request/claim/NAV
-    ///      paths; (3) after the call, the vault's asset balance must remain
-    ///      at or above the escrow floor `totalPendingDepositAssets +
-    ///      totalClaimableRedeemAssets` — strategy capital is only the
-    ///      folded-in share pool; escrowed pending deposits and reserved
-    ///      redemption payouts can never be spent. Calling the asset token is
-    ///      allowed (approvals need it); the floor covers misuse. Reverts
-    ///      from `target` are bubbled with their original revert data.
+    /// @notice Perform an external call from the vault against the same
+    ///         allowlisted surface a quorum-signed plan is bound to. This
+    ///         is how the deploy-time loop entry script drives the Morpho
+    ///         position (approvals, supply, borrow, swap) from the vault's
+    ///         own balance, so the vault itself holds the position the NAV
+    ///         component reads.
+    /// @dev Strategist-only; a trusted demo role (see `strategist`). Guards
+    ///      compose:
+    ///        (1) caller must be the strategist;
+    ///        (2) `target` must not be the vault itself, so `execute` can
+    ///            never re-enter request/claim/NAV paths;
+    ///        (3) `_validatePlanStep(target, data)` runs BEFORE the call,
+    ///            so the strategist is confined to the same
+    ///            recursive-loop surface a quorum-signed plan step is
+    ///            (Morpho supply/borrow/repay/withdrawCollateral/flashLoan
+    ///            with `onBehalf`/`receiver`/`token` pinned to the vault,
+    ///            Uniswap V3 `exactInputSingle` with `recipient == vault`,
+    ///            and `approve` on asset/collateral only to Morpho or the
+    ///            swap router). This closes the direct-transfer drain
+    ///            (`execute(usde, usde.transfer(strategist, x))`) that
+    ///            the earlier floor-only guard did not cover;
+    ///        (4) after the call, the vault's asset balance must remain at
+    ///            or above the escrow floor
+    ///            `totalPendingDepositAssets + totalClaimableRedeemAssets`.
+    ///            The allowlist alone cannot see that pending deposits are
+    ///            reserved USDC, so the floor stays as a second wall.
     ///
-    ///      The floor is evaluated at the end of this call only. Allowances
-    ///      granted through `execute` persist beyond it, so approvals are
-    ///      expected to be exact-amount and revoked once the entry sequence
-    ///      completes. Emits `Executed` once the floor check passes.
-    /// @param target Contract to call (never this vault).
+    ///      The Priime-independent-exit pitch is unchanged: every step of
+    ///      a manual unwind (repay Morpho debt, withdraw collateral, swap
+    ///      USDe→USDC via Uniswap V3) is on the allowlist because those
+    ///      are exactly the steps `plan_deleverage` composes. What the
+    ///      strategist can no longer do is route USDC or USDe out of the
+    ///      vault to a personal address — users get their money through
+    ///      the ERC-4626 request-and-claim flow, share-proportional
+    ///      against NAV, the same way they always did.
+    ///
+    ///      The floor is evaluated at the end of this call only.
+    ///      Allowances granted through `execute` persist beyond it, so
+    ///      approvals are expected to be exact-amount and revoked once
+    ///      the entry sequence completes. Reverts from `target` are
+    ///      bubbled with their original revert data. Emits `Executed`
+    ///      once the floor check passes.
+    /// @param target Contract to call (never this vault, must satisfy
+    ///        `_validatePlanStep`).
     /// @param data   Full calldata for the target.
     /// @return result The target's raw return data.
     function execute(address target, bytes calldata data) external returns (bytes memory result) {
         if (msg.sender != strategist) revert NotStrategist();
         if (target == address(this)) revert SelfCallForbidden();
+        _validatePlanStep(target, data);
 
         bool success;
         (success, result) = target.call(data);
@@ -637,12 +662,14 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///      swap, back to solvent) without every step reasserting a floor
     ///      the sequence is trying to restore. The pre-check makes it
     ///      strictly a recovery tool: at any point above floor it reverts.
-    ///      `msg.sender == strategist` + no self-call keeps the trust
-    ///      surface identical to `execute`.
+    ///      `msg.sender == strategist`, no self-call, and the same
+    ///      `_validatePlanStep` allowlist `execute` runs — so the trust
+    ///      surface of this path is identical to `execute`'s, minus one
+    ///      guard that only made sense when the vault could satisfy it.
     function emergencyExecute(address target, bytes calldata data) external returns (bytes memory result) {
         if (msg.sender != strategist) revert NotStrategist();
         if (target == address(this)) revert SelfCallForbidden();
-
+        _validatePlanStep(target, data);
         uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
         uint256 balance = IERC20(asset()).balanceOf(address(this));
         if (balance >= floor) revert VaultNotStuck(balance, floor);
