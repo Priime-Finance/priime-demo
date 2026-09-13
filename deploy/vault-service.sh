@@ -229,8 +229,8 @@ http_endpoint = "$DOCKER_RPC"
 [priime]
 ipfs_gateway = "$GATEWAY"
 port = $port
-host = "0.0.0.0"
-dev_endpoints_enabled = true
+host = "127.0.0.1"
+dev_endpoints_enabled = false
 signing_mnemonic = "${NODE_MNEMONICS[$i]}"
 mcp_chain_credential = "$K0"
 aggregator_evm_credential = "${K_AGGS[$i]}"
@@ -261,7 +261,7 @@ start_node() {  # $1=index (0-based)
   local home="${HOME_DIRS[$i]}"
   docker rm -f "$name" >/dev/null 2>&1 || true
   docker run -d --name "$name" --network host -v "$home:/root/priime" "$PRIIME_IMG" \
-    priime --home /root/priime --ipfs-gateway "$GATEWAY" --host 0.0.0.0 --log-level info >/dev/null
+    priime --home /root/priime --ipfs-gateway "$GATEWAY" --host 127.0.0.1 --log-level info >/dev/null
   local ready=0
   for _ in $(seq 1 30); do
     curl -sf "http://localhost:$port/services" >/dev/null 2>&1 && { ready=1; break; }
