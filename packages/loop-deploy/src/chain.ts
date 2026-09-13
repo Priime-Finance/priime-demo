@@ -12,6 +12,7 @@ import {
   createWalletClient,
   defineChain,
   http,
+  parseEventLogs,
   type Address,
   type Hex,
 } from "viem";
@@ -31,6 +32,12 @@ const MANAGER_ABI = [
     inputs: [{ name: "serviceURI", type: "string" }],
     outputs: [],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "ServiceURIUpdated",
+    inputs: [{ name: "serviceURI", type: "string", indexed: false }],
+    anonymous: false,
   },
 ] as const;
 
@@ -72,6 +79,18 @@ const POOL_ABI = [
     ],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "observations",
+    inputs: [{ name: "index", type: "uint256" }],
+    outputs: [
+      { name: "blockTimestamp", type: "uint32" },
+      { name: "tickCumulative", type: "int56" },
+      { name: "secondsPerLiquidityCumulativeX128", type: "uint160" },
+      { name: "initialized", type: "bool" },
+    ],
+    stateMutability: "view",
+  },
 ] as const;
 
 const FACTORY_ABI = [
@@ -99,6 +118,19 @@ const FACTORY_ABI = [
     outputs: [{ type: "address" }],
     stateMutability: "nonpayable",
   },
+  {
+    type: "event",
+    name: "VaultCreated",
+    inputs: [
+      { name: "vault", type: "address", indexed: true },
+      { name: "strategist", type: "address", indexed: true },
+      { name: "serviceManager", type: "address", indexed: true },
+      { name: "asset", type: "address", indexed: false },
+      { name: "deployer", type: "address", indexed: false },
+      { name: "index", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
 ] as const;
 
 export interface StrategyConfig {
@@ -119,15 +151,52 @@ export interface VaultPendingBalances {
 }
 
 export interface ChainPort {
-  /** Deploy a PriimeVault(serviceManager, asset, strategist, StrategyConfig). Returns the address. */
-  deployHandler(strategist: string, strategy: StrategyConfig): Promise<string>;
+  /**
+   * Submit a `factory.deployVault(serviceManager, asset, strategist, strategy)`
+   * transaction and return its hash WITHOUT waiting for confirmation. The
+   * caller must persist the hash before invoking `finalizeDeployHandler`
+   * so a crash mid-wait can resume on the same tx.
+   */
+  submitDeployHandler(strategist: string, strategy: StrategyConfig): Promise<string>;
+  /**
+   * Wait for a previously-submitted deployVault tx to land, decode its
+   * `VaultCreated` receipt log, and return the vault address. Idempotent
+   * on the tx hash: safe to call once the receipt is known or on resume
+   * from a crash whose registry retained the hash.
+   */
+  finalizeDeployHandler(txHash: string): Promise<string>;
   getServiceUri(): Promise<string>;
-  /** Set the manager's service URI and wait for inclusion. Returns the tx hash. */
-  setServiceUri(uri: string): Promise<string>;
-  /** Read `totalPendingDepositAssets` + `totalPendingRedeemShares` off the vault. Used by the pause pre-flight so testers can't strand mid-flight deposits or redeems. */
+  /**
+   * Set the manager's service URI and wait for inclusion. Returns the tx
+   * hash and the block the tx was mined in — callers use the block to
+   * scan for other `ServiceURIUpdated` events landed between their
+   * base-fetch checkpoint and this write, which is how the mutation
+   * queue detects cross-process races.
+   */
+  setServiceUri(uri: string): Promise<{ txHash: string; blockNumber: bigint }>;
+  /** Current chain head; used as the checkpoint before an optimistic mutation. */
+  getCurrentBlockNumber(): Promise<bigint>;
+  /**
+   * `ServiceURIUpdated(serviceURI)` events emitted by the manager between
+   * `fromBlock` (inclusive) and `toBlock` (inclusive). Empty if no other
+   * writer landed in the window; a non-empty return means the mutation
+   * queue MUST retry so we don't silently clobber another loop-server's
+   * addition.
+   */
+  getServiceUriUpdates(fromBlock: bigint, toBlock: bigint): Promise<string[]>;
   vaultPendingBalances(vaultAddress: string): Promise<VaultPendingBalances>;
-  /** Read `slot0()` off the pool and verify it decodes into the 7-word Uniswap V3 shape vault-nav expects. Throws with a specific message on mismatch (e.g. Aerodrome CL, whose 6-word slot0 was the class of bug this preflight prevents). */
-  verifyUniswapV3Pool(poolAddress: string): Promise<void>;
+  /**
+   * Read `slot0()` off the pool and verify the 7-word Uniswap V3 shape
+   * `vault-nav` expects, then read the pool's OLDEST initialized
+   * observation and refuse the deploy if the ring is younger than
+   * `minObservableSecs` (the same floor `vault-nav`'s
+   * `effective_twap_window` enforces at every strike — 300 s). Without
+   * this second check a freshly-cardinality-bumped mainnet pool would
+   * deploy successfully and then have every strike revert on the
+   * runtime TWAP guard until the ring naturally grew, silently killing
+   * the first minutes of the loop's cadence.
+   */
+  verifyUniswapV3Pool(poolAddress: string, options?: { minObservableSecs?: number }): Promise<void>;
 }
 
 export interface ChainOptions {
@@ -191,13 +260,14 @@ export function makeChain(options: ChainOptions): ChainPort {
   };
 
   return {
-    async deployHandler(strategist: string, strategy: StrategyConfig): Promise<string> {
+    async submitDeployHandler(strategist: string, strategy: StrategyConfig): Promise<string> {
       // Every deploy goes through the factory so the subgraph auto-indexes
       // the new vault via its VaultCreated event + data-source template.
-      const nonceBefore = await publicClient.getTransactionCount({
-        address: account.address,
-        blockTag: "pending",
-      });
+      // This method ONLY submits the tx and returns its hash. The caller
+      // MUST persist that hash BEFORE awaiting `finalizeDeployHandler`;
+      // otherwise a crash inside the confirmation wait would leak a
+      // deployed vault (registry lost the pointer) and the next resume
+      // would deploy a second one.
       const args = [
         manager,
         asset,
@@ -212,27 +282,45 @@ export function makeChain(options: ChainOptions): ChainPort {
           poolFee: strategy.poolFee,
         },
       ] as const;
-      // Predict the vault address up-front so we do not need to parse
-      // VaultCreated back out of the receipt.
-      const predicted = await publicClient.readContract({
-        address: factory,
-        abi: FACTORY_ABI,
-        functionName: "deployVault",
-        args,
-        account,
-      });
-      const hash = await walletClient.writeContract({
+      return await walletClient.writeContract({
         address: factory,
         abi: FACTORY_ABI,
         functionName: "deployVault",
         args,
       });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    },
+    async finalizeDeployHandler(txHash: string): Promise<string> {
+      // Idempotent: `waitForTransactionReceipt` returns the same receipt
+      // for every call once the tx is mined, so this both drives the
+      // happy path AND resumes a crashed loop whose registry already
+      // carries a tx hash.
+      const nonceBefore = await publicClient.getTransactionCount({
+        address: account.address,
+        blockTag: "pending",
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as Hex });
       if (receipt.status !== "success") {
-        throw new Error(`factory.deployVault reverted (tx ${hash})`);
+        throw new Error(`factory.deployVault reverted (tx ${txHash})`);
       }
-      await waitForNonce(nonceBefore + 1, 10_000);
-      return (predicted as Address).toLowerCase();
+      // Do NOT rely on `eth_call` at latest to predict the CREATE
+      // address: two concurrent deploys both see the same "next" address
+      // and would BOTH persist it. Decode `VaultCreated` out of the
+      // receipt logs — the event carries the vault address on
+      // `topics[1]` and is emitted at construction time inside the same
+      // tx, so it is the one source of truth every path agrees on.
+      const events = parseEventLogs({
+        abi: FACTORY_ABI,
+        eventName: "VaultCreated",
+        logs: receipt.logs,
+      });
+      const emitted = events.find((e) => e.address.toLowerCase() === factory.toLowerCase());
+      if (emitted === undefined) {
+        throw new Error(`factory.deployVault (tx ${txHash}) did not emit VaultCreated`);
+      }
+      // Bounded wait so a stale mempool view (nonce not yet advanced on
+      // this rpc) doesn't wedge the follow-up setServiceUri submission.
+      await waitForNonce(nonceBefore, 10_000);
+      return emitted.args.vault.toLowerCase();
     },
 
     async getServiceUri(): Promise<string> {
@@ -243,7 +331,7 @@ export function makeChain(options: ChainOptions): ChainPort {
       });
     },
 
-    async setServiceUri(uri: string): Promise<string> {
+    async setServiceUri(uri: string): Promise<{ txHash: string; blockNumber: bigint }> {
       // Retry the send on a nonce race: the write itself is idempotent (the
       // service URI is the same string on every attempt), so a second submit
       // through a caught-up node lands cleanly.
@@ -268,7 +356,29 @@ export function makeChain(options: ChainOptions): ChainPort {
       }
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error(`setServiceURI reverted (tx ${hash})`);
-      return hash;
+      return { txHash: hash, blockNumber: receipt.blockNumber };
+    },
+
+    async getCurrentBlockNumber(): Promise<bigint> {
+      return await publicClient.getBlockNumber();
+    },
+
+    async getServiceUriUpdates(fromBlock: bigint, toBlock: bigint): Promise<string[]> {
+      // Empty window (toBlock < fromBlock): our tx landed in the same
+      // block as our checkpoint, so no other tx could have raced. Return
+      // early instead of hitting the RPC with an inverted range.
+      if (toBlock < fromBlock) return [];
+      const logs = await publicClient.getLogs({
+        address: manager,
+        event: {
+          type: "event",
+          name: "ServiceURIUpdated",
+          inputs: [{ name: "serviceURI", type: "string", indexed: false }],
+        },
+        fromBlock,
+        toBlock,
+      });
+      return logs.map((log) => log.args.serviceURI ?? "");
     },
 
     async vaultPendingBalances(vaultAddress: string): Promise<VaultPendingBalances> {
@@ -283,14 +393,19 @@ export function makeChain(options: ChainOptions): ChainPort {
       return { pendingDepositAssets, pendingRedeemShares };
     },
 
-    async verifyUniswapV3Pool(poolAddress: string): Promise<void> {
-      // One eth_call. If the returned data does not decode into the 7-word
+    async verifyUniswapV3Pool(
+      poolAddress: string,
+      options?: { minObservableSecs?: number },
+    ): Promise<void> {
+      const pool = poolAddress as Address;
+      // Shape check: if the returned data does not decode into the 7-word
       // Uniswap V3 shape (uint160,int24,uint16,uint16,uint16,uint8,bool),
-      // viem throws a decode error; we rethrow with a specific message so
+      // viem throws a decode error; rethrow with a specific message so
       // the loop-server surfaces "wrong pool" instead of an opaque revert.
+      let slot0: readonly [bigint, number, number, number, number, number, boolean];
       try {
-        await publicClient.readContract({
-          address: poolAddress as Address,
+        slot0 = await publicClient.readContract({
+          address: pool,
           abi: POOL_ABI,
           functionName: "slot0",
         });
@@ -298,6 +413,54 @@ export function makeChain(options: ChainOptions): ChainPort {
         const detail = err instanceof Error ? err.message : String(err);
         throw new Error(
           `slot0() at ${poolAddress} did not decode into the 7-word Uniswap V3 shape vault-nav expects (Aerodrome CL forks return 6 words); reject the market config before publishing. Underlying: ${detail}`,
+        );
+      }
+
+      const minObservableSecs = options?.minObservableSecs;
+      if (minObservableSecs === undefined) return;
+
+      // Ring depth check: read the pool's OLDEST initialized observation
+      // and compute observable seconds. Every strike inside a window
+      // shorter than `MIN_TWAP_WINDOW_SECS` (300 s in vault-nav) would
+      // otherwise revert on the runtime TWAP guard; catch it here so
+      // the deploy fails fast with an actionable message instead of
+      // burning a cadence of strikes on-chain.
+      const [, , observationIndex, observationCardinality] = slot0;
+      if (observationCardinality === 0) {
+        throw new Error(
+          `pool ${poolAddress} reports observationCardinality=0; call increaseObservationCardinalityNext on the pool and wait for observations to backfill before publishing`,
+        );
+      }
+      const oldestIndex = (observationIndex + 1) % observationCardinality;
+      const readObs = async (index: number): Promise<{ blockTimestamp: number; initialized: boolean }> => {
+        const [blockTimestamp, , , initialized] = await publicClient.readContract({
+          address: pool,
+          abi: POOL_ABI,
+          functionName: "observations",
+          args: [BigInt(index)],
+        });
+        return { blockTimestamp, initialized };
+      };
+      // If the "oldest" slot round the ring is still uninitialized
+      // (cardinality was bumped but not yet backfilled), fall back to
+      // slot 0 — Uniswap V3 always initializes slot 0 first.
+      let oldest = await readObs(oldestIndex);
+      if (!oldest.initialized) oldest = await readObs(0);
+      if (!oldest.initialized) {
+        throw new Error(
+          `pool ${poolAddress} has no initialized observations; call increaseObservationCardinalityNext and wait before publishing`,
+        );
+      }
+      const nowSecs = Math.floor(Date.now() / 1000);
+      // Uniswap V3's observation timestamps are truncated `uint32`;
+      // reproduce the same wrap the runtime does so a genuine wrap
+      // reads as a small positive age, not a giant negative one.
+      const nowU32 = nowSecs >>> 0;
+      const observable = (nowU32 - oldest.blockTimestamp) >>> 0;
+      if (observable < minObservableSecs) {
+        const shortfall = minObservableSecs - observable;
+        throw new Error(
+          `pool ${poolAddress} observation ring only covers ${observable}s of TWAP window; vault-nav floor is ${minObservableSecs}s. Call increaseObservationCardinalityNext on the pool and wait ~${shortfall}s (or use a market with a mature pool) before publishing, otherwise the first strikes will revert on the runtime TWAP guard.`,
         );
       }
     },

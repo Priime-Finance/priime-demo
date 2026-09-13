@@ -371,6 +371,14 @@ export default function ActivitySection({
       mine: true,
     }));
 
+    /* `onchainExecutionsFor` returns `[]` for every slug in this build
+       (see the file-level warning in `onchain-executions.ts`: the
+       captured handler ledger belongs to a real Base contract, and
+       co-locating it with the hero page's sample fixture would put
+       Verify links onto an unrelated contract). A future real
+       publish that emits its own tx hashes lands them through this
+       same call; when that happens the table just fills in and the
+       modeled/family branches stand down. */
     const onchain: LedgerRow[] = executionRows(
       onchainExecutionsFor(vault.slug).map((x) => ({ ...x, chainId: EXECUTION_CHAIN_ID })),
     );
@@ -378,14 +386,6 @@ export default function ActivitySection({
 
     const earning = vault.modeledApy > 0;
     const modeled: LedgerRow[] = modeledActivity(vault, nowMs, tvlUsd).filter((r) => {
-      /* WHERE A REAL LEDGER EXISTS THE MODELED ROWS STAND DOWN (founder,
-         2026-09-07). `router` is the OTHER modeled kind and it stands down
-         too, but structurally rather than here: `modeledActivity` emits only
-         `auto | publish | deposit`, and every router row is built inside the
-         `if (!hasChain)` block below, so adding it to this test would be a
-         comparison TypeScript rejects and a branch nothing reaches. The
-         guard is the block, and `tests/vaults.test.ts` asserts the outcome
-         rather than the branch. */
       if (hasChain && r.kind === "auto") return false;
       if (statesNegativeMoney(r.detail)) return false;
       if (!earning && /compound/i.test(r.action)) return false;

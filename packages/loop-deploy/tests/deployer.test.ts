@@ -8,7 +8,7 @@ import type { ChainPort } from "../src/chain.ts";
 import type { IpfsPort } from "../src/ipfs.ts";
 import { workflowIds } from "../src/builder.ts";
 import { LoopDeployer } from "../src/deployer.ts";
-import { parseLossless } from "../src/json.ts";
+import { parseLossless, stringifyLossless } from "../src/json.ts";
 import { LoopRegistry } from "../src/registry.ts";
 import { fixtureServiceText, TEMPLATE_WORKFLOW_ID, validLoopResolveInput } from "./fixtures.ts";
 
@@ -59,12 +59,27 @@ interface Fakes {
   failNextPoolCheck: () => void;
   setPending: (pendingDepositAssets: bigint, pendingRedeemShares: bigint) => void;
   currentDoc: () => unknown;
+  /**
+   * Register a one-shot hook that fires just BEFORE the next `pinText`
+   * call. Used to simulate an out-of-band `setServiceURI` writer landing
+   * mid-mutation, which is exactly the cross-process race
+   * `mutateService`'s optimistic-concurrency loop is meant to detect.
+   */
+  beforeNextPin: (fn: () => Promise<void>) => void;
 }
 
 function makeFakes(): Fakes {
   const store = new Map<string, string>();
   store.set("ipfs://QmGenesis", fixtureServiceText());
   let uri = "ipfs://QmGenesis";
+  // Emulate a chain head: every `setServiceUri` records a
+  // `ServiceURIUpdated` event at the CURRENT head, then advances. The
+  // real chain advances by many blocks between txs; a single-block bump
+  // per event is enough to exercise the race-detection window because
+  // `mutateService` walks (checkpoint+1, writeBlock-1) inclusively.
+  let block = 100n;
+  const serviceUriUpdates: { block: bigint; uri: string }[] = [];
+  let beforeNextPinHook: (() => Promise<void>) | null = null;
   let pinCounter = 0;
   let deployCounter = 0;
   const counters = { deploys: 0, pins: 0, setUri: 0 };
@@ -73,19 +88,45 @@ function makeFakes(): Fakes {
   let pendingRedeemShares = 0n;
   let poolShouldFail = false;
 
+  const pendingDeploys = new Map<string, string>();
   const chain: ChainPort = {
-    async deployHandler(strategist: string): Promise<string> {
+    async submitDeployHandler(strategist: string): Promise<string> {
       counters.deploys += 1;
       deployCounter += 1;
-      return `0x${(deployCounter + 0xd000).toString(16).padStart(4, "0")}${strategist.slice(6, 42)}`.toLowerCase();
+      const vault = `0x${(deployCounter + 0xd000).toString(16).padStart(4, "0")}${strategist.slice(6, 42)}`.toLowerCase();
+      const txHash = `0x${"tx".padStart(2, "0")}${deployCounter.toString(16).padStart(62, "0")}`;
+      pendingDeploys.set(txHash, vault);
+      return txHash;
+    },
+    async finalizeDeployHandler(txHash: string): Promise<string> {
+      const vault = pendingDeploys.get(txHash);
+      if (vault === undefined) throw new Error(`test fake has no pending deploy for ${txHash}`);
+      return vault;
     },
     async getServiceUri(): Promise<string> {
       return uri;
     },
-    async setServiceUri(next: string): Promise<string> {
+    async setServiceUri(next: string): Promise<{ txHash: string; blockNumber: bigint }> {
       counters.setUri += 1;
+      // Real chain: a submitted tx mines in a block STRICTLY GREATER
+      // than any block observable via `getBlockNumber` at submit time.
+      // Advance the head first, THEN record the event, so a checkpoint
+      // captured before submission and this write's block sandwich any
+      // other writer that landed in the same interval — which is what
+      // `mutateService`'s optimistic-concurrency scan needs to see.
+      block += 1n;
+      serviceUriUpdates.push({ block, uri: next });
       uri = next;
-      return "0xtxhash";
+      return { txHash: "0xtxhash", blockNumber: block };
+    },
+    async getCurrentBlockNumber(): Promise<bigint> {
+      return block;
+    },
+    async getServiceUriUpdates(fromBlock: bigint, toBlock: bigint): Promise<string[]> {
+      if (toBlock < fromBlock) return [];
+      return serviceUriUpdates
+        .filter((e) => e.block >= fromBlock && e.block <= toBlock)
+        .map((e) => e.uri);
     },
     async vaultPendingBalances(_vaultAddress: string): Promise<{ pendingDepositAssets: bigint; pendingRedeemShares: bigint }> {
       return { pendingDepositAssets: pendingDepositAssets, pendingRedeemShares: pendingRedeemShares };
@@ -105,6 +146,11 @@ function makeFakes(): Fakes {
       return text;
     },
     async pinText(content: string): Promise<string> {
+      if (beforeNextPinHook !== null) {
+        const fire = beforeNextPinHook;
+        beforeNextPinHook = null;
+        await fire();
+      }
       if (pinShouldFail) {
         pinShouldFail = false;
         throw new Error("ipfs down");
@@ -132,6 +178,9 @@ function makeFakes(): Fakes {
       pendingRedeemShares = redeems;
     },
     currentDoc: () => parseLossless(store.get(uri) ?? "null"),
+    beforeNextPin: (fn) => {
+      beforeNextPinHook = fn;
+    },
   };
 }
 
@@ -337,5 +386,137 @@ describe("LoopDeployer", () => {
     const config = componentConfigOf(fakes.currentDoc(), resumed.workflowId);
     expect(config.swap_router).toBe("0x2626664c2603336e57b271c5c0b26f421741e481");
     expect(config.pool_fee).toBe("500");
+  });
+
+  it("concurrent publishes get distinct vaults (finding: predict-only was collision-prone)", async () => {
+    /* Two simultaneous createLoop calls used to both persist the same
+       eth_call-predicted CREATE address; the second submission would
+       actually deploy at nonce+1 while the registry pointed at the
+       first caller's vault. `finalizeDeployHandler` decodes VaultCreated
+       from the tx's own receipt, so two publishes with distinct hashes
+       land at distinct addresses. */
+    const { deployer } = makeDeployer();
+    const aInput = { ...validLoopResolveInput(), name: "A", strategist: "0xaaaa00000000000000000000000000000000aaaa" };
+    const bInput = { ...validLoopResolveInput(), name: "B", strategist: "0xbbbb00000000000000000000000000000000bbbb" };
+    const [a, b] = await Promise.all([deployer.createLoop(aInput), deployer.createLoop(bInput)]);
+    expect(a.handlerAddress).not.toBe(b.handlerAddress);
+    expect(a.strategist).not.toBe(b.strategist);
+  });
+
+  it("crash between submit and confirm resumes on the same tx hash (no second vault)", async () => {
+    /* Simulates a crash inside `finalizeDeployHandler`'s receipt wait.
+       The registry already carries the persisted tx hash from
+       `submitDeployHandler`; on resume, the deployer MUST reuse that
+       hash (idempotent decode) instead of submitting a second tx. */
+    const { deployer, registry, fakes } = makeDeployer();
+    // Land a full loop, then rewind it to the "submit landed,
+    // finalize did not" state: forget the handler address, drop step
+    // back to `validated`, and re-inject a fresh unresolved tx hash so
+    // `resumeLoop` MUST call `finalizeDeployHandler` — never
+    // `submitDeployHandler` — to advance.
+    const loop = await deployer.createLoop(validLoopResolveInput());
+    const primeHash = await fakes.chain.submitDeployHandler(loop.strategist, {
+      collateralToken: "0x0000000000000000000000000000000000000001",
+      morpho: "0x0000000000000000000000000000000000000002",
+      morphoOracle: "0x0000000000000000000000000000000000000003",
+      morphoIrm: "0x0000000000000000000000000000000000000004",
+      morphoLltv: 1n,
+      swapRouter: "0x0000000000000000000000000000000000000005",
+      poolFee: 500,
+    });
+    const deploysBefore = fakes.counters.deploys;
+    registry.update(loop.id, {
+      handlerAddress: null,
+      deployTxHash: primeHash,
+      step: "validated",
+      status: "deploying",
+    });
+    const resumed = await deployer.resumeLoop(loop.id);
+    expect(resumed.status).toBe("active");
+    expect(resumed.handlerAddress).not.toBeNull();
+    // Deploys counter did not tick — only finalize was invoked.
+    expect(fakes.counters.deploys).toBe(deploysBefore);
+    // Hash cleared once the vault address landed.
+    expect(resumed.deployTxHash).toBeNull();
+  });
+
+  it("crash between setServiceURI and step=service_updated resumes without 'workflow already exists'", async () => {
+    /* Simulates a crash after the service-mutation half of the pipeline
+       succeeded (workflow already in service.json, vault already
+       attesting) but before the registry write. Under the pre-fix code
+       the resumed `addLoopWorkflow` would throw ServiceDocError and the
+       loop would be wedged forever. */
+    const { deployer, registry, fakes } = makeDeployer();
+    const loop = await deployer.createLoop(validLoopResolveInput());
+    // Snapshot the "landed" state and rewind the registry step to the
+    // pre-mark position while leaving service.json untouched.
+    const setUriBefore = fakes.counters.setUri;
+    registry.update(loop.id, { step: "handler_deployed", status: "deploying", error: null });
+    // Sanity: service.json still contains the workflow.
+    expect(workflowIds(fakes.currentDoc())).toContain(loop.workflowId);
+    const resumed = await deployer.resumeLoop(loop.id);
+    expect(resumed.status).toBe("active");
+    expect(resumed.step).toBe("active");
+    // No second setServiceUri: the mutation queue detected the no-op.
+    expect(fakes.counters.setUri).toBe(setUriBefore);
+  });
+
+  it("mid-mutation setServiceURI by another writer is detected and mutation retries without dropping any workflow", async () => {
+    /* Simulates a second loop-server instance (or any out-of-band
+       `setServiceURI` caller) landing a write between our doc fetch
+       and our own tx. Under the pre-fix code the loop-server's
+       in-process mutation tail was the only lock, so the racing write
+       silently dropped the workflow the deployer was adding. The
+       optimistic-concurrency loop must detect the overlap via
+       `ServiceURIUpdated` event scan, re-fetch, re-apply, and land a
+       final doc that contains BOTH workflows. */
+    const { deployer, fakes } = makeDeployer();
+
+    // Prime: land loop A normally so we have a real workflow shape to
+    // splice into the "other writer" doc.
+    const aInput = { ...validLoopResolveInput(), name: "loop A", strategist: "0xaaaa00000000000000000000000000000000aaaa" };
+    const loopA = await deployer.createLoop(aInput);
+    const docWithA = fakes.currentDoc();
+    expect(workflowIds(docWithA)).toContain(loopA.workflowId);
+
+    // Land loop B, but inject a "concurrent writer" that adds its own
+    // pretend-workflow ("loop C") the instant loop B's mutation reads
+    // the base doc. If the retry loop is wired correctly, loop B's
+    // final on-chain doc must contain A, C, AND B; if the retry loop
+    // is missing, loop B's write silently clobbers C.
+    const bInput = { ...validLoopResolveInput(), name: "loop B", strategist: "0xbbbb00000000000000000000000000000000bbbb" };
+    fakes.beforeNextPin(async () => {
+      // Build a doc that mimics an interfering setServiceURI writer:
+      // clone current on-chain doc and add a workflow named "loop-c"
+      // by hand. The exact shape doesn't matter for the test — what
+      // matters is that its workflowIds set is a superset the deployer
+      // must preserve.
+      const current = fakes.currentDoc();
+      const clone = parseLossless(stringifyLossless(current, 0));
+      if (clone === null || typeof clone !== "object" || !("workflows" in clone)) {
+        throw new Error("test setup: expected workflows key");
+      }
+      const workflows = clone.workflows;
+      if (workflows === null || typeof workflows !== "object") {
+        throw new Error("test setup: workflows is not an object");
+      }
+      // Copy loopA's workflow onto a fresh id — represents whatever
+      // the racing writer inserted.
+      const templateWorkflow = Object.entries(workflows).find(([k]) => k === loopA.workflowId)?.[1];
+      if (templateWorkflow === undefined) throw new Error("test setup: loopA workflow missing");
+      Object.assign(workflows, { "loop-c000000000000000000c": templateWorkflow });
+      const forkedText = stringifyLossless(clone, 0);
+      const forkedUri = await fakes.ipfs.pinText(forkedText, "service.json");
+      await fakes.chain.setServiceUri(forkedUri);
+    });
+
+    const loopB = await deployer.createLoop(bInput);
+    expect(loopB.status).toBe("active");
+
+    const finalIds = workflowIds(fakes.currentDoc());
+    // Both raced-in workflows survive: nothing was silently dropped.
+    expect(finalIds).toContain(loopA.workflowId);
+    expect(finalIds).toContain(loopB.workflowId);
+    expect(finalIds).toContain("loop-c000000000000000000c");
   });
 });

@@ -16,6 +16,7 @@ import {
   DEMO_SCOPE,
   FLOOR_MARKET_ID,
   HERO_MARKET_ID,
+  HERO_MARKET_ID_FORK,
   HERO_SLUG,
   isLiveMarket,
   isLiveModule,
@@ -39,7 +40,7 @@ describe("the register", () => {
     expect(DEMO_MARKET_ID).toBe(HERO_MARKET_ID);
     expect(DEMO_SCOPE).toEqual({
       liveMarketId: HERO_MARKET_ID,
-      liveMarketIds: [HERO_MARKET_ID, FLOOR_MARKET_ID],
+      liveMarketIds: [HERO_MARKET_ID, HERO_MARKET_ID_FORK, FLOOR_MARKET_ID],
       liveVenues: ["morpho-blue-base", "treasury-ausdc-base"],
       liveModules: ["liquidity-source", "safety-buffer", "auto-compound", "redemption-route"],
       liveStrategies: ["loop", "treasury"],
@@ -100,7 +101,12 @@ describe("the register", () => {
     expect(COPILOT_REJECT_COMING_SOON).toBe(
       "that market is coming soon; only the USDe/USDC loop and the Aave v3 Base USDC reserve are live in this build",
     );
-    expect(DEMO_SCOPE.liveMarketIds).toHaveLength(2);
+    /* THREE now: mainnet-hero + fork-hero + floor. Both hero slugs are
+       "the loop" for the copilot's purposes; the fork slug is
+       structurally identical to the mainnet one at the pinned block.
+       If a THIRD independent lane lands (a real second market, not a
+       chain variant), the reject string above needs to update too. */
+    expect(DEMO_SCOPE.liveMarketIds).toHaveLength(3);
   });
 });
 

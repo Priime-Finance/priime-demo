@@ -229,10 +229,13 @@ http_endpoint = "$DOCKER_RPC"
 [priime]
 ipfs_gateway = "$GATEWAY"
 port = $port
-host = "0.0.0.0"
-dev_endpoints_enabled = true
+host = "127.0.0.1"
+dev_endpoints_enabled = false
 signing_mnemonic = "${NODE_MNEMONICS[$i]}"
-mcp_chain_credential = "$K0"
+# `mcp_chain_credential` was written here but the runtime does not
+# define that field, so it was silently dropped on load. Writing the
+# owner key into every node's priime.toml under an unread key was pure
+# on-disk key sprawl. Same drop landed in `deploy/deploy.sh`.
 aggregator_evm_credential = "${K_AGGS[$i]}"
 
 # libp2p peer discovery over the loopback: node 1 is the bootstrap
@@ -261,7 +264,7 @@ start_node() {  # $1=index (0-based)
   local home="${HOME_DIRS[$i]}"
   docker rm -f "$name" >/dev/null 2>&1 || true
   docker run -d --name "$name" --network host -v "$home:/root/priime" "$PRIIME_IMG" \
-    priime --home /root/priime --ipfs-gateway "$GATEWAY" --host 0.0.0.0 --log-level info >/dev/null
+    priime --home /root/priime --ipfs-gateway "$GATEWAY" --host 127.0.0.1 --log-level info >/dev/null
   local ready=0
   for _ in $(seq 1 30); do
     curl -sf "http://localhost:$port/services" >/dev/null 2>&1 && { ready=1; break; }
@@ -486,10 +489,36 @@ for i in $(seq 0 $((NODE_COUNT - 1))); do
   echo "  $name: service deployed"
 done
 
-# --- 9. wait for the first cron strike --------------------------------------
+# --- 9. persist vault-service.json (BEFORE the strike wait) -----------------
+# Every downstream consumer — loop-server, enter-loop.sh, run-live-demo.sh —
+# reads $FORKDIR/vault-service.json to find the vault, service manager and
+# node topology. Writing it AFTER the first-strike wait meant a timeout
+# stranded the entire on-chain deployment (fresh manager, funded operators,
+# service deployed to nodes) with no state file: loop-server couldn't start,
+# and the only recovery was another full rerun that deployed a second
+# manager and re-funded another operator set. Land the file as soon as
+# every constituent value is known, so a strike timeout is a soft failure
+# the operator can retry (`docker logs ${NODE_NAMES[0]}` for cause, then
+# `bash deploy/run-live-demo.sh` again to reuse the same manager).
+NODE_LIST=$(printf '%s\n' "${NODE_NAMES[@]}" | jq -R . | jq -s .)
+jq -n --arg vault "$VAULT" --arg sm "$SM" --arg strategist "$STRATEGIST" \
+  --arg factory "$FACTORY" \
+  --arg node "${NODE_NAMES[0]}" --argjson nodes "$NODE_LIST" \
+  --arg template_workflow_id "$WID" \
+  --arg target "$TARGET" --arg chain_id "$CHAIN_ID" \
+  --arg quorum_threshold 2 --arg quorum_total 3 \
+  '{vault: $vault, factory: $factory, service_manager: $sm, strategist: $strategist, node: $node, nodes: $nodes, template_workflow_id: $template_workflow_id, target: $target, chain_id: $chain_id, quorum_threshold: ($quorum_threshold|tonumber), quorum_total: ($quorum_total|tonumber)}' \
+  > "$FORKDIR/vault-service.json"
+echo "vault-service.json written: $FORKDIR/vault-service.json"
+
+# --- 10. wait for the first cron strike -------------------------------------
 # The budget is per target because the cadence is: 90s covers the fork's
 # 10-second cron several times over, while an hourly mainnet cron needs more
-# than an hour of patience. Both come from targets/<target>.json.
+# than an hour of patience. Both come from targets/<target>.json. A timeout
+# here is now a SOFT failure: vault-service.json is already on disk (see
+# step 9), so loop-server can start and diagnostic scripts can address the
+# vault. Rerunning this script re-attempts the strike wait without losing
+# state.
 STRIKE_TRIES=$(( $(tcfg_req .service.first_strike_timeout_secs) / 5 ))
 say "await first attested NAV strike (pre-position NAV: 0; cron $CRON, up to $((STRIKE_TRIES * 5))s)"
 for i in $(seq 1 "$STRIKE_TRIES"); do
@@ -498,22 +527,14 @@ for i in $(seq 1 "$STRIKE_TRIES"); do
   if [ "$UPDATES" != "0" ]; then
     NAV=$(cast call "$VAULT" 'nav()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
     IB=$(cast call "$VAULT" 'lastInputsBlock()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
-    # Emit the whole node list in vault-service.json so downstream scripts
-    # (loop-server, enter-loop.sh) can address any of them; keep the "node"
-    # field for compatibility with the single-node consumers.
-    NODE_LIST=$(printf '%s\n' "${NODE_NAMES[@]}" | jq -R . | jq -s .)
-    jq -n --arg vault "$VAULT" --arg sm "$SM" --arg strategist "$STRATEGIST" \
-      --arg factory "$FACTORY" \
-      --arg node "${NODE_NAMES[0]}" --argjson nodes "$NODE_LIST" \
-      --arg template_workflow_id "$WID" \
-      --arg target "$TARGET" --arg chain_id "$CHAIN_ID" \
-      --arg quorum_threshold 2 --arg quorum_total 3 \
-      '{vault: $vault, factory: $factory, service_manager: $sm, strategist: $strategist, node: $node, nodes: $nodes, template_workflow_id: $template_workflow_id, target: $target, chain_id: $chain_id, quorum_threshold: ($quorum_threshold|tonumber), quorum_total: ($quorum_total|tonumber)}' \
-      > "$FORKDIR/vault-service.json"
     echo "SUCCESS: updateCount=$UPDATES nav=$NAV inputsBlock=$IB"
     echo "vault=$VAULT  serviceManager=$SM  nodes=${NODE_NAMES[*]} (docker logs ${NODE_NAMES[0]})"
     exit 0
   fi
   echo "  t+$((i*5))s: no strike yet"
 done
-echo "FAILED: no strike landed; inspect: docker logs ${NODE_NAMES[0]} (or ${NODE_NAMES[1]}, ${NODE_NAMES[2]})"; exit 1
+echo "!! no strike landed within the timeout, but vault-service.json IS on disk"
+echo "!!   vault=$VAULT  manager=$SM  factory=$FACTORY"
+echo "!!   investigate:   docker logs ${NODE_NAMES[0]} (or ${NODE_NAMES[1]}, ${NODE_NAMES[2]})"
+echo "!!   retry strike:  bash deploy/vault-service.sh   (idempotent from this point)"
+exit 1

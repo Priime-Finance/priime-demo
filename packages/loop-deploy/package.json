@@ -5,7 +5,8 @@
   "description": "Control-plane library for deploying user loops as workflows on the shared Priime service: service.json mutation, handler deploys, IPFS pinning, loop registry.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./auth": "./src/auth.ts"
   },
   "scripts": {
     "test": "vitest run",

@@ -34,12 +34,12 @@ Every script under `deploy/` resolves a deploy **target** first (`TARGET`, defau
 - `PRIIME_PUBLIC_RPC_URL` (required, separate from the above): the browser-facing RPC URL `run-live-demo.sh` hands to the frontend as `NEXT_PUBLIC_RPC_URL`. Kept distinct so a keyed URL never reaches the client.
 - `PRIIME_OWNER_KEY`, `PRIIME_STRATEGIST_KEY`, `PRIIME_DEPOSITOR_KEY`, `PRIIME_TREASURY_KEY` (all required): one 0x-prefixed private key each for the four roles. They may be four distinct keys or fewer; that's an operational choice the scripts don't make for you.
 - `LOOP_SERVER_TOKEN` (required): `run-live-demo.sh`'s `demo-token-...` default is fork-only; a live run must supply its own bearer token (`openssl rand -hex 24`).
-- `.env.mainnet` at the repo root holds every required variable in one file, gitignored via the `.env.*` rule. Copy from the template committed in the tree and fill in the blanks; then `env $(grep -v '^#' .env.mainnet | xargs) TARGET=mainnet deploy/vault-service.sh`.
+- `.env.mainnet` at the repo root holds every required variable in one file, gitignored via the `.env.*` rule. Copy `.env.mainnet.example` (committed alongside this doc) to `.env.mainnet` and fill in the blanks; then `env $(grep -v '^#' .env.mainnet | xargs) TARGET=mainnet deploy/vault-service.sh`.
 - Funding is a real transfer from the treasury key, balance-checked first; a shortfall is fatal rather than silently short-funding an account. Blocks are real; the scripts poll for one rather than forcing it. The strike cadence is `0 * * * * *` (once per minute), a UX pick rather than a cost cap; Base gas per strike is a fraction of a cent, so cadence choices land in the ~$1/day range at 60s or ~$7/day at 10s. See `deploy/targets/mainnet.json` for the tradeoff comment.
 - Per-run artifacts land in `deploy/.mainnet/`.
 - `deploy/deploy.sh` (the top-level M1 hello-world pipeline in the repo README) refuses `TARGET=mainnet` outright: its `priime.toml` wants one shared signing mnemonic, which only a mnemonic-backed target (`fork`) has.
 
-`TARGET=mainnet` moves real money and has not been exercised end to end in this repo; see "Known limits" below. Treat it accordingly.
+`TARGET=mainnet` moves real money. The live topology (factory, service manager, three registered operators, subgraph) is up and attesting — see "What's live" below — but individual smoke runs still surface known gaps captured under "Known limits". Treat every publish accordingly.
 
 ## Script
 
@@ -57,7 +57,7 @@ Then in the browser, on `/build`:
 2. **Install defaults** (adds Dynamic leverage + Auto-compound).
 3. **Review & publish** (top right).
 4. **Connect** (in the modal) → your wallet on the local anvil (see wallet setup below; on `TARGET=mainnet`, whatever wallet holds the strategist key).
-5. **Publish vault**. Success redirects to `/vaults/loop-xxxxxxxx` and attested strikes land every strike cadence (10s on the fork, hourly on mainnet).
+5. **Publish vault**. Success redirects to `/vaults/loop-xxxxxxxx` and attested strikes land at each target's configured cadence (`deploy/targets/*.json::service.cron_schedule` — every 10s on the fork, every minute on mainnet and Sepolia).
 
 Shut everything down with:
 
@@ -170,7 +170,7 @@ Note: `OWNER_PRIVATE_KEY` above is not read from `deploy/target.sh`; it is the f
 
 ## The seam, at a glance
 
-- The composer's Review card emits a five-field body: `{ name, strategist, cronSeconds, candidateId, targetLeverage }`.
+- The composer's Review card emits a six-field body: `{ name, strategist, cronSeconds, candidateId, targetLeverage, strategyParams }`. `strategyParams` is a flat string map carrying every other composer knob (risk preset, HF bands, auto-compound cadence, exit route, ...) and is forwarded verbatim into the workflow's `componentConfig`.
 - `POST /loops` (loop server) calls `resolveLoopConfig`, which looks `candidateId` up in `packages/loop-deploy/src/catalog.ts` and refuses unknown candidates with a `400 { issues: [...] }`. On a hit it merges the catalog's addresses with the user's leverage + cadence into the full `LoopConfig`, deploys a new `PriimeVault` with the connected wallet as `strategist`, clones the template workflow into `service.json`, pins the mutation, and calls `setServiceURI` on the manager. Priime nodes pick the new workflow up automatically via the `ServiceURIUpdated` event.
 - `GET /loops/:id/journals` (loop server) reads `NavUpdated` logs off the handler, decodes `handleSignedEnvelope` calldata, and emits records that validate against `schema/journal.v1.schema.json`.
 - The frontend proxies both through `/api/loops/*` (the bearer token stays in Node) and consumes them from `apps/replay-ui/lib/vaults/live-source.ts`.

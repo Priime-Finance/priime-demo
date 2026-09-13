@@ -38,19 +38,25 @@ where
     F: Fn(u64) -> Fut,
     Fut: Future<Output = Result<u64, String>>,
 {
-    // A node that has not reached trigger_time cannot know the right block.
-    // Fail the cycle rather than substitute its own (lower) head: an unsigned
-    // cycle costs a beat, a differently-signed one silently misses quorum.
+    // A node that has not reached trigger_time cannot know the right block,
+    // AND a node whose head IS the trigger_time cannot know whether a later
+    // block sharing the same timestamp will appear (anvil `mine` bursts and
+    // real L2 aggregators both produce 2+ blocks per second, so runs of
+    // equal-timestamp headers happen live on Base). Returning `head` in
+    // either case would resolve `inputs_block` to whatever the local head
+    // happened to be, and two operators one block apart would sign a
+    // different height. Require the head to be strictly past `target_secs`;
+    // an unsigned cycle costs a beat, a differently-signed one silently
+    // misses quorum. The binary search below then finds the LAST block
+    // whose timestamp is at or before the target, which is the same answer
+    // for every operator whose head has cleared the equal-timestamp run.
     let head_ts = timestamp_of(head).await?;
-    if head_ts < target_secs {
+    if head_ts <= target_secs {
         return Err(format!(
-            "chain head {head} (timestamp {head_ts}) has not reached trigger_time \
-             {target_secs}: node is behind, failing the cycle rather than pinning \
-             a different block than the rest of the quorum"
+            "chain head {head} (timestamp {head_ts}) has not moved past trigger_time \
+             {target_secs}: node is behind or the head is still inside an equal-timestamp \
+             run, failing the cycle rather than pinning a different block than the rest of the quorum"
         ));
-    }
-    if head_ts == target_secs {
-        return Ok(head);
     }
 
     // Doubling walk-back for a bracket lower bound at or before the target.
@@ -168,12 +174,37 @@ mod tests {
     }
 
     #[test]
-    fn head_exactly_at_trigger_time_is_the_answer() {
+    fn head_exactly_at_trigger_time_fails_the_cycle() {
+        // Same rule as "head behind": if head_ts <= target_secs, the node
+        // cannot know whether a later block sharing the same timestamp
+        // will appear. Two operators one head apart inside an equal-
+        // timestamp run would otherwise resolve to different blocks.
+        // Fail the cycle rather than pin the local head.
         let c = Chain::new(1000, 2);
-        let b = ready(block_at_or_before(500, 2000, |n| c.at(n))).unwrap();
-        assert_eq!(b, 500);
-        // One lookup: the head answered it outright.
-        assert_eq!(c.probes.get(), 1);
+        let e = ready(block_at_or_before(500, 2000, |n| c.at(n))).unwrap_err();
+        assert!(e.contains("has not moved past trigger_time"), "{e}");
+    }
+
+    #[test]
+    fn equal_timestamp_run_resolves_to_the_last_matching_block_for_every_head() {
+        // Anvil's `mine` bursts and real L2 aggregators both produce runs
+        // of blocks sharing a header timestamp. The regression from the
+        // pre-fix code: two operators whose heads sat at different points
+        // inside the run signed different `inputs_block` values (one
+        // returned its own head via the equal-ts shortcut, the other
+        // binary-searched to a different end of the run). Both must now
+        // resolve to the LAST block with `ts <= target`, whatever their
+        // own head is.
+        let table = [100u64, 200, 300, 300, 300, 300, 400, 500];
+        let lookup = |n: u64| {
+            let ts = table[n as usize];
+            async move { Ok(ts) }
+        };
+        // Head one past the run vs head several blocks past: same answer.
+        let a = ready(block_at_or_before(6, 300, lookup)).unwrap();
+        let b = ready(block_at_or_before(7, 300, lookup)).unwrap();
+        assert_eq!(a, 5, "highest block with ts <= 300 is index 5");
+        assert_eq!(a, b, "operators one head apart resolve the same block");
     }
 
     #[test]

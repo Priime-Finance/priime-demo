@@ -14,8 +14,6 @@
  * treated as opaque JSON with narrow, validated accessors.
  */
 
-import { randomBytes } from "node:crypto";
-
 import { isRecord } from "./guards.ts";
 
 /** Matches priime_types WorkflowId: `[a-z0-9-_]{3,36}`. */
@@ -44,7 +42,20 @@ export interface WorkflowSpec {
 }
 
 export function newWorkflowId(): string {
-  return `loop-${randomBytes(6).toString("hex")}`;
+  /* Web Crypto (`crypto.getRandomValues`) instead of `node:crypto`
+     `randomBytes`: `node:crypto` is a Node-only scheme and webpack
+     refuses to bundle it for a browser build, which is what tanks
+     `apps/replay-ui`'s `/build` and `/portfolio` routes with an
+     `UnhandledSchemeError`. Web Crypto is browser-native and Node
+     19+ ships it as a top-level global, so the same function works
+     in every consumer without a per-platform branch.
+     `hl-scan`/`serialize.contentHash` use the SAME API for the same
+     reason (see `lib/canvas/scenario/hash.ts` for the port note). */
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  let hex = "";
+  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+  return `loop-${hex}`;
 }
 
 /** The workflows map of a parsed service document. */
@@ -129,5 +140,32 @@ export function removeLoopWorkflow(doc: unknown, workflowId: string, protectedId
     throw new ServiceDocError(`workflow ${workflowId} does not exist in the service`);
   }
   delete workflows[workflowId];
+  return next;
+}
+
+/**
+ * Rescue workflows a competing writer added between our doc fetch and
+ * our own `setServiceURI`. Copies every workflow entry present in
+ * `donor` but not in `target`, verbatim. The runtime treats each
+ * workflow as an opaque document (see `addLoopWorkflow`'s narrow field
+ * writes above), so `structuredClone` is safe: no serde reshaping.
+ *
+ * Used by `LoopDeployer.mutateService`'s optimistic-concurrency retry:
+ * once we detect that our `setServiceURI` overwrote a `ServiceURIUpdated`
+ * event landed in the window, we fetch each clobbered URI's doc, merge
+ * its unknown workflows into our own edited doc, and re-pin+re-set.
+ */
+export function mergeMissingWorkflows(target: unknown, donor: unknown): unknown {
+  const targetWorkflows = workflowsOf(target);
+  const donorWorkflows = workflowsOf(donor);
+  const missing = Object.keys(donorWorkflows).filter((id) => targetWorkflows[id] === undefined);
+  if (missing.length === 0) return target;
+  const next = structuredClone(target);
+  const nextWorkflows = workflowsOf(next);
+  for (const id of missing) {
+    // structuredClone is applied by the outer clone above; the donor
+    // entry is already a fresh subtree.
+    nextWorkflows[id] = structuredClone(donorWorkflows[id]);
+  }
   return next;
 }

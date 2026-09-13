@@ -44,7 +44,7 @@ import {
   FLOOR_PAIR_MOVE_WEIGHT,
 } from "@/lib/canvas/floor-pair";
 import { heroNavUsd } from "@/lib/vaults/rows";
-import { onchainExecutionsFor } from "@/lib/vaults/onchain-executions";
+import { handlerCaptureEvidence, onchainExecutionsFor } from "@/lib/vaults/onchain-executions";
 import { SEED_SLUGS, SEED_VAULTS } from "@/lib/vaults/seeds";
 import { measuredRouterReplay } from "@/lib/canvas/router-replay";
 import {
@@ -763,15 +763,20 @@ describe("the ledger's relocation rows", () => {
     expect(routerActivityRows(heroRecord())).toEqual([]);
   });
 
-  /* THE STAND-DOWN'S PREMISE, pinned. `routerActivityRows` deliberately does
-     not ask whether a chain ledger exists; the section places the call inside
-     its own `if (!hasChain)` block, so what a test CAN hold still is that the
-     attested slug is the one carrying a ledger and that the rows the router
-     would contribute are all older than it. Walked in a browser on a record
-     carrying both: eight chain rows, a Verify column, zero `Weight moved`. */
-  it("the attested slug is the one with a chain ledger, and the move predates it", () => {
-    const chain = onchainExecutionsFor(HERO_SLUG);
+  /* The stand-down's premise moved. `onchainExecutionsFor` now returns
+     `[]` on every slug (see `onchain-executions.ts`), so no vault page
+     receives the captured handler ledger; the captured rows still exist
+     as `handlerCaptureEvidence()` for a dedicated proof surface. What
+     this test now pins: the router's own contributed rows continue to
+     predate the handler capture as a whole, so a future page that DOES
+     print both never renders a router move ahead of the captured
+     history. */
+  it("the router's rows still predate the captured handler ledger, if both were surfaced", () => {
+    const chain = handlerCaptureEvidence();
     expect(chain.length).toBeGreaterThan(0);
+    // No hero page currently prints these rows — the vault page's
+    // getter returns empty. Pin that shape too.
+    expect(onchainExecutionsFor(HERO_SLUG)).toEqual([]);
     const oldestChainMs = Math.min(...chain.map((x) => x.timestamp * 1000));
     const record = { ...heroRecord(), automations: deriveAutomations(routedSource()) };
     const rows = routerActivityRows(record);

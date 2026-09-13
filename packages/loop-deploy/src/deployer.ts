@@ -11,7 +11,8 @@
  *   handler or the workflow.
  */
 
-import { addLoopWorkflow, newWorkflowId, removeLoopWorkflow } from "./builder.ts";
+import { addLoopWorkflow, mergeMissingWorkflows, newWorkflowId, removeLoopWorkflow, ServiceDocError, workflowIds } from "./builder.ts";
+import { friendlyErrorMessage } from "./friendly-error.ts";
 import { lookupMarket } from "./catalog.ts";
 import type { ChainPort } from "./chain.ts";
 import { componentConfigFor, cronFromSeconds, resolveLoopConfig, ValidationError, validateLoopConfig, type LoopConfig } from "./config.ts";
@@ -99,10 +100,10 @@ export class LoopDeployer {
     // WASM `buffer overrun while deserializing` in the operator logs.
     // Regression pin for the Aerodrome CL → Uniswap V3 migration bug.
     try {
-      await this.chain.verifyUniswapV3Pool(config.poolAddress);
+      await this.chain.verifyUniswapV3Pool(config.poolAddress, { minObservableSecs: 300 });
     } catch (err) {
       throw new ValidationError([
-        `poolAddress "${config.poolAddress}" does not respond as a Uniswap V3 pool: ${err instanceof Error ? err.message : String(err)}`,
+        `poolAddress "${config.poolAddress}" does not respond as a Uniswap V3 pool: ${friendlyErrorMessage(err)}`,
       ]);
     }
     const record = this.registry.create({
@@ -141,15 +142,28 @@ export class LoopDeployer {
       }
     }
     try {
-      // Deploys that never reached the service have nothing to remove.
+      // Deploys that never reached the service have nothing to remove. A
+      // workflow already absent on chain (out-of-band cleanup, or a prior
+      // half-completed delete that flipped status without writing the
+      // registry) is also a no-op: `removeLoopWorkflow` throws in that
+      // case and we treat it as success — the desired state is already
+      // in place.
       if (record.step === "service_updated" || record.step === "active") {
         const protectedIds = this.templateWorkflowId === undefined ? [] : [this.templateWorkflowId];
-        const cid = await this.mutateService((doc) => removeLoopWorkflow(doc, record.workflowId, protectedIds));
-        this.registry.update(id, { serviceCid: cid });
+        try {
+          const cid = await this.mutateService((doc) => removeLoopWorkflow(doc, record.workflowId, protectedIds));
+          this.registry.update(id, { serviceCid: cid });
+        } catch (err) {
+          if (err instanceof ServiceDocError && err.message.includes("does not exist in the service")) {
+            // Already gone. Fall through to the inactive flip.
+          } else {
+            throw err;
+          }
+        }
       }
       return this.registry.update(id, { status: "inactive", error: null });
     } catch (err) {
-      this.registry.update(id, { status: "failed", error: err instanceof Error ? err.message : String(err) });
+      this.registry.update(id, { status: "failed", error: friendlyErrorMessage(err) });
       throw err;
     }
   }
@@ -180,24 +194,53 @@ export class LoopDeployer {
         if (market === null) {
           throw new Error(`market catalog missing entry for ${config.candidateId}`);
         }
-        const handler = await this.chain.deployHandler(config.strategist, {
-          collateralToken: market.usdeAddress,
-          morpho: market.morphoAddress,
-          morphoOracle: market.oracleAddress,
-          morphoIrm: market.irmAddress,
-          morphoLltv: BigInt(market.lltv),
-          swapRouter: market.swapRouter,
-          poolFee: market.poolFee,
+        // Two windows to close on crash-resume:
+        //   1. Between submitting the deploy tx and reading its receipt.
+        //      Pre-persisting the tx hash lets a resumed run wait on the
+        //      same tx (idempotent via `waitForTransactionReceipt`) and
+        //      decode `VaultCreated` from its logs, so we never deploy
+        //      a second vault while the first one already landed.
+        //   2. Between decoding the vault address and writing it to the
+        //      registry. Same tx hash still on file: resume just re-runs
+        //      the (cheap) receipt decode and stores the address.
+        let txHash = record.deployTxHash;
+        if (txHash === null) {
+          txHash = await this.chain.submitDeployHandler(config.strategist, {
+            collateralToken: market.usdeAddress,
+            morpho: market.morphoAddress,
+            morphoOracle: market.oracleAddress,
+            morphoIrm: market.irmAddress,
+            morphoLltv: BigInt(market.lltv),
+            swapRouter: market.swapRouter,
+            poolFee: market.poolFee,
+          });
+          record = this.registry.update(id, { deployTxHash: txHash });
+        }
+        const handler = await this.chain.finalizeDeployHandler(txHash);
+        record = this.registry.update(id, {
+          handlerAddress: handler,
+          deployTxHash: null,
+          step: "handler_deployed",
+          status: "deploying",
+          error: null,
         });
-        record = this.registry.update(id, { handlerAddress: handler, step: "handler_deployed", status: "deploying", error: null });
       }
 
       if (record.step !== "service_updated" && record.step !== "active") {
         const handlerAddress = record.handlerAddress;
         if (handlerAddress === null) throw new Error(`loop ${id} reached ${record.step} without a handler`);
         const now = this.nowNanos();
-        const cid = await this.mutateService((doc) =>
-          addLoopWorkflow(
+        const cid = await this.mutateService((doc) => {
+          // Crash-resume idempotency: if the workflow already landed in
+          // service.json (setServiceURI succeeded, then we crashed before
+          // marking step="service_updated"), the second `addLoopWorkflow`
+          // would throw "workflow already exists" and wedge the loop
+          // forever while its vault keeps attesting. Detect the
+          // already-present case and return the doc unchanged; the outer
+          // `mutateService` treats reference-identical output as a no-op
+          // and reuses the current URI.
+          if (workflowIds(doc).includes(record.workflowId)) return doc;
+          return addLoopWorkflow(
             doc,
             {
               workflowId: record.workflowId,
@@ -214,14 +257,14 @@ export class LoopDeployer {
               },
             },
             this.templateWorkflowId,
-          ),
-        );
+          );
+        });
         record = this.registry.update(id, { serviceCid: cid, step: "service_updated" });
       }
 
       return this.registry.update(id, { step: "active", status: "active", error: null });
     } catch (err) {
-      this.registry.update(id, { status: "failed", error: err instanceof Error ? err.message : String(err) });
+      this.registry.update(id, { status: "failed", error: friendlyErrorMessage(err) });
       throw err;
     }
   }
@@ -236,17 +279,81 @@ export class LoopDeployer {
    * Serialized service.json mutation: fetch the manager's current document,
    * apply `edit`, pin the result, point the manager at it. Returns the new
    * document's ipfs:// URI.
+   *
+   * The in-process serialization tail alone is NOT enough: a second
+   * loop-server instance or any script calling `setServiceURI` would
+   * silently overwrite our edit (last-write-wins on the manager). To
+   * catch that, every attempt captures the chain block BEFORE fetching
+   * the base doc, scans `ServiceURIUpdated` events between that
+   * checkpoint and our tx's block, and re-runs the whole cycle if
+   * anyone landed a `setServiceURI` in between. The idempotency check
+   * in the caller's `edit` (see `runPipeline`'s "workflow already
+   * present" branch) makes re-runs cheap: once our workflow is in the
+   * doc, `edit` returns the doc unchanged and the retry short-circuits.
    */
   private mutateService(edit: (doc: unknown) => unknown): Promise<string> {
+    const MAX_ATTEMPTS = 5;
     const run = async (): Promise<string> => {
-      const currentUri = await this.chain.getServiceUri();
-      const currentText = await this.ipfs.fetchText(currentUri);
-      const doc = parseLossless(currentText);
-      const edited = edit(doc);
-      const nextText = stringifyLossless(edited, 2);
-      const nextUri = await this.ipfs.pinText(nextText, "service.json");
-      await this.chain.setServiceUri(nextUri);
-      return nextUri;
+      let lastError: Error | null = null;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+        const checkpoint = await this.chain.getCurrentBlockNumber();
+        const currentUri = await this.chain.getServiceUri();
+        const currentText = await this.ipfs.fetchText(currentUri);
+        const doc = parseLossless(currentText);
+        const edited = edit(doc);
+        if (edited === doc) {
+          // Edit was a no-op (workflow already present, or the caller's
+          // resume-safe check in `runPipeline` short-circuited): the
+          // current URI already reflects the desired state, no write.
+          return currentUri;
+        }
+        const nextText = stringifyLossless(edited, 2);
+        const nextUri = await this.ipfs.pinText(nextText, "service.json");
+        const { blockNumber: writeBlock } = await this.chain.setServiceUri(nextUri);
+        // Race detection: any ServiceURIUpdated event strictly between
+        // our checkpoint and our own tx's block means another writer
+        // landed a mutation on top of the base we read. `postUri` tells
+        // us who won the last write.
+        const overlaps = await this.chain.getServiceUriUpdates(checkpoint + 1n, writeBlock - 1n);
+        const postUri = await this.chain.getServiceUri();
+
+        if (overlaps.length === 0 && postUri === nextUri) {
+          return nextUri;
+        }
+
+        if (postUri === nextUri && overlaps.length > 0) {
+          // We won the race BUT clobbered other writers whose events
+          // land in the window. Rescue their workflows by merging every
+          // id present in each clobbered doc but missing from ours,
+          // then re-pin and re-set. The subsequent iteration verifies
+          // the merge itself did not race.
+          let mergedDoc = edited;
+          for (const clobberedUri of overlaps) {
+            const clobberedText = await this.ipfs.fetchText(clobberedUri);
+            const clobberedDoc = parseLossless(clobberedText);
+            mergedDoc = mergeMissingWorkflows(mergedDoc, clobberedDoc);
+          }
+          if (mergedDoc !== edited) {
+            const mergedText = stringifyLossless(mergedDoc, 2);
+            const mergedUri = await this.ipfs.pinText(mergedText, "service.json");
+            await this.chain.setServiceUri(mergedUri);
+          }
+          // Loop back: `getServiceUri()` is now either our merged URI
+          // (verify and return) or someone else's (retry with their
+          // base). Either path lands in the top-of-loop refetch.
+          lastError = new Error(
+            `service.json mutation clobbered ${overlaps.length} concurrent writer(s); merged and retrying to verify`,
+          );
+          continue;
+        }
+
+        // Someone overwrote us (postUri !== nextUri): refetch from
+        // their base and re-run our edit on top of it.
+        lastError = new Error(
+          `service.json mutation lost to a concurrent writer: attempt=${attempt + 1}; retrying`,
+        );
+      }
+      throw lastError ?? new Error(`service.json mutation exhausted ${MAX_ATTEMPTS} retries`);
     };
     // Chain onto the tail regardless of predecessor outcome; each mutation
     // fails or succeeds on its own.

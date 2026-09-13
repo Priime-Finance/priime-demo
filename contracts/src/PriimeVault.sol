@@ -86,6 +86,29 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///         already queued can always top up.
     uint256 public constant MAX_QUEUE_LENGTH = 100;
 
+    /// @notice Minimum USDC (base units) the FIRST depositor into a
+    ///         fresh vault must escrow to bootstrap. Once shares exist
+    ///         the check no longer applies — later depositors can size
+    ///         normally, and the refund path handles anything the strike
+    ///         cannot price.
+    ///
+    ///         Rationale: the classic first-depositor inflation vector
+    ///         starts with a 1-unit bootstrap and then donates the
+    ///         attacker's capital directly to `address(this)`. The
+    ///         operator quorum's NAV read counts idle USDC (excluding
+    ///         pending escrow, reserved redemption payout and refund
+    ///         book) as part of NAV, so the donation folds in at the
+    ///         next strike and dilutes anyone who deposits after.
+    ///         Requiring a real bootstrap denominates the attack's cost
+    ///         at least `MIN_BOOTSTRAP_ASSETS`, which the attacker must
+    ///         lock in as ownership; a subsequent depositor's dilution
+    ///         is bounded by that ownership, and the attack pays for
+    ///         itself only if the eventual dilution exceeds the
+    ///         bootstrap. `1e6` (1 USDC in USDC's 6-dec base units) is
+    ///         a demo-appropriate floor; a mainnet redeployment should
+    ///         raise this to reflect real capital-at-risk sizing.
+    uint256 public constant MIN_BOOTSTRAP_ASSETS = 1e6;
+
     /// @notice Service manager (POA stake registry) that validates operator sigs.
     IPriimeServiceManager public immutable serviceManager;
 
@@ -138,6 +161,18 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     address[] private _depositQueue;
     /// @notice Escrowed USDC awaiting fulfillment; NOT part of NAV.
     uint256 public totalPendingDepositAssets;
+    /// @notice Per-controller USDC balance owed as a REFUND, credited when
+    ///         a strike fulfillment finds the deposit unpriceable (attested
+    ///         NAV is zero, or the amount is too small to buy one share).
+    ///         Pull-claimed via `claimDepositRefund`, never push-transferred
+    ///         inside a strike — a push would let a USDC-blacklisted or
+    ///         reverting controller brick every future strike.
+    mapping(address => uint256) private _refundableDepositAssets;
+    /// @notice Aggregate of `_refundableDepositAssets` across every
+    ///         controller. Part of the vault's escrow floor: refunds sit
+    ///         in the vault's own USDC balance until pulled, and the
+    ///         strategist may not spend that balance.
+    uint256 public totalRefundableDepositAssets;
 
     // Redeem request state (per controller, requestId 0 aggregation).
     mapping(address => uint256) private _pendingRedeemShares;
@@ -206,6 +241,10 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///         (zero NAV against outstanding shares, or an amount too small to
     ///         buy one share) and was returned to its controller.
     event DepositRequestRefunded(address indexed controller, uint256 assets);
+    /// @notice A controller pulled a refund `_fulfillDeposits` had credited on
+    ///         a prior strike. Separate from `DepositRequestRefunded` so
+    ///         indexers can distinguish "credit landed" from "pull happened".
+    event DepositRefundClaimed(address indexed controller, address indexed receiver, uint256 assets);
     /// @notice A strategist call left the vault above the escrow floor. The
     ///         full calldata is logged: `execute` is the vault's only arbitrary
     ///         call path, so this is the audit trail for every strategy action
@@ -246,6 +285,12 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///         breach flag. Existing claims are unaffected; only NEW
     ///         requests are refused, until the next strike clears the flag.
     error VaultBreached(uint16 flags);
+    /// @notice `requestDeposit` was called while the vault had zero share
+    ///         supply and the amount escrowed was smaller than
+    ///         `MIN_BOOTSTRAP_ASSETS`. Prevents the classic first-
+    ///         depositor inflation attack (bootstrap with 1 wei, donate
+    ///         to inflate NAV, dilute later depositors).
+    error MinimumBootstrapNotMet(uint256 provided, uint256 required);
 
     /// @notice Batch of on-chain steps the operator quorum computed for
     ///         THIS strike. `targets[i]` is called with `calldatas[i]` under
@@ -316,6 +361,20 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///         any other flashloan denomination would leave the callback
     ///         approving / swapping the wrong balances.
     error PlanFlashLoanTokenRefused(address token);
+    /// @notice A `swapRouter.exactInputSingle` step named a `tokenIn` or
+    ///         `tokenOut` outside the vault's `{asset(), collateralToken}`
+    ///         pair. The recursive loop only swaps between those two, and
+    ///         `onMorphoFlashLoan` hardcodes that pair; every other swap
+    ///         shape would move value into a token the vault has no
+    ///         reason to hold, which is the drain vector the natspec
+    ///         already claimed was prevented.
+    error PlanSwapTokenRefused(address token);
+    /// @notice A `swapRouter.exactInputSingle` step named a fee tier that
+    ///         does not match the vault's pinned `poolFee`. Different fee
+    ///         tiers pick different Uniswap V3 pools, and a strategist-
+    ///         controlled pool at a foreign fee would route the swap
+    ///         through liquidity the pitch never priced.
+    error PlanSwapFeeRefused(uint24 fee);
     error SelfCallOnly();
     error AsyncFlowOnly();
     /// @notice `onMorphoFlashLoan` was invoked by a caller other than the
@@ -395,7 +454,18 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///        - `morpho.{supplyCollateral, borrow, repay, withdrawCollateral, flashLoan}`
     ///          with every address argument (`onBehalf`, `receiver`,
     ///          flashloan `token`) pinned to `address(this)` / `asset()`.
-    ///        - `swapRouter.exactInputSingle` with `recipient == address(this)`.
+    ///        - `swapRouter.exactInputSingle` with `recipient` pinned to
+    ///          `address(this)`, `tokenIn` and `tokenOut` pinned to
+    ///          `{asset(), collateralToken}`, and `fee` pinned to the
+    ///          immutable `poolFee`. `amountIn`, `amountOutMinimum`
+    ///          (slippage) and `sqrtPriceLimitX96` are NOT pinned — they
+    ///          are quorum-chosen per strike, and the operator set's
+    ///          `Signable` bytes cover them. A single compromised
+    ///          operator cannot move the swap alone; a corrupt quorum
+    ///          could still set a wide `amountOutMinimum` and eat
+    ///          slippage, so treat this as defense-in-depth on the
+    ///          per-target surface — the quorum's own honesty is the
+    ///          primary control.
     ///        - `asset() / collateralToken` `.approve` only, and only to
     ///          `morpho` or `swapRouter` — the two spenders the loop and
     ///          the flashLoan callback need.
@@ -436,6 +506,18 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
             IUniswapV3SwapRouter02.ExactInputSingleParams memory p =
                 abi.decode(data[4:], (IUniswapV3SwapRouter02.ExactInputSingleParams));
             if (p.recipient != address(this)) revert PlanReceiverNotSelf(p.recipient);
+            // Pin the swap to the loop's two-asset surface. Without this, a
+            // strategist could route USDC → JUNK through a Uniswap V3 pool
+            // they control (recipient == vault, so the surface-only guard
+            // above lets it through), and skim value on the pool side; the
+            // vault's remaining USDC balance would still clear the escrow
+            // floor. The natspec on `poolFee` already claimed this shape
+            // was prevented; now the code matches the claim.
+            address usdc = asset();
+            address usde = collateralToken;
+            if (p.tokenIn != usdc && p.tokenIn != usde) revert PlanSwapTokenRefused(p.tokenIn);
+            if (p.tokenOut != usdc && p.tokenOut != usde) revert PlanSwapTokenRefused(p.tokenOut);
+            if (p.fee != poolFee) revert PlanSwapFeeRefused(p.fee);
         } else if (target == asset() || target == collateralToken) {
             if (sel != IERC20.approve.selector) revert PlanSelectorRefused(target, sel);
             (address spender,) = abi.decode(data[4:], (address, uint256));
@@ -481,7 +563,7 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
         // rest of this self-call and shares stay in `_pendingRedeemShares`
         // for the next strike to try again.
         _fulfillRedeems();
-        uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
+        uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets + totalRefundableDepositAssets;
         uint256 balance = IERC20(asset()).balanceOf(address(this));
         if (balance < floor) revert EscrowFloorBreached(balance, floor);
     }
@@ -580,31 +662,56 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     // Strategist execution path
     // ------------------------------------------------------------------------
 
-    /// @notice Perform an arbitrary external call from the vault. This is how
-    ///         the deploy-time loop entry script drives the Morpho position
-    ///         (approvals, supply, borrow, swap) from the vault's own balance,
-    ///         so the vault itself holds the position the NAV component reads.
-    /// @dev Strategist-only; a trusted demo role (see `strategist`). Guards:
-    ///      (1) caller must be the strategist; (2) `target` must not be the
-    ///      vault itself, so `execute` can never re-enter request/claim/NAV
-    ///      paths; (3) after the call, the vault's asset balance must remain
-    ///      at or above the escrow floor `totalPendingDepositAssets +
-    ///      totalClaimableRedeemAssets` — strategy capital is only the
-    ///      folded-in share pool; escrowed pending deposits and reserved
-    ///      redemption payouts can never be spent. Calling the asset token is
-    ///      allowed (approvals need it); the floor covers misuse. Reverts
-    ///      from `target` are bubbled with their original revert data.
+    /// @notice Perform an external call from the vault against the same
+    ///         allowlisted surface a quorum-signed plan is bound to. This
+    ///         is how the deploy-time loop entry script drives the Morpho
+    ///         position (approvals, supply, borrow, swap) from the vault's
+    ///         own balance, so the vault itself holds the position the NAV
+    ///         component reads.
+    /// @dev Strategist-only; a trusted demo role (see `strategist`). Guards
+    ///      compose:
+    ///        (1) caller must be the strategist;
+    ///        (2) `target` must not be the vault itself, so `execute` can
+    ///            never re-enter request/claim/NAV paths;
+    ///        (3) `_validatePlanStep(target, data)` runs BEFORE the call,
+    ///            so the strategist is confined to the same
+    ///            recursive-loop surface a quorum-signed plan step is
+    ///            (Morpho supply/borrow/repay/withdrawCollateral/flashLoan
+    ///            with `onBehalf`/`receiver`/`token` pinned to the vault,
+    ///            Uniswap V3 `exactInputSingle` with `recipient == vault`,
+    ///            and `approve` on asset/collateral only to Morpho or the
+    ///            swap router). This closes the direct-transfer drain
+    ///            (`execute(usde, usde.transfer(strategist, x))`) that
+    ///            the earlier floor-only guard did not cover;
+    ///        (4) after the call, the vault's asset balance must remain at
+    ///            or above the escrow floor
+    ///            `totalPendingDepositAssets + totalClaimableRedeemAssets + totalRefundableDepositAssets`.
+    ///            The allowlist alone cannot see that pending deposits are
+    ///            reserved USDC, so the floor stays as a second wall.
     ///
-    ///      The floor is evaluated at the end of this call only. Allowances
-    ///      granted through `execute` persist beyond it, so approvals are
-    ///      expected to be exact-amount and revoked once the entry sequence
-    ///      completes. Emits `Executed` once the floor check passes.
-    /// @param target Contract to call (never this vault).
+    ///      The Priime-independent-exit pitch is unchanged: every step of
+    ///      a manual unwind (repay Morpho debt, withdraw collateral, swap
+    ///      USDe→USDC via Uniswap V3) is on the allowlist because those
+    ///      are exactly the steps `plan_deleverage` composes. What the
+    ///      strategist can no longer do is route USDC or USDe out of the
+    ///      vault to a personal address — users get their money through
+    ///      the ERC-4626 request-and-claim flow, share-proportional
+    ///      against NAV, the same way they always did.
+    ///
+    ///      The floor is evaluated at the end of this call only.
+    ///      Allowances granted through `execute` persist beyond it, so
+    ///      approvals are expected to be exact-amount and revoked once
+    ///      the entry sequence completes. Reverts from `target` are
+    ///      bubbled with their original revert data. Emits `Executed`
+    ///      once the floor check passes.
+    /// @param target Contract to call (never this vault, must satisfy
+    ///        `_validatePlanStep`).
     /// @param data   Full calldata for the target.
     /// @return result The target's raw return data.
     function execute(address target, bytes calldata data) external returns (bytes memory result) {
         if (msg.sender != strategist) revert NotStrategist();
         if (target == address(this)) revert SelfCallForbidden();
+        _validatePlanStep(target, data);
 
         bool success;
         (success, result) = target.call(data);
@@ -615,7 +722,7 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
             }
         }
 
-        uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
+        uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets + totalRefundableDepositAssets;
         uint256 balance = IERC20(asset()).balanceOf(address(this));
         if (balance < floor) revert EscrowFloorBreached(balance, floor);
 
@@ -637,13 +744,15 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///      swap, back to solvent) without every step reasserting a floor
     ///      the sequence is trying to restore. The pre-check makes it
     ///      strictly a recovery tool: at any point above floor it reverts.
-    ///      `msg.sender == strategist` + no self-call keeps the trust
-    ///      surface identical to `execute`.
+    ///      `msg.sender == strategist`, no self-call, and the same
+    ///      `_validatePlanStep` allowlist `execute` runs — so the trust
+    ///      surface of this path is identical to `execute`'s, minus one
+    ///      guard that only made sense when the vault could satisfy it.
     function emergencyExecute(address target, bytes calldata data) external returns (bytes memory result) {
         if (msg.sender != strategist) revert NotStrategist();
         if (target == address(this)) revert SelfCallForbidden();
-
-        uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets;
+        _validatePlanStep(target, data);
+        uint256 floor = totalPendingDepositAssets + totalClaimableRedeemAssets + totalRefundableDepositAssets;
         uint256 balance = IERC20(asset()).balanceOf(address(this));
         if (balance >= floor) revert VaultNotStuck(balance, floor);
 
@@ -668,6 +777,11 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     ///      and the deposit queue holds `MAX_QUEUE_LENGTH` controllers.
     function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256) {
         if (assets == 0) revert ZeroAmount();
+        // Bootstrap gate: a zero-supply vault requires a real first
+        // deposit. See `MIN_BOOTSTRAP_ASSETS`.
+        if (totalSupply() == 0 && assets < MIN_BOOTSTRAP_ASSETS) {
+            revert MinimumBootstrapNotMet(assets, MIN_BOOTSTRAP_ASSETS);
+        }
         if (breachFlags != 0) revert VaultBreached(breachFlags);
         if (msg.sender != owner && !_operators[owner][msg.sender]) revert NotOwnerOrOperator();
 
@@ -775,6 +889,35 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
     /// @notice ERC-7540 overload: claim on behalf of `controller`.
     function mint(uint256 shares, address receiver, address controller) external returns (uint256) {
         return _claimMint(shares, receiver, controller);
+    }
+
+    /// @notice Pull a refund credited when a prior strike found this
+    ///         controller's deposit unpriceable (attested NAV zero, or
+    ///         amount too small to buy one share at the strike price).
+    ///         Sends the whole refundable balance to `receiver`.
+    /// @dev    Refunds are pull-only: pushing inside `_fulfillDeposits`
+    ///         would let a USDC-blacklisted controller revert every
+    ///         future strike and brick the vault. The escrow floor
+    ///         includes `totalRefundableDepositAssets` so the strategist
+    ///         cannot spend the refund balance between credit and pull.
+    ///         Auth is the same `controller` or approved-operator gate
+    ///         the other 7540 claim overloads use.
+    /// @param receiver The address that receives the refunded USDC.
+    /// @param controller The controller whose refund is claimed.
+    /// @return assets The number of USDC base units transferred.
+    function claimDepositRefund(address receiver, address controller) external returns (uint256 assets) {
+        _requireControllerOrOperator(controller);
+        assets = _refundableDepositAssets[controller];
+        if (assets == 0) revert ZeroAmount();
+        _refundableDepositAssets[controller] = 0;
+        totalRefundableDepositAssets -= assets;
+        IERC20(asset()).safeTransfer(receiver, assets);
+        emit DepositRefundClaimed(controller, receiver, assets);
+    }
+
+    /// @notice Refundable USDC balance a controller can currently pull.
+    function refundableDepositAssets(address controller) external view returns (uint256) {
+        return _refundableDepositAssets[controller];
     }
 
     /// @notice Claim fulfilled redemption payout by shares. The third
@@ -1073,11 +1216,20 @@ contract PriimeVault is ERC4626, IPriimeServiceHandler, IMorphoFlashLoanCallback
             } else {
                 shares = nav == 0 ? 0 : (assets * supply) / nav;
                 if (shares == 0) {
-                    // Unpriceable: release the escrow back to the controller.
+                    // Unpriceable at this strike's price. Push-transferring
+                    // the refund here would let a USDC-blacklisted (or
+                    // otherwise reverting) controller brick every future
+                    // strike, freezing NAV settlement, redemptions and
+                    // everyone else's escrow. Credit the refund instead
+                    // and require the controller to pull it via
+                    // `claimDepositRefund`; the vault's own USDC
+                    // balance carries the refund and the escrow floor
+                    // now covers `totalRefundableDepositAssets` too so
+                    // the strategist cannot spend it.
                     _pendingDepositAssets[controller] = 0;
                     totalPendingDepositAssets -= assets;
-
-                    IERC20(asset()).safeTransfer(controller, assets);
+                    _refundableDepositAssets[controller] += assets;
+                    totalRefundableDepositAssets += assets;
 
                     emit DepositRequestRefunded(controller, assets);
                     continue;

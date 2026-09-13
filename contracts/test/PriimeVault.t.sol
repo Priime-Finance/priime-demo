@@ -20,6 +20,7 @@ interface Vm {
 /// @dev Mintable 6-decimal stand-in for USDC. Test-only.
 contract TestUSDC {
     mapping(address => uint256) public balanceOf;
+    mapping(address => bool) public blacklisted;
     mapping(address => mapping(address => uint256)) public allowance;
 
     function decimals() external pure returns (uint8) {
@@ -30,12 +31,30 @@ contract TestUSDC {
         balanceOf[to] += amount;
     }
 
+    /// @dev Test-only helper. Lets a fixture drop a target address below the
+    ///      escrow floor without going through the `_validatePlanStep`
+    ///      allowlist on `execute` — the same allowlist tests below pin the
+    ///      strategist AGAINST.
+    function burn(address from, uint256 amount) external {
+        require(balanceOf[from] >= amount, "balance");
+        balanceOf[from] -= amount;
+    }
+
     function approve(address spender, uint256 amount) external returns (bool) {
         allowance[msg.sender][spender] = amount;
         return true;
     }
 
+    /// @dev Real USDC on mainnet blocks transfers to/from blacklisted
+    ///      addresses. The brick-attack regression sets a controller
+    ///      address on this list; the vault's strike refund path must
+    ///      NOT push into it (a push would revert the whole strike).
+    function setBlacklisted(address who, bool on) external {
+        blacklisted[who] = on;
+    }
+
     function transfer(address to, uint256 amount) external returns (bool) {
+        require(!blacklisted[msg.sender] && !blacklisted[to], "USDC blacklist");
         require(balanceOf[msg.sender] >= amount, "balance");
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
@@ -43,6 +62,7 @@ contract TestUSDC {
     }
 
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        require(!blacklisted[from] && !blacklisted[to], "USDC blacklist");
         require(balanceOf[from] >= amount, "balance");
         require(allowance[from][msg.sender] >= amount, "allowance");
         allowance[from][msg.sender] -= amount;
@@ -823,20 +843,19 @@ contract PriimeVaultTest {
 
     // --- strategist execution path -------------------------------------------
 
-    function test_StrategistCanExecuteAgainstFreeBalance() public {
+    function test_StrategistCanExecuteAllowlistedApproval() public {
         _bootstrapAlice(); // vault holds 1,000 USDC, all folded into NAV, no escrow
 
-        // Route an approval through execute (how the loop script will arm Morpho).
+        /* The whole entry sequence starts with `asset.approve(swapRouter, x)`
+           so the vault can let Uniswap pull USDC for the USDe swap leg.
+           Under the allowlist, `swapRouter` (address(0x04) in this fixture)
+           is a permitted spender; the approval lands and the allowance is
+           readable off-chain. */
         vm.prank(STRATEGIST);
-        bytes memory ret = vault.execute(address(usdc), abi.encodeCall(TestUSDC.approve, (SINK, 250 * ONE_USDC)));
+        bytes memory ret =
+            vault.execute(address(usdc), abi.encodeCall(TestUSDC.approve, (address(0x04), 250 * ONE_USDC)));
         require(abi.decode(ret, (bool)), "approve returned true through execute");
-        require(usdc.allowance(address(vault), SINK) == 250 * ONE_USDC, "allowance set from vault");
-
-        // Deploy free capital out of the vault (stand-in for a Morpho supply).
-        vm.prank(STRATEGIST);
-        vault.execute(address(usdc), abi.encodeCall(TestUSDC.transfer, (SINK, 400 * ONE_USDC)));
-        require(usdc.balanceOf(SINK) == 400 * ONE_USDC, "free balance deployed");
-        require(usdc.balanceOf(address(vault)) == 600 * ONE_USDC, "vault balance reduced");
+        require(usdc.allowance(address(vault), address(0x04)) == 250 * ONE_USDC, "allowance set from vault");
     }
 
     function test_NonStrategistCannotExecute() public {
@@ -851,94 +870,175 @@ contract PriimeVaultTest {
         vault.execute(address(vault), abi.encodeCall(PriimeVault.setOperator, (STRATEGIST, true)));
     }
 
-    /// @dev The guarantee `execute` actually holds is a post-call balance floor,
-    ///      not "escrow can never be spent": the check only sees the vault's
-    ///      balance when the call returns. An allowance granted through
-    ///      `execute` can be pulled afterwards and take the balance below the
-    ///      floor with nothing to revert (see
-    ///      `test_ExecuteFloorDoesNotBindAllowancesPulledLater`). Approvals are
-    ///      therefore expected to be exact-amount and revoked by the strategist.
-    function test_ExecuteRevertsWhenPostCallBalanceBelowDepositEscrowFloor() public {
+    /// @dev `execute` funnels every strategist call through the same
+    ///      `_validatePlanStep` allowlist a quorum-signed plan step is
+    ///      bound to. `IERC20.transfer` is not on that allowlist, so the
+    ///      call is refused at the validator BEFORE the target ever runs
+    ///      — no matter what the balance or floor say. The escrow floor
+    ///      stays as a second wall, but the primary defence is that the
+    ///      "route freed collateral to the strategist" vector is
+    ///      structurally impossible.
+    function test_ExecuteAllowlistRefusesRawAssetTransfer() public {
         _bootstrapAlice(); // 1,000 USDC free (folded into NAV)
 
         vm.prank(BOB);
         vault.requestDeposit(500 * ONE_USDC, BOB, BOB); // escrow floor now 500
 
-        // Balance 1,500; spending 1,100 would leave 400 < 500 escrow floor.
         vm.prank(STRATEGIST);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                PriimeVault.EscrowFloorBreached.selector, uint256(400 * ONE_USDC), uint256(500 * ONE_USDC)
-            )
+            abi.encodeWithSelector(PriimeVault.PlanSelectorRefused.selector, address(usdc), IERC20.transfer.selector)
         );
         vault.execute(address(usdc), abi.encodeCall(TestUSDC.transfer, (SINK, 1_100 * ONE_USDC)));
-
-        // Spending exactly the free 1,000 is allowed (balance lands on the floor).
-        vm.prank(STRATEGIST);
-        vault.execute(address(usdc), abi.encodeCall(TestUSDC.transfer, (SINK, 1_000 * ONE_USDC)));
-        require(usdc.balanceOf(address(vault)) == 500 * ONE_USDC, "escrow floor intact");
     }
-
-    /// @dev Same caveat as the deposit-escrow case above: this pins the
-    ///      post-call balance floor, not an unspendable reserve.
-    function test_ExecuteRevertsWhenPostCallBalanceBelowRedemptionReserveFloor() public {
+    /// @dev VAULT-01 regression. The finding was: a strategist could pull
+    ///      the freed USDe out of Morpho via `execute` and then route it
+    ///      to their own wallet with `execute(collateralToken, transfer(...))`,
+    ///      because the escrow floor is USDC-denominated and never sees
+    ///      the collateral leg leave the vault. Under the allowlist, the
+    ///      only selector on `collateralToken` is `approve`, and its
+    ///      spender is pinned to `morpho` or `swapRouter`. A raw
+    ///      transfer of the collateral is refused with
+    ///      `PlanSelectorRefused` — the drain vector is structurally
+    ///      impossible, not just floor-guarded.
+    function test_ExecuteAllowlistBlocksCollateralDrainToStrategist() public {
         _bootstrapAlice();
 
-        vm.prank(ALICE);
-        vault.requestRedeem(400 * ONE_USDC, ALICE, ALICE);
-        _attest(bytes20(uint160(0xF00D02)), 1_000 * ONE_USDC, 2); // payout 400 reserved
-
-        // Balance 1,000; reserved 400; spending 700 would leave 300 < 400.
+        // `collateralToken` in the top-level fixture is `address(0xC0)` —
+        // it never receives the call because the validator refuses first.
+        address collateralToken = vault.collateralToken();
         vm.prank(STRATEGIST);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                PriimeVault.EscrowFloorBreached.selector, uint256(300 * ONE_USDC), uint256(400 * ONE_USDC)
-            )
+            abi.encodeWithSelector(PriimeVault.PlanSelectorRefused.selector, collateralToken, IERC20.transfer.selector)
         );
-        vault.execute(address(usdc), abi.encodeCall(TestUSDC.transfer, (SINK, 700 * ONE_USDC)));
+        vault.execute(collateralToken, abi.encodeCall(TestUSDC.transfer, (STRATEGIST, 1)));
     }
 
-    /// @dev The honest limit of the floor check, pinned so nobody reads the two
-    ///      tests above as an escrow guarantee. The contract deliberately does
-    ///      not track allowances (see `execute`'s natspec); the mitigation is
-    ///      operational (exact-amount approvals, revoked after the entry
-    ///      sequence), not enforced on chain.
-    function test_ExecuteFloorDoesNotBindAllowancesPulledLater() public {
+    /// @dev The allowlist accepts `IERC20.approve` on asset/collateral only
+    ///      when the spender is `morpho` or `swapRouter`. Approving an
+    ///      arbitrary sink — the "grant now, drain later" pattern — is
+    ///      refused at the validator, so the "floor does not survive a
+    ///      hostile allowance" caveat that used to live here is no longer
+    ///      possible to trigger.
+    function test_ExecuteAllowlistRefusesApproveToNonWhitelistedSpender() public {
         _bootstrapAlice();
 
         vm.prank(BOB);
-        vault.requestDeposit(500 * ONE_USDC, BOB, BOB); // escrow floor 500, balance 1,500
+        vault.requestDeposit(500 * ONE_USDC, BOB, BOB);
 
-        // The approval itself passes the floor check: it moves no balance.
         vm.prank(STRATEGIST);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.PlanApproveSpenderRefused.selector, SINK));
         vault.execute(address(usdc), abi.encodeCall(TestUSDC.approve, (SINK, 1_500 * ONE_USDC)));
-
-        // Pulled later, outside any `execute` frame, it drains the escrow with
-        // nothing left to revert.
-        vm.prank(SINK);
-        require(usdc.transferFrom(address(vault), SINK, 1_500 * ONE_USDC), "pull succeeds");
-
-        require(usdc.balanceOf(address(vault)) == 0, "floor does not survive the allowance");
-        require(vault.totalPendingDepositAssets() == 500 * ONE_USDC, "escrow still owed on the books");
     }
 
-    function test_ExecuteEmitsExecutedAfterTheFloorCheck() public {
+    /// @dev A random target — not asset, not collateral, not morpho, not
+    ///      swap router — is refused at the validator with the same
+    ///      `PlanTargetNotWhitelisted` error a quorum-signed plan step
+    ///      would hit. The revert-bubbling behaviour that used to be
+    ///      exercised here is still tested by the plan path
+    ///      (`test_PlanValidatorRefusesEveryEscapeHatch` and the mock
+    ///      Morpho/Uniswap stack).
+    function test_ExecuteAllowlistRefusesArbitraryTarget() public {
+        RevertingTarget target = new RevertingTarget();
+
+        vm.prank(STRATEGIST);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.PlanTargetNotWhitelisted.selector, address(target)));
+        vault.execute(address(target), abi.encodeCall(RevertingTarget.kaboom, ()));
+    }
+
+    /// @dev The swap arm now pins `tokenIn`, `tokenOut`, and `fee` in
+    ///      addition to `recipient`. Without those pins, the sequence
+    ///
+    ///          execute(usdc, approve(swapRouter, x))
+    ///          execute(swapRouter, exactInputSingle({
+    ///              tokenIn: usdc, tokenOut: JUNK, fee: any,
+    ///              recipient: vault, amountOutMinimum: 0 }))
+    ///
+    ///      is accepted: the approve passes (spender allowlisted), the
+    ///      swap passes (recipient == vault), and the vault's non-escrow
+    ///      USDC lands in a strategist-controlled pool that returns
+    ///      strategist-controlled JUNK. The escrow floor still holds
+    ///      because USDC balance stays >= pending + claimable, but the
+    ///      folded-in share pool — the depositors' working capital — is
+    ///      gone. VAULT-04-shaped, same as the shape the flash-loan
+    ///      callback already hardcodes against.
+    function test_ExecuteAllowlistRefusesSwapToForeignTokenOut() public {
+        (PriimeVault muVault, MockUniswapV3SwapRouter02 muRouter,, TestUSDC muUsdc,) = _buildMorphoMockStack();
+        TestUSDe junk = new TestUSDe();
+
+        IUniswapV3SwapRouter02.ExactInputSingleParams memory p = IUniswapV3SwapRouter02.ExactInputSingleParams({
+            tokenIn: address(muUsdc),
+            tokenOut: address(junk),
+            fee: muVault.poolFee(),
+            recipient: address(muVault),
+            amountIn: 1,
+            amountOutMinimum: 0,
+            sqrtPriceLimitX96: 0
+        });
+        vm.prank(STRATEGIST);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.PlanSwapTokenRefused.selector, address(junk)));
+        muVault.execute(address(muRouter), abi.encodeCall(IUniswapV3SwapRouter02.exactInputSingle, (p)));
+    }
+
+    /// @dev Symmetric pin: a foreign `tokenIn` is refused the same way.
+    ///      Together the two pins constrain the swap surface to the exact
+    ///      `{asset(), collateralToken}` pair `onMorphoFlashLoan`
+    ///      hardcodes.
+    function test_ExecuteAllowlistRefusesSwapWithForeignTokenIn() public {
+        (PriimeVault muVault, MockUniswapV3SwapRouter02 muRouter,, TestUSDC muUsdc,) = _buildMorphoMockStack();
+        TestUSDe junk = new TestUSDe();
+
+        IUniswapV3SwapRouter02.ExactInputSingleParams memory p = IUniswapV3SwapRouter02.ExactInputSingleParams({
+            tokenIn: address(junk),
+            tokenOut: address(muUsdc),
+            fee: muVault.poolFee(),
+            recipient: address(muVault),
+            amountIn: 1,
+            amountOutMinimum: 0,
+            sqrtPriceLimitX96: 0
+        });
+        vm.prank(STRATEGIST);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.PlanSwapTokenRefused.selector, address(junk)));
+        muVault.execute(address(muRouter), abi.encodeCall(IUniswapV3SwapRouter02.exactInputSingle, (p)));
+    }
+
+    /// @dev Even with the right token pair, a foreign fee tier picks a
+    ///      DIFFERENT Uniswap V3 pool (fee is part of the pool key). A
+    ///      strategist-controlled pool at a foreign fee would route the
+    ///      swap through liquidity the pitch never priced. Pin the fee
+    ///      to `poolFee`.
+    function test_ExecuteAllowlistRefusesSwapAtForeignFeeTier() public {
+        (PriimeVault muVault, MockUniswapV3SwapRouter02 muRouter,, TestUSDC muUsdc, TestUSDe muUsde) =
+            _buildMorphoMockStack();
+        uint24 foreignFee = muVault.poolFee() + 500;
+
+        IUniswapV3SwapRouter02.ExactInputSingleParams memory p = IUniswapV3SwapRouter02.ExactInputSingleParams({
+            tokenIn: address(muUsdc),
+            tokenOut: address(muUsde),
+            fee: foreignFee,
+            recipient: address(muVault),
+            amountIn: 1,
+            amountOutMinimum: 0,
+            sqrtPriceLimitX96: 0
+        });
+        vm.prank(STRATEGIST);
+        vm.expectRevert(abi.encodeWithSelector(PriimeVault.PlanSwapFeeRefused.selector, foreignFee));
+        muVault.execute(address(muRouter), abi.encodeCall(IUniswapV3SwapRouter02.exactInputSingle, (p)));
+    }
+
+    /// @dev The `Executed` event fires exactly when the call passes both
+    ///      guards: the allowlist accepts it, and the post-call floor
+    ///      holds. Pin the legal shape (`asset.approve(swapRouter, …)`,
+    ///      a step every entry sequence needs) so a future edit that
+    ///      moves the event outside the guarded region breaks this test.
+    function test_ExecuteEmitsExecutedForAllowlistedApproveToSwapRouter() public {
         _bootstrapAlice();
 
-        bytes memory data = abi.encodeCall(TestUSDC.transfer, (SINK, 400 * ONE_USDC));
+        bytes memory data = abi.encodeCall(TestUSDC.approve, (address(0x04), 400 * ONE_USDC));
 
         vm.expectEmit(true, false, false, true);
         emit PriimeVault.Executed(address(usdc), data);
         vm.prank(STRATEGIST);
         vault.execute(address(usdc), data);
-    }
-
-    function test_ExecuteBubblesTargetRevertData() public {
-        RevertingTarget target = new RevertingTarget();
-
-        vm.prank(STRATEGIST);
-        vm.expectRevert(abi.encodeWithSelector(RevertingTarget.Boom.selector, uint256(42)));
-        vault.execute(address(target), abi.encodeCall(RevertingTarget.kaboom, ()));
     }
 
     // --- VAULT-02: NAV update through the service-manager seam ---------------
@@ -1227,9 +1327,13 @@ contract PriimeVaultTest {
         _attestOn(muVault, bytes20(uint160(0xF01)), 0, 1);
         vm.prank(ALICE);
         muVault.deposit(1_000 * ONE_USDC, ALICE);
-        // Move all USDC out of the vault so the next strike is stuck below floor.
-        vm.prank(STRATEGIST);
-        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.transfer, (SINK, 1_000 * ONE_USDC)));
+        // Force the stuck state by burning the vault's USDC directly (a
+        // fixture cheat — the same behaviour the allowlist prevents
+        // `execute` from producing in production). Under the fix the
+        // `execute(usdc, transfer(...))` shape is refused at
+        // `_validatePlanStep`, so tests need a non-execute path to
+        // reproduce a below-floor vault.
+        muUsdc.burn(address(muVault), 1_000 * ONE_USDC);
 
         vm.prank(ALICE);
         muVault.requestRedeem(1_000 * ONE_USDC, ALICE, ALICE);
@@ -1345,9 +1449,11 @@ contract PriimeVaultTest {
         vm.prank(ALICE);
         muVault.deposit(100 * ONE_USDC, ALICE);
 
-        // Move the vault's USDC out to a placeholder sink so we're stuck.
-        vm.prank(STRATEGIST);
-        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.transfer, (SINK, 100 * ONE_USDC)));
+        // Force the stuck state by burning the vault's USDC directly.
+        // Under the allowlist the strategist cannot drain via
+        // `execute(usdc, transfer(SINK, ...))` any more, so tests
+        // reproduce the below-floor scenario through a fixture cheat.
+        muUsdc.burn(address(muVault), 100 * ONE_USDC);
         // Stage a redemption so totalClaimableRedeemAssets grows on the next strike.
         vm.prank(ALICE);
         muVault.requestRedeem(100 * ONE_USDC, ALICE, ALICE);
@@ -1362,45 +1468,45 @@ contract PriimeVaultTest {
         );
         // With the rollback fix, no claimable is left standing after the failed plan.
         require(muVault.totalClaimableRedeemAssets() == 0, "claim rolled back");
+        address muRouter = muVault.swapRouter();
 
-        // Simulate a legacy stuck state (rollback didn't happen in old code)
-        // by donating USDC to the vault via the strategist and setting a
-        // manual scenario: mint 200 USDC to SINK, transfer it back, then
-        // spend it back out so the vault is short vs its floor. We don't
-        // have easy access to the old buggy path; instead just prove the
-        // emergencyExecute path itself: at balance 0 with a 0 floor, the
-        // guard says "not stuck".
+        // At balance 0 with a 0 floor, `emergencyExecute` refuses: the
+        // guard is meant to unstick a below-floor vault, not gate a
+        // clean one. The probe uses `asset.approve(swapRouter, 1)` — an
+        // allowlisted no-op — so the failure isolates to `VaultNotStuck`
+        // rather than a validator hit.
         vm.prank(STRATEGIST);
         vm.expectRevert(abi.encodeWithSelector(PriimeVault.VaultNotStuck.selector, uint256(0), uint256(0)));
-        muVault.emergencyExecute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (SINK, 1)));
+        muVault.emergencyExecute(
+            address(muUsdc), abi.encodeCall(TestUSDC.approve, (muRouter, uint256(1)))
+        );
 
-        // Force a stuck state: put a pending deposit on the queue (non-zero
-        // floor) but drain the escrow via a legacy-simulated write. Simplest
-        // path: another user deposits, we transfer their escrow out via
-        // execute BEFORE the floor check would refuse (it can't, execute
-        // enforces the same floor). So use `emergencyExecute` itself to
-        // approve while at 0/0 (currently blocked, as expected). Instead,
-        // just confirm the guard triggers with a nonzero floor.
+        // Non-zero floor: a fresh depositor's escrow sits inside the
+        // vault, so the balance now MATCHES the floor. The guard is
+        // symmetric: at-floor is still refused, only strictly-below-floor
+        // unlocks the recovery path.
         muUsdc.mint(BOB, 50 * ONE_USDC);
         vm.prank(BOB);
         muUsdc.approve(address(muVault), type(uint256).max);
         vm.prank(BOB);
         muVault.requestDeposit(50 * ONE_USDC, BOB, BOB); // escrow 50 in vault
         vm.prank(STRATEGIST);
-        // A regular execute cannot move that 50 out (floor would break).
-        vm.expectRevert(
-            abi.encodeWithSelector(PriimeVault.EscrowFloorBreached.selector, uint256(0), uint256(50 * ONE_USDC))
-        );
-        muVault.execute(address(muUsdc), abi.encodeCall(TestUSDC.transfer, (SINK, 50 * ONE_USDC)));
-        // But if the vault were ALREADY stuck (imagine mock-only state where
-        // balance < floor), emergencyExecute would let the strategist act.
-        // Here we prove the AT-FLOOR case is refused: balance == floor,
-        // guard says not stuck.
-        vm.prank(STRATEGIST);
         vm.expectRevert(
             abi.encodeWithSelector(PriimeVault.VaultNotStuck.selector, uint256(50 * ONE_USDC), uint256(50 * ONE_USDC))
         );
-        muVault.emergencyExecute(address(muUsdc), abi.encodeCall(TestUSDC.approve, (SINK, 1)));
+        muVault.emergencyExecute(
+            address(muUsdc), abi.encodeCall(TestUSDC.approve, (muRouter, uint256(1)))
+        );
+
+        // Push the vault strictly below floor and verify the recovery
+        // path actually unlocks. The allowlisted approve is a no-op on
+        // balances, so success is proved by absence of a revert.
+        muUsdc.burn(address(muVault), 10 * ONE_USDC);
+        vm.prank(STRATEGIST);
+        muVault.emergencyExecute(
+            address(muUsdc), abi.encodeCall(TestUSDC.approve, (muRouter, uint256(1)))
+        );
+        require(muUsdc.allowance(address(muVault), muRouter) == 1, "recovery-mode approve took effect");
     }
 
     function test_ZeroDebtCollateralRedemptionDeliversUsdcInOneStrike() public {
@@ -1858,50 +1964,160 @@ contract PriimeVaultTest {
 
     // --- unpriceable deposits: refund instead of revert or zero-share mint ----
 
-    function test_ZeroNavStrikeRefundsPendingDepositAndKeepsUpdatesFlowing() public {
+    function test_ZeroNavStrikeCreditsPendingDepositRefundAndKeepsUpdatesFlowing() public {
         _bootstrapAlice(); // supply 1,000 shares, nav 1,000
 
         vm.prank(BOB);
         vault.requestDeposit(500 * ONE_USDC, BOB, BOB);
-        uint256 bobBefore = usdc.balanceOf(BOB);
 
-        // Total loss: the attested NAV is zero while shares are still
-        // outstanding, so Bob's deposit has no price. It must be refunded, not
-        // reverted (a revert would brick every future strike) and not folded in
-        // at zero shares (that would donate it to Alice).
+        // Total loss: attested NAV is zero while shares are still
+        // outstanding, so Bob's deposit has no price. It must be REFUND
+        // credited (not push-transferred: that would let a broken/
+        // blacklisted controller brick every future strike), not
+        // reverted, and not folded in at zero shares.
         _attest(bytes20(uint160(0xF00D03)), 0, 2);
 
-        require(usdc.balanceOf(BOB) - bobBefore == 500 * ONE_USDC, "deposit refunded to controller");
         require(vault.pendingDepositRequest(0, BOB) == 0, "pending cleared");
-        require(vault.claimableDepositRequest(0, BOB) == 0, "nothing claimable");
+        require(vault.refundableDepositAssets(BOB) == 500 * ONE_USDC, "refund credited to controller");
+        require(vault.totalRefundableDepositAssets() == 500 * ONE_USDC, "aggregate refundable tracked");
+        require(vault.claimableDepositRequest(0, BOB) == 0, "nothing claimable as deposit");
         require(vault.maxMint(BOB) == 0, "no shares minted");
-        require(vault.totalPendingDepositAssets() == 0, "escrow released");
+        require(vault.totalPendingDepositAssets() == 0, "pending escrow released");
         require(vault.totalAssets() == 0, "refund not folded into NAV");
         require(vault.totalSupply() == 1_000 * ONE_USDC, "supply untouched");
         require(vault.updateCount() == 2, "strike accepted");
 
-        // The vault is not bricked: a later strike still lands and prices.
+        // Bob pulls the refund to his own wallet.
+        uint256 bobBefore = usdc.balanceOf(BOB);
+        vm.prank(BOB);
+        uint256 got = vault.claimDepositRefund(BOB, BOB);
+        require(got == 500 * ONE_USDC, "pulled full refund");
+        require(usdc.balanceOf(BOB) - bobBefore == 500 * ONE_USDC, "refund delivered");
+        require(vault.refundableDepositAssets(BOB) == 0, "refund book cleared");
+        require(vault.totalRefundableDepositAssets() == 0, "aggregate cleared");
+
+        // A later strike still lands and prices — the vault is not bricked.
         _attest(bytes20(uint160(0xF00D04)), 800 * ONE_USDC, 3);
         require(vault.totalAssets() == 800 * ONE_USDC, "later strike still works");
         require(vault.updateCount() == 3, "later strike counted");
     }
 
-    function test_ZeroShareDustDepositIsRefunded() public {
+    function test_ZeroShareDustDepositIsCreditedAsRefund() public {
         _bootstrapAlice();
 
-        // Share price is 10,000 USDC/share after the strike below, so a 1-base-unit
-        // deposit prices to zero shares: refund rather than donate it to Alice.
+        // Share price is 10,000 USDC/share after the strike below, so a
+        // 1-base-unit deposit prices to zero shares.
         vm.prank(BOB);
         vault.requestDeposit(1, BOB, BOB);
-        uint256 bobBefore = usdc.balanceOf(BOB);
 
         _attest(bytes20(uint160(0xF00D05)), 10_000_000 * ONE_USDC, 2);
 
-        require(usdc.balanceOf(BOB) - bobBefore == 1, "dust refunded");
+        require(vault.refundableDepositAssets(BOB) == 1, "dust credited as refund");
+        require(vault.totalRefundableDepositAssets() == 1, "aggregate refundable = 1");
         require(vault.maxMint(BOB) == 0, "no shares for dust");
-        require(vault.maxDeposit(BOB) == 0, "nothing claimable");
+        require(vault.maxDeposit(BOB) == 0, "nothing claimable as deposit");
         require(vault.totalAssets() == 10_000_000 * ONE_USDC, "dust not folded into NAV");
         require(vault.totalSupply() == 1_000 * ONE_USDC, "supply untouched");
+
+        uint256 bobBefore = usdc.balanceOf(BOB);
+        vm.prank(BOB);
+        vault.claimDepositRefund(BOB, BOB);
+        require(usdc.balanceOf(BOB) - bobBefore == 1, "pulled dust");
+    }
+
+    function test_BlacklistedControllerCannotBrickFutureStrikes() public {
+        /* Regression pin for the 1-unit-deposit-with-blacklisted-controller
+           brick vector: pre-fix, `_fulfillDeposits`'s inline
+           `safeTransfer(controller, ...)` on the refund branch would
+           revert on a USDC-blacklisted controller and take EVERY future
+           strike down with it. NAV frozen, redemptions blocked,
+           everyone's escrow stuck.
+
+           TestUSDC exposes `setBlacklisted(address, bool)` so the test
+           can simulate the "controller cannot receive USDC" outcome; the
+           attacker's dust deposit sits in the refund book, cannot be
+           claimed by the blacklisted controller directly, but the strike
+           accepts and everyone else keeps flowing. */
+        _bootstrapAlice();
+
+        address attacker = address(0xBAD1);
+        usdc.mint(attacker, 1);
+        vm.prank(attacker);
+        usdc.approve(address(vault), 1);
+        vm.prank(attacker);
+        vault.requestDeposit(1, attacker, attacker);
+
+        // USDC blacklist lands AFTER the escrow is pulled but BEFORE the
+        // strike would push the refund. Real-world equivalent: the
+        // controller was blacklisted between requestDeposit and the
+        // strike, or the controller is a contract without a receive path.
+        usdc.setBlacklisted(attacker, true);
+
+        // The strike PROCEEDS, credits the refund, and updateCount ticks.
+        _attest(bytes20(uint160(0xB000E01)), 10_000_000 * ONE_USDC, 2);
+        require(vault.updateCount() == 2, "strike accepted despite blacklisted controller");
+        require(vault.refundableDepositAssets(attacker) == 1, "refund credited, not pushed");
+
+        // Every future strike keeps landing.
+        _attest(bytes20(uint160(0xB000E02)), 12_000_000 * ONE_USDC, 3);
+        require(vault.updateCount() == 3, "vault not bricked");
+
+        // The attacker's own pull reverts on the blacklist — as it must:
+        // the USDC contract itself refuses. Their escrow is stuck for
+        // them, not for anyone else.
+        vm.prank(attacker);
+        vm.expectRevert(bytes("USDC blacklist"));
+        vault.claimDepositRefund(attacker, attacker);
+    }
+
+    function test_FirstDepositorInflationAttackRefusedByMinimumBootstrap() public {
+        /* Regression pin for the classic first-depositor inflation
+           attack. Pre-fix: attacker deposits 1 wei, gets 1 share via
+           the bootstrap branch, then direct-transfers a fat donation
+           to the vault. The next strike counts idle USDC into NAV, so
+           supply=1, nav=big; subsequent depositors are diluted to
+           zero (or, after the refund fix, refunded — but the attacker
+           still walks the donation.). `MIN_BOOTSTRAP_ASSETS` closes
+           this: the first depositor MUST escrow at least the floor,
+           so an attack's break-even sits at or above the required
+           bootstrap and no fresh deposit can be diluted below cost. */
+        uint256 floor = vault.MIN_BOOTSTRAP_ASSETS();
+        address attacker = address(0xBAADF00D);
+        usdc.mint(attacker, 100 * ONE_USDC);
+        vm.prank(attacker);
+        usdc.approve(address(vault), 100 * ONE_USDC);
+
+        // Zero-supply, sub-floor deposit — refused (with 1 wei).
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(PriimeVault.MinimumBootstrapNotMet.selector, uint256(1), floor)
+        );
+        vault.requestDeposit(1, attacker, attacker);
+
+        // Zero-supply, one-wei-below-floor — still refused.
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(PriimeVault.MinimumBootstrapNotMet.selector, floor - 1, floor)
+        );
+        vault.requestDeposit(floor - 1, attacker, attacker);
+
+        // Exactly the floor — accepted.
+        vm.prank(attacker);
+        uint256 got = vault.requestDeposit(floor, attacker, attacker);
+        require(got == 0, "requestId 0");
+
+        // With shares now outstanding (next strike will mint), tiny
+        // top-ups from a different depositor are permitted again — the
+        // gate is bootstrap-only.
+        _attest(bytes20(uint160(0xB007401)), floor, 1);
+        require(vault.totalSupply() > 0, "bootstrap fulfilled");
+
+        address bob = address(0xB0B);
+        usdc.mint(bob, 1);
+        vm.prank(bob);
+        usdc.approve(address(vault), 1);
+        vm.prank(bob);
+        vault.requestDeposit(1, bob, bob); // no revert
     }
 
     // --- event surface -------------------------------------------------------

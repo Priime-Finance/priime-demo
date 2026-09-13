@@ -120,6 +120,17 @@ if [ "$IS_FORK" = "1" ]; then
   SERVER_RPC="http://127.0.0.1:$RPC_PORT"
   PUBLIC_RPC="${NEXT_PUBLIC_RPC_URL:-$SERVER_RPC}"
   DB_FILE="${DB_PATH:-/tmp/loop-demo.db}"
+  # Every fork rerun redeploys the service manager via vault-service.sh.
+  # An earlier run's loops.db would then hold loop records pinned to a
+  # dead manager (`asset()` on a no-code address 500s every
+  # /loops/:id/journals hit) while their workflow lives on a service
+  # manager the browser can never reach. Wipe the DB unless the caller
+  # explicitly opted into preservation via KEEP_LOOP_DB=1 or a custom
+  # DB_PATH they own.
+  if [ -z "${DB_PATH:-}" ] && [ "${KEEP_LOOP_DB:-0}" != "1" ] && [ -e "$DB_FILE" ]; then
+    rm -f "$DB_FILE" "$DB_FILE"-wal "$DB_FILE"-shm
+    echo "wiped stale loops.db (manager address changed on fork rerun)"
+  fi
 else
   SERVER_RPC="$RPC"
   # The browser-facing URL is separate and required: $RPC usually carries a
@@ -157,11 +168,23 @@ stop_pidfile "$PIDFILE_UI" "replay-ui"
 
 pushd "$ROOT/apps/replay-ui" >/dev/null
 [ -d node_modules ] || pnpm install >/dev/null 2>&1
+# `PRIIME_RPC_URL` is read by `apps/replay-ui/app/api/rpc/[chainId]/route.ts`
+# to forward /api/rpc/<chainId> to the server-side RPC. Without an explicit
+# export here every deposit/redeem read and every tx from wagmi errors
+# with "PRIIME_RPC_URL not configured". Worse, if the shell environment
+# already carries a mainnet-flavour `PRIIME_RPC_URL` (a stale .env.local
+# from a previous session, or a developer's global export), a fork run
+# would silently forward every /api/rpc/31337 to Base mainnet — the
+# browser would then read state from mainnet while the wallet signs and
+# submits against the fork, and every wagmi write would either bounce or
+# spend real money. Pin the fork's own SERVER_RPC explicitly.
 LOOP_SERVER_URL="http://127.0.0.1:$LS_PORT" \
 LOOP_SERVER_TOKEN="$TOKEN" \
+PRIIME_RPC_URL="$SERVER_RPC" \
 NEXT_PUBLIC_RPC_URL="$PUBLIC_RPC" \
 NEXT_PUBLIC_CHAIN_ID="$CHAIN_ID" \
-  nohup pnpm dev -- -p "$UI_PORT" > "$LOGDIR/replay-ui.log" 2>&1 &
+NEXT_PUBLIC_SERVICE_MANAGER="$SM" \
+  nohup pnpm dev -- -p "$UI_PORT" -H 127.0.0.1 > "$LOGDIR/replay-ui.log" 2>&1 &
 echo $! > "$PIDFILE_UI"
 popd >/dev/null
 

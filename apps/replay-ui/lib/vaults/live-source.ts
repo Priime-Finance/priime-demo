@@ -10,7 +10,13 @@
  * from the proxy is expected during a demo pause or a fresh dev boot.
  */
 
-import type { LoopRecord, StrikeRecord } from "@priime-demo/loop-deploy";
+import type {
+  JournalWireEntry,
+  LoopRecord,
+  Observations,
+  StrikeRecord,
+} from "@priime-demo/loop-deploy";
+import type { Journal } from "@priime-demo/journal-schema";
 
 export interface LoopsListResponse {
   loops: LoopRecord[];
@@ -20,8 +26,24 @@ export interface LoopDetailResponse {
   loop: LoopRecord;
 }
 
+/**
+ * `/api/loops/:id/journals` payload. `chainStrikeCount` reports the
+ * vault's own `updateCount()`; if it is strictly greater than
+ * `journals.length` the vault has strikes older than the scan window,
+ * so the UI must NOT render "awaiting first strike". `chainQuorum`
+ * carries the manager's own `QuorumThresholdUpdated` numerator/
+ * denominator when the reader could resolve one from chain
+ * (`source: "chain"`); when the scan window held no emission the
+ * reader falls back to the loop-server env defaults
+ * (`source: "fallback"`) and the UI MUST render that source. `null`
+ * values mean the vault has not been deployed yet.
+ */
 export interface LoopJournalsResponse {
   journals: StrikeRecord[];
+  chainStrikeCount: string | null;
+  windowFromBlock: string | null;
+  windowToBlock: string | null;
+  chainQuorum: { threshold: number; total: number; source: "chain" | "fallback" } | null;
 }
 
 /** Wrap fetch so callers get a typed result or a plain Error. */
@@ -52,9 +74,45 @@ export function fetchLoop(id: string): Promise<LoopDetailResponse> {
   return getJson<LoopDetailResponse>(`/api/loops/${encodeURIComponent(id)}`);
 }
 
-export function fetchLoopJournals(id: string, limit = 20): Promise<LoopJournalsResponse> {
+/**
+ * Wire shape of `/api/loops/:id/journals`. Each entry nests the
+ * schema-valid Journal under `.journal`, with `observations` and `plan`
+ * as SIBLINGS. This mirrors the shape loop-server actually returns
+ * (`packages/loop-deploy/src/journal-source.ts::JournalWireEntry`) so
+ * every emitted `journal` object validates against
+ * `schema/journal.v1.schema.json` with `additionalProperties:false`.
+ */
+interface LoopJournalsWireResponse {
+  journals: JournalWireEntry[];
+  chainStrikeCount: string | null;
+  windowFromBlock: string | null;
+  windowToBlock: string | null;
+  chainQuorum: { threshold: number; total: number; source: "chain" | "fallback" } | null;
+}
+
+/**
+ * Flatten a wire entry into the intersection shape existing UI reads
+ * (`strike.attestation`, `strike.plan.status`, …). The wire STAYS
+ * schema-valid; only the in-memory client shape is flat.
+ */
+function flattenWire(entry: JournalWireEntry): StrikeRecord {
+  const journal: Journal = entry.journal;
+  const observations: Observations = entry.observations;
+  return { ...journal, observations, plan: entry.plan };
+}
+
+export async function fetchLoopJournals(id: string, limit = 20): Promise<LoopJournalsResponse> {
   const suffix = limit === 20 ? "" : `?limit=${String(limit)}`;
-  return getJson<LoopJournalsResponse>(`/api/loops/${encodeURIComponent(id)}/journals${suffix}`);
+  const wire = await getJson<LoopJournalsWireResponse>(
+    `/api/loops/${encodeURIComponent(id)}/journals${suffix}`,
+  );
+  return {
+    journals: wire.journals.map(flattenWire),
+    chainStrikeCount: wire.chainStrikeCount,
+    windowFromBlock: wire.windowFromBlock,
+    windowToBlock: wire.windowToBlock,
+    chainQuorum: wire.chainQuorum,
+  };
 }
 
 
@@ -71,6 +129,10 @@ export interface CreateLoopInput {
   cronSeconds: number;
   candidateId: string;
   targetLeverage: number;
+  /** Unix seconds; the strategist's signature is over this value + the rest of the fields above. */
+  signedAt: number;
+  /** EIP-712 signature over `LoopPublish`. Loop-server refuses the request when the recovered address does not equal `strategist`. */
+  signature: `0x${string}`;
   /**
    * Composer knobs, string-encoded. Merged into the workflow's
    * `componentConfig` verbatim so every user choice lands on IPFS.

@@ -323,7 +323,7 @@ function LiveCard({ v, i, live }: { v: VaultRecord; i: number; live: boolean }) 
       ) : null}
       <div className="vx-card-rows">
         <span className="vx-cell">
-          <i>NAV, attested</i>
+          <i>NAV, attested (sample)</i>
           <b>{navUsd === null ? "awaiting strike" : fmtUsd(navUsd)}</b>
         </span>
         <span className="vx-cell">
@@ -602,7 +602,7 @@ export default function VaultsDirectory() {
               "awaiting strike"
             ) : (
               <>
-                <b className="num">{fmtUsd(navUsd)}</b> attested NAV
+                <b className="num">{fmtUsd(navUsd)}</b> attested NAV (sample)
               </>
             )}{" "}
             · <b className="num">{soonCount}</b> {COMING_SOON.prose}

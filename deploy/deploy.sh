@@ -64,10 +64,18 @@ http_endpoint = "http://localhost:8545"
 [priime]
 ipfs_gateway = "$GATEWAY"
 port = 8041
-host = "0.0.0.0"
-dev_endpoints_enabled = true
+# The M1 hello-world node used to bind 0.0.0.0 with dev endpoints on and
+# no auth on POST/DELETE /services or /dev/*, which on any reachable host
+# was a service takeover. Mirror the vault-service.sh hardening: bind
+# loopback only and turn dev endpoints off. Same rationale as
+# `deploy/vault-service.sh:231-233`.
+host = "127.0.0.1"
+dev_endpoints_enabled = false
 signing_mnemonic = "$MNEMONIC"
-mcp_chain_credential = "$K0"
+# `mcp_chain_credential` is NOT a defined field on this node's config; the
+# runtime silently ignored it. Writing the owner key into every node's
+# priime.toml under an unread key was pure on-disk key sprawl. Dropped
+# here and in `deploy/vault-service.sh`.
 aggregator_evm_credential = "$K0"
 
 [cli]

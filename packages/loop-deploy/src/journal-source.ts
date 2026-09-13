@@ -31,6 +31,7 @@ const HANDLER_ABI = parseAbi([
   "event PlanRejected(bytes32 indexed planHash, bytes reason)",
   "function handleSignedEnvelope((bytes20 eventId, bytes12 ordering, bytes payload) envelope, (address[] signers, bytes[] signatures, uint32 referenceBlock) signatureData) external",
   "function asset() external view returns (address)",
+  "function updateCount() external view returns (uint256)",
 ]) satisfies Abi;
 
 /** Signatures the operator quorum encodes into StrategyPlan step calldatas.
@@ -50,16 +51,31 @@ const ERC20_META_ABI = parseAbi([
   "function symbol() external view returns (string)",
 ]) satisfies Abi;
 
+/** Only the service-manager event we need to derive the on-chain quorum
+ *  fraction. `QuorumThresholdUpdated(numerator, denominator)` is a
+ *  cumulative log stream: the LATEST emission is the current threshold
+ *  the manager gates `validate()` against. Both fields are `indexed`
+ *  in the interface (`contracts/src/interfaces/priime/IPriimeServiceManager.sol`). */
+const MANAGER_ABI = parseAbi([
+  "event QuorumThresholdUpdated(uint256 indexed numerator, uint256 indexed denominator)",
+]) satisfies Abi;
+
 export interface JournalReaderOptions {
   rpcUrl: string;
   chainId: number;
   chainKey: string;
   managerAddress: string;
   componentDigest: string;
-  /** Quorum config surfaced by the deployer at bring-up. */
-  quorumThreshold: number;
-  quorumTotal: number;
-  /** Where to start scanning for NavUpdated logs. Defaults to earliest. */
+  /**
+   * FALLBACK ONLY. Used when the manager has never emitted a
+   * `QuorumThresholdUpdated` event (fresh deploy, or a fork replayed
+   * without the constructor emission). The reader ALWAYS prefers the
+   * on-chain event scan; these values are what a new build advertises
+   * before the first threshold write lands.
+   */
+  fallbackQuorumThreshold: number;
+  fallbackQuorumTotal: number;
+  /** Where to start scanning for `NavUpdated` and `QuorumThresholdUpdated` logs. Defaults to earliest. */
   fromBlock?: bigint;
 }
 
@@ -113,14 +129,94 @@ export interface AttestedPlan {
   timestampSecs: number;
 }
 
+/**
+ * Wire shape returned by `readJournals` and served verbatim by
+ * `loop-server` on `GET /loops/:id/journals`. The `journal` field is
+ * schema-compliant against `schema/journal.v1.schema.json` (v1 is
+ * FROZEN with `additionalProperties:false`; `docs/LIVE_DEMO.md` and
+ * `schema/README.md` both promise every emitted record validates
+ * against it). `observations` and `plan` are enrichments the reader
+ * decodes from the strike's calldata; they sit as SIBLING fields so
+ * they never contaminate the schema-valid journal object.
+ */
+export interface JournalWireEntry {
+  journal: Journal;
+  observations: Observations;
+  plan: AttestedPlan;
+}
+
+/**
+ * Flat client-facing view. Kept as a `Journal & { observations, plan }`
+ * intersection so existing UI code that reads `strike.attestation` /
+ * `strike.inputs_block` / `strike.plan.status` in one namespace stays
+ * unchanged. The wire boundary (`apps/replay-ui/lib/vaults/live-source.ts`)
+ * flattens `JournalWireEntry` into this shape on parse.
+ */
 export type StrikeRecord = Journal & {
   observations: Observations;
   plan: AttestedPlan;
 };
 
+/**
+ * Result of `readJournals`. Carries the scan window and the on-chain
+ * strike count alongside the decoded strikes so consumers can tell a
+ * "vault has never attested" state apart from a "vault attested plenty,
+ * but every strike is older than our lookback window" state — which
+ * used to render identically as `{ journals: [], attested: null }`.
+ */
+export interface JournalScan {
+  strikes: JournalWireEntry[];
+  /**
+   * `updateCount` read straight off the vault. `strikes.length` never
+   * exceeds `Number(chainStrikeCount)`; if it is strictly less, our
+   * window is missing strikes and the UI MUST tell the operator the
+   * shortfall instead of drawing an idle vault.
+   */
+  chainStrikeCount: bigint;
+  /** Inclusive lower bound of the block range we scanned. */
+  windowFromBlock: bigint;
+  /** Inclusive upper bound of the block range we scanned. */
+  windowToBlock: bigint;
+  /**
+   * On-chain quorum threshold, resolved from the LATEST
+   * `QuorumThresholdUpdated(numerator, denominator)` event on the
+   * service manager. `source: "chain"` means the scan found at least
+   * one emission in the window; `source: "fallback"` means the reader
+   * fell back to its constructor's `fallbackQuorumThreshold/Total`
+   * (the loop-server env values) because no event was found — usually
+   * a fresh deploy before the first threshold write, or a chain
+   * snapshot that pre-dates the manager. Consumers MUST render the
+   * source so the UI never poses env defaults as chain reads.
+   */
+  chainQuorum: { threshold: number; total: number; source: "chain" | "fallback" };
+}
+
+/**
+ * Pick the authoritative `chainQuorum` from a `QuorumThresholdUpdated`
+ * log stream. The event is cumulative on chain — later emissions
+ * replace earlier ones — so the latest well-formed entry wins.
+ *
+ * Returns the caller's `fallback` (tagged `source: "fallback"`) when
+ * the stream is empty or every entry is malformed (missing args,
+ * zero denominator). Split out for isolated testing; `readJournals`
+ * calls it after fetching the logs.
+ */
+export function pickLatestQuorum(
+  logs: readonly { args: { numerator?: bigint; denominator?: bigint } }[],
+  fallback: { threshold: number; total: number },
+): { threshold: number; total: number; source: "chain" | "fallback" } {
+  for (let i = logs.length - 1; i >= 0; i -= 1) {
+    const { numerator, denominator } = logs[i]!.args;
+    if (numerator === undefined || denominator === undefined) continue;
+    if (denominator === 0n) continue;
+    return { threshold: Number(numerator), total: Number(denominator), source: "chain" };
+  }
+  return { threshold: fallback.threshold, total: fallback.total, source: "fallback" };
+}
+
 export interface JournalReader {
-  /** Latest N strikes for a handler, newest first. */
-  readJournals(vaultAddress: string, limit: number): Promise<StrikeRecord[]>;
+  /** Latest N strikes for a handler, newest first, with window metadata. */
+  readJournals(vaultAddress: string, limit: number): Promise<JournalScan>;
 }
 
 /**
@@ -165,12 +261,44 @@ const PAYLOAD_TUPLE = [
   },
 ] as const;
 
-/** Envelope tuple as Priime signs it. */
+/**
+ * Envelope tuple as Priime signs it. `Envelope` is a Solidity struct with a
+ * dynamic field (`payload`), so `abi.encode(envelope)` — which is what the
+ * Rust side does via `SolValue::abi_encode` on the struct — wraps the tuple
+ * with an outer offset word. Encoding as three loose parameters produces a
+ * different byte string and therefore a different keccak256, which is what
+ * ever consumer would use to verify the signatures we persist in the
+ * journal against. Model the tuple explicitly.
+ */
 const ENVELOPE_TUPLE = [
-  { type: "bytes20" },
-  { type: "bytes12" },
-  { type: "bytes" },
+  {
+    type: "tuple",
+    components: [
+      { name: "eventId", type: "bytes20" },
+      { name: "ordering", type: "bytes12" },
+      { name: "payload", type: "bytes" },
+    ],
+  },
 ] as const;
+
+/**
+ * Result hash the operator quorum signs. Byte-identical to what
+ * `Envelope.abi_encode()` produces in `priime-types::signing` (verified
+ * against the alloy encoding with a matching sample). Any consumer that
+ * wants to verify the persisted signatures re-derives the hash from the
+ * `payload` + `eventId` + `ordering` fields in the journal, so this
+ * function has to stay in lockstep with the Rust side or the whole
+ * signature record becomes decorative.
+ */
+export function hashEnvelope(envelope: { eventId: `0x${string}`; ordering: `0x${string}`; payload: `0x${string}` }): `0x${string}` {
+  return keccak256(
+    encodeAbiParameters(ENVELOPE_TUPLE, [{
+      eventId: envelope.eventId,
+      ordering: envelope.ordering,
+      payload: envelope.payload,
+    }]),
+  );
+}
 
 interface NavUnit {
   asset: string;
@@ -207,13 +335,57 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
     return unit;
   };
 
+  // Chain-authoritative quorum: scan `QuorumThresholdUpdated` events off
+  // the service manager and take the LATEST emission. The fallback env
+  // values are only used when the manager has never emitted (fresh
+  // deploy, or a fork replayed without a threshold write). Cache the
+  // result; the event is rare and the RPC cost adds up otherwise.
+  const managerQuorumUpdated = MANAGER_ABI.find(
+    (e): e is Extract<(typeof MANAGER_ABI)[number], { type: "event" }> =>
+      e.type === "event" && e.name === "QuorumThresholdUpdated",
+  );
+  if (managerQuorumUpdated === undefined) throw new Error("manager abi is missing QuorumThresholdUpdated");
+  type ChainQuorum = { threshold: number; total: number; source: "chain" | "fallback" };
+  let quorumCache: ChainQuorum | null = null;
+  const resolveQuorum = async (headBlock: bigint): Promise<ChainQuorum> => {
+    if (quorumCache !== null) return quorumCache;
+    // Same window bounds `readJournals` uses for NavUpdated: honours
+    // `fromBlock` if the caller pins one, otherwise a rolling 10k
+    // (Base fork on anvil caps `eth_getLogs` at 10 000 blocks).
+    const scanFrom = options.fromBlock ?? (headBlock > 9_999n ? headBlock - 9_999n : 0n);
+    const logs = await client.getLogs({
+      address: options.managerAddress as Address,
+      event: managerQuorumUpdated,
+      fromBlock: scanFrom,
+      toBlock: headBlock,
+    });
+    quorumCache = pickLatestQuorum(logs, {
+      threshold: options.fallbackQuorumThreshold,
+      total: options.fallbackQuorumTotal,
+    });
+    return quorumCache;
+  };
+
   return {
-    async readJournals(vaultAddress: string, limit: number): Promise<StrikeRecord[]> {
+    async readJournals(vaultAddress: string, limit: number): Promise<JournalScan> {
       const vault = vaultAddress.toLowerCase() as Address;
       // Some RPCs (Base fork on anvil) cap eth_getLogs at 10k blocks. Default
       // to a rolling window ending at head; callers with a wider need set
       // fromBlock explicitly.
       const head = await client.getBlockNumber();
+      const [chainStrikeCount, chainQuorum] = await Promise.all([
+        // Read the vault's own strike counter so callers can tell a
+        // stalled vault ("plenty of strikes on-chain, none in our
+        // window") from an idle one ("vault has never attested"). The
+        // rolling-window read below cannot make that distinction on
+        // its own: an empty log slice looks identical either way.
+        client.readContract({ address: vault, abi: HANDLER_ABI, functionName: "updateCount" }),
+        // Chain-authoritative quorum for the manager (not env
+        // defaults). Cached inside `resolveQuorum` — first call scans
+        // the manager's `QuorumThresholdUpdated` events; subsequent
+        // calls return immediately.
+        resolveQuorum(head),
+      ]);
       const from = options.fromBlock ?? (head > 9_999n ? head - 9_999n : 0n);
       const logs = await client.getLogs({
         address: vault,
@@ -225,7 +397,7 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
       const picked = logs.slice(-Math.max(1, limit)).reverse();
       const unit = await readNavUnit(vault);
 
-      const strikes: StrikeRecord[] = [];
+      const strikes: JournalWireEntry[] = [];
       for (const log of picked) {
         const args = log.args as { eventId?: Hex; nav?: bigint; inputsBlock?: bigint };
         if (log.transactionHash === null || args.eventId === undefined || args.nav === undefined || args.inputsBlock === undefined) {
@@ -274,11 +446,11 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           );
         }
 
-        const envelopeBytes = encodeAbiParameters(
-          ENVELOPE_TUPLE,
-          [envelope.eventId, envelope.ordering, envelope.payload],
-        );
-        const resultHash = keccak256(envelopeBytes);
+        const resultHash = hashEnvelope({
+          eventId: envelope.eventId,
+          ordering: envelope.ordering,
+          payload: envelope.payload,
+        });
 
         const input: JournalBuildInput = {
           chainId: options.chainId,
@@ -288,8 +460,8 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           componentDigest: options.componentDigest,
           navAsset: unit.asset,
           navDecimals: unit.decimals,
-          quorumThreshold: options.quorumThreshold,
-          quorumTotal: options.quorumTotal,
+          quorumThreshold: chainQuorum.threshold,
+          quorumTotal: chainQuorum.total,
           eventId: envelope.eventId,
           inputsBlock: args.inputsBlock,
           navFinal: payloadNav,
@@ -316,9 +488,9 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           receiptLogs: receipt.logs,
         });
 
-        strikes.push({ ...buildJournal(input), observations, plan });
+        strikes.push({ journal: buildJournal(input), observations, plan });
       }
-      return strikes;
+      return { strikes, chainStrikeCount, windowFromBlock: from, windowToBlock: head, chainQuorum };
     },
   };
 }

@@ -66,9 +66,20 @@ interface StaticJournalEntry {
 /**
  * The two captured runs that back the demo, in demo order.
  *
- * Both are **real captures**: the sabotage run is a recording of a node that
- * actually reported a divergent NAV, not a client-side mutation of the
- * settled run.
+ * These are **synthetic fixtures**, not real captures. Every hash and
+ * digest surface is a placeholder byte pattern for demo clarity, not a
+ * value produced by an operator quorum on Base:
+ *
+ *   - `result_hash`      = 0xa1a1…a1a1 / 0xb2b2…b2b2 / 0xdede…dede
+ *   - `component_digest` = sha256:9c9c…9c9c
+ *   - `tx_hash`          = 0x7a7a…7a7a
+ *   - vault address      = 0x21844Ad9343AC9Aac3d9bD951DD74e95dBcccb42 (fixture only)
+ *
+ * The sabotage run's shape (2-of-3 settles, one node rejected) IS the
+ * shape a real corrupt-operator strike would produce; the *content*
+ * (hashes, digests, addresses) is synthetic. Any UI that surfaces one
+ * of these values must label its origin — see `HERO_SLUG` renderers
+ * for the "sample fixture" chip that says so.
  */
 export const DEMO_JOURNALS: readonly StaticJournalEntry[] = [
   { journal: strikeSettled, label: "Validate, honest 3-of-3" },

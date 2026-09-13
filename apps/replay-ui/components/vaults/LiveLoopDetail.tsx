@@ -119,7 +119,13 @@ const NO_EXECUTIONS =
 type LoadState =
   | { kind: "loading" }
   | { kind: "unreachable"; message: string }
-  | { kind: "ready"; loop: LoopRecord; journals: StrikeRecord[] };
+  | {
+      kind: "ready";
+      loop: LoopRecord;
+      journals: StrikeRecord[];
+      chainStrikeCount: bigint | null;
+      chainQuorum: { threshold: number; total: number; source: "chain" | "fallback" } | null;
+    };
 
 export default function LiveLoopDetail({ id }: { id: string }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
@@ -135,7 +141,13 @@ export default function LiveLoopDetail({ id }: { id: string }) {
     const load = () => {
       Promise.all([fetchLoop(id), fetchLoopJournals(id, JOURNAL_WINDOW)])
         .then(([detail, feed]) => {
-          if (alive) setState({ kind: "ready", loop: detail.loop, journals: feed.journals });
+          if (alive) setState({
+            kind: "ready",
+            loop: detail.loop,
+            journals: feed.journals,
+            chainStrikeCount: feed.chainStrikeCount === null ? null : BigInt(feed.chainStrikeCount),
+            chainQuorum: feed.chainQuorum,
+          });
         })
         .catch((e: unknown) => {
           // A refresh that fails leaves the page as it was: the last payload
@@ -182,7 +194,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
     );
   }
 
-  const { loop, journals } = state;
+  const { loop, journals, chainStrikeCount, chainQuorum } = state;
   const config = readLoopConfig(loop.configJson);
   const quorum = liveQuorum(journals);
   const nav = attestedNavReading(journals);
@@ -263,16 +275,43 @@ export default function LiveLoopDetail({ id }: { id: string }) {
         </div>
         <div className="vx-stat" style={{ "--i": 1 } as CSSProperties}>
           <i>Strikes</i>
-          <b>{settled}</b>
+          {/* `settled` is what our window contains AND has settled.
+              `chainStrikeCount` is the vault's own on-chain counter and
+              is authoritative for "how many strikes exist at all". A
+              gap between the two is the "stalled window" state that
+              used to render as an idle vault. */}
+          <b>{chainStrikeCount === null ? settled : chainStrikeCount.toString()}</b>
           <small>
-            settled of {journals.length} recorded
+            {chainStrikeCount !== null && BigInt(journals.length) < chainStrikeCount
+              ? `${String(settled)} settled of ${String(journals.length)} in window · ${(chainStrikeCount - BigInt(journals.length)).toString()} older strikes not fetched`
+              : `${String(settled)} settled of ${String(journals.length)} recorded`}
           </small>
         </div>
         <div className="vx-stat" style={{ "--i": 2 } as CSSProperties}>
           <i>Quorum</i>
-          <b>{quorum === null ? AWAITING_LABEL : quorum.requiredLabel}</b>
+          {/* PREFER the chain read. `chainQuorum` is the manager's own
+              `QuorumThresholdUpdated(numerator, denominator)` — the
+              cumulative log stream the manager gates `validate()`
+              against, latest emission wins. Only when the reader's
+              scan window found no emission (fresh deploy, or a chain
+              whose deploy predates the log window) does the display
+              fall back to loop-server's `QUORUM_THRESHOLD`/`_TOTAL`
+              env, and it labels that too. */}
+          <b>
+            {chainQuorum !== null
+              ? `${String(chainQuorum.threshold)} of ${String(chainQuorum.total)}`
+              : quorum === null
+                ? AWAITING_LABEL
+                : quorum.requiredLabel}
+          </b>
           <small>
-            {quorum === null ? "no journal yet" : "registered on this deployment"}
+            {chainQuorum !== null
+              ? chainQuorum.source === "chain"
+                ? "manager QuorumThresholdUpdated (chain)"
+                : "loop-server fallback (no chain event in scan window)"
+              : quorum === null
+                ? "no journal yet"
+                : "loop-server configuration (env)"}
           </small>
         </div>
         {cronSeconds === null ? null : (
@@ -341,7 +380,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
               <p className="vxd-desc">
                 {quorum === null
                   ? "The operator set re-executes the component against one pinned input block and the quorum attests the NAV only once their result hashes agree. This loop has recorded no strike yet, so the numbers below are absent rather than assumed."
-                  : liveAttestationNote(quorum)}
+                  : liveAttestationNote(quorum, chainQuorum)}
               </p>
             </div>
             <div className="vx-panel vx-ledger" style={{ marginTop: 16 }}>
