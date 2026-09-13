@@ -236,18 +236,27 @@ export function liveQuorum(journals: readonly Journal[]): LiveQuorum | null {
  * sentence counts the operators the journal actually carries and says what
  * that means, rather than borrowing a number from the showcase.
  */
-export function liveAttestationNote(quorum: LiveQuorum): string {
+export function liveAttestationNote(
+  quorum: LiveQuorum,
+  chainQuorum?: { threshold: number; total: number; source: "chain" | "fallback" } | null,
+): string {
   const one = quorum.total === 1;
   const who = one
     ? "One operator re-executes the component"
     : `${String(quorum.total)} operators re-execute the same component`;
-  // `requiredLabel` traces through the journal reader back to
-  // loop-server's `QUORUM_THRESHOLD` / `QUORUM_TOTAL` env vars, not
-  // to a manager view function (the interface only exposes
-  // `QuorumThresholdUpdated` as an event; a proper chain read would
-  // scan those). Attribute the number to its real source rather than
-  // let the sentence pose as a chain fact.
-  return `${who} against one pinned input block, and the handler checks the signature before it acts. loop-server is configured for ${quorum.requiredLabel} (from QUORUM_THRESHOLD / QUORUM_TOTAL in the server's env), so a divergence has nothing to be outvoted by; an independent set is a registry change, not a code change.`;
+  // Prefer the chain-authoritative reading: the manager's own
+  // `QuorumThresholdUpdated(numerator, denominator)` event stream.
+  // When the reader could resolve one from chain we cite the event by
+  // name; otherwise we cite the env fallback loop-server was booted
+  // with and the reason (no emission in the scan window).
+  const auth = chainQuorum ?? null;
+  const requirement =
+    auth === null
+      ? `loop-server is configured for ${quorum.requiredLabel} (from QUORUM_THRESHOLD / QUORUM_TOTAL in the server's env)`
+      : auth.source === "chain"
+        ? `the service manager requires ${String(auth.threshold)} of ${String(auth.total)} (from its own QuorumThresholdUpdated event)`
+        : `no QuorumThresholdUpdated event was found in the scan window, so this deployment shows the loop-server fallback of ${String(auth.threshold)} of ${String(auth.total)}`;
+  return `${who} against one pinned input block, and the handler checks the signature before it acts. ${requirement}, so a divergence has nothing to be outvoted by; an independent set is a registry change, not a code change.`;
 }
 
 /**

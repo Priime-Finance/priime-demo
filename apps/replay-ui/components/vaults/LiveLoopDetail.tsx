@@ -119,7 +119,13 @@ const NO_EXECUTIONS =
 type LoadState =
   | { kind: "loading" }
   | { kind: "unreachable"; message: string }
-  | { kind: "ready"; loop: LoopRecord; journals: StrikeRecord[]; chainStrikeCount: bigint | null };
+  | {
+      kind: "ready";
+      loop: LoopRecord;
+      journals: StrikeRecord[];
+      chainStrikeCount: bigint | null;
+      chainQuorum: { threshold: number; total: number; source: "chain" | "fallback" } | null;
+    };
 
 export default function LiveLoopDetail({ id }: { id: string }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
@@ -140,6 +146,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
             loop: detail.loop,
             journals: feed.journals,
             chainStrikeCount: feed.chainStrikeCount === null ? null : BigInt(feed.chainStrikeCount),
+            chainQuorum: feed.chainQuorum,
           });
         })
         .catch((e: unknown) => {
@@ -187,7 +194,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
     );
   }
 
-  const { loop, journals, chainStrikeCount } = state;
+  const { loop, journals, chainStrikeCount, chainQuorum } = state;
   const config = readLoopConfig(loop.configJson);
   const quorum = liveQuorum(journals);
   const nav = attestedNavReading(journals);
@@ -282,18 +289,29 @@ export default function LiveLoopDetail({ id }: { id: string }) {
         </div>
         <div className="vx-stat" style={{ "--i": 2 } as CSSProperties}>
           <i>Quorum</i>
-          <b>{quorum === null ? AWAITING_LABEL : quorum.requiredLabel}</b>
+          {/* PREFER the chain read. `chainQuorum` is the manager's own
+              `QuorumThresholdUpdated(numerator, denominator)` — the
+              cumulative log stream the manager gates `validate()`
+              against, latest emission wins. Only when the reader's
+              scan window found no emission (fresh deploy, or a chain
+              whose deploy predates the log window) does the display
+              fall back to loop-server's `QUORUM_THRESHOLD`/`_TOTAL`
+              env, and it labels that too. */}
+          <b>
+            {chainQuorum !== null
+              ? `${String(chainQuorum.threshold)} of ${String(chainQuorum.total)}`
+              : quorum === null
+                ? AWAITING_LABEL
+                : quorum.requiredLabel}
+          </b>
           <small>
-            {/* HONEST-LABELING. The `requiredLabel` here traces back
-                through `journal.ts::quorum.threshold/total` to
-                `apps/loop-server/src/env.ts`, which reads
-                `QUORUM_THRESHOLD` / `QUORUM_TOTAL` (defaults 2 and 3)
-                — not to a chain view. The manager exposes only
-                `QuorumThresholdUpdated(numerator, denominator)` as an
-                event, so this figure is authoritative only for what
-                THIS loop-server was booted with. Say so instead of
-                letting it read as "registered on chain". */}
-            {quorum === null ? "no journal yet" : "loop-server configuration (env)"}
+            {chainQuorum !== null
+              ? chainQuorum.source === "chain"
+                ? "manager QuorumThresholdUpdated (chain)"
+                : "loop-server fallback (no chain event in scan window)"
+              : quorum === null
+                ? "no journal yet"
+                : "loop-server configuration (env)"}
           </small>
         </div>
         {cronSeconds === null ? null : (
@@ -362,7 +380,7 @@ export default function LiveLoopDetail({ id }: { id: string }) {
               <p className="vxd-desc">
                 {quorum === null
                   ? "The operator set re-executes the component against one pinned input block and the quorum attests the NAV only once their result hashes agree. This loop has recorded no strike yet, so the numbers below are absent rather than assumed."
-                  : liveAttestationNote(quorum)}
+                  : liveAttestationNote(quorum, chainQuorum)}
               </p>
             </div>
             <div className="vx-panel vx-ledger" style={{ marginTop: 16 }}>

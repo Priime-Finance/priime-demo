@@ -37,9 +37,12 @@ export {
   type JournalBuildInput,
 } from "./journal.ts";
 export {
+  hashEnvelope,
   makeJournalReader,
+  pickLatestQuorum,
   type JournalReader,
   type JournalReaderOptions,
+  type JournalScan,
   type Observations,
   type StrikeRecord,
 } from "./journal-source.ts";

@@ -24,14 +24,20 @@ export interface LoopDetailResponse {
  * `/api/loops/:id/journals` payload. `chainStrikeCount` reports the
  * vault's own `updateCount()`; if it is strictly greater than
  * `journals.length` the vault has strikes older than the scan window,
- * so the UI must NOT render "awaiting first strike". `null` values
- * mean the vault has not been deployed yet.
+ * so the UI must NOT render "awaiting first strike". `chainQuorum`
+ * carries the manager's own `QuorumThresholdUpdated` numerator/
+ * denominator when the reader could resolve one from chain
+ * (`source: "chain"`); when the scan window held no emission the
+ * reader falls back to the loop-server env defaults
+ * (`source: "fallback"`) and the UI MUST render that source. `null`
+ * values mean the vault has not been deployed yet.
  */
 export interface LoopJournalsResponse {
   journals: StrikeRecord[];
   chainStrikeCount: string | null;
   windowFromBlock: string | null;
   windowToBlock: string | null;
+  chainQuorum: { threshold: number; total: number; source: "chain" | "fallback" } | null;
 }
 
 /** Wrap fetch so callers get a typed result or a plain Error. */

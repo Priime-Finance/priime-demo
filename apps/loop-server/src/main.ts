@@ -71,8 +71,8 @@ const journalReader: JournalReader = makeJournalReader({
   chainKey: env.chainKey,
   managerAddress: env.managerAddress,
   componentDigest: env.componentDigest,
-  quorumThreshold: env.quorumThreshold,
-  quorumTotal: env.quorumTotal,
+  fallbackQuorumThreshold: env.quorumThreshold,
+  fallbackQuorumTotal: env.quorumTotal,
   fromBlock: env.journalFromBlock,
 });
 
@@ -91,8 +91,16 @@ function serializeLoop(loop: LoopRecord): Record<string, unknown> {
  * our lookback window" (>0 with empty strikes).
  */
 async function latestAttested(loop: LoopRecord): Promise<
-  | { nav: string; inputsBlock: number; txHash: string; timestamp: number; chainStrikeCount: string; windowFromBlock: string; windowToBlock: string }
-  | { nav: null; chainStrikeCount: string; windowFromBlock: string; windowToBlock: string }
+  | {
+      nav: string; inputsBlock: number; txHash: string; timestamp: number;
+      chainStrikeCount: string; windowFromBlock: string; windowToBlock: string;
+      chainQuorum: { threshold: number; total: number; source: "chain" | "fallback" };
+    }
+  | {
+      nav: null;
+      chainStrikeCount: string; windowFromBlock: string; windowToBlock: string;
+      chainQuorum: { threshold: number; total: number; source: "chain" | "fallback" };
+    }
   | null
 > {
   if (loop.handlerAddress === null) return null;
@@ -102,6 +110,7 @@ async function latestAttested(loop: LoopRecord): Promise<
       chainStrikeCount: scan.chainStrikeCount.toString(),
       windowFromBlock: scan.windowFromBlock.toString(),
       windowToBlock: scan.windowToBlock.toString(),
+      chainQuorum: scan.chainQuorum,
     };
     const [latest] = scan.strikes;
     if (latest === undefined) return { nav: null, ...meta };
@@ -260,10 +269,13 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const loop = registry.get(journalsMatch[1]!);
     if (loop === null) throw new LoopNotFoundError(journalsMatch[1]!);
     if (loop.handlerAddress === null) {
-      // Vault not yet deployed — no chain to read; return an explicit
-      // "no scan performed" marker instead of the same shape the reader
-      // uses for a deployed-but-stalled vault.
-      sendJson(res, 200, { journals: [], chainStrikeCount: null, windowFromBlock: null, windowToBlock: null });
+      sendJson(res, 200, {
+        journals: [],
+        chainStrikeCount: null,
+        windowFromBlock: null,
+        windowToBlock: null,
+        chainQuorum: null,
+      });
       return;
     }
     const limitRaw = url.searchParams.get("limit");
@@ -271,12 +283,10 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const scan = await journalReader.readJournals(loop.handlerAddress, limit);
     sendJson(res, 200, {
       journals: scan.strikes,
-      // Serialize BigInts as decimal strings — every other loop-server
-      // response type-checks the same way and the front-end already
-      // parses `updateCount` off other endpoints as a string.
       chainStrikeCount: scan.chainStrikeCount.toString(),
       windowFromBlock: scan.windowFromBlock.toString(),
       windowToBlock: scan.windowToBlock.toString(),
+      chainQuorum: scan.chainQuorum,
     });
     return;
   }
