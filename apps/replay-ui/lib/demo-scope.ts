@@ -30,6 +30,20 @@ export const HERO_SLUG = "verifiable-usde-loop";
 export const HERO_MARKET_ID = "morpho-blue-base:8453:USDe-USDC:0x54cf9be5";
 
 /**
+ * The fork-chain counterpart of `HERO_MARKET_ID` — same USDe/USDC market
+ * (the fork inherits every Base address at the pinned block), but with
+ * the fork's own chain segment in the slug (`base-fork:31337:...`) so
+ * `packages/loop-deploy/src/catalog.ts::USDE_USDC_MORPHO_BASE_FORK`
+ * matches on `chainKey === "evm:31337"` and `deployer.ts::createLoop`
+ * accepts the publish. Kept next to `HERO_MARKET_ID` so a future
+ * catalog edit that renames one is loud about needing to rename the
+ * other. See `apps/replay-ui/lib/vaults/publish-loop.ts::
+ * remapCandidateForChain` for the post-time rewrite that flips one
+ * to the other based on the connected wallet's chainId.
+ */
+export const HERO_MARKET_ID_FORK = "morpho-blue-base-fork:31337:USDe-USDC:0x54cf9be5";
+
+/**
  * THE FLOOR LANE'S MARKET (router lane plan R1): the Aave v3 Base USDC
  * reserve, the hand-authored treasury issuer row `TREASURY_CANDIDATES` already
  * ships. It is a MODELED row and belongs to no venue document, so it reaches
@@ -64,7 +78,14 @@ export interface DemoScope {
 
 export const DEMO_SCOPE: DemoScope = {
   liveMarketId: HERO_MARKET_ID,
-  liveMarketIds: [HERO_MARKET_ID, FLOOR_MARKET_ID],
+  // Admit BOTH the mainnet and the fork slug so the fork's client-side
+  // filters (`catalog-server::liveVenues`, review gating,
+  // `isLiveMarket`) don't strip a candidate the fork loop-server would
+  // gladly accept. The publish path still rewrites the mainnet slug to
+  // the fork slug on chain 31337 as belt-and-suspenders; this line
+  // covers the case where a fork fixture (present or future) already
+  // emits a fork-shape slug.
+  liveMarketIds: [HERO_MARKET_ID, HERO_MARKET_ID_FORK, FLOOR_MARKET_ID],
   liveVenues: ["morpho-blue-base", "treasury-ausdc-base"],
   liveModules: ["liquidity-source", "safety-buffer", "auto-compound", "redemption-route"],
   liveStrategies: ["loop", "treasury"],

@@ -10,7 +10,13 @@
  * from the proxy is expected during a demo pause or a fresh dev boot.
  */
 
-import type { LoopRecord, StrikeRecord } from "@priime-demo/loop-deploy";
+import type {
+  JournalWireEntry,
+  LoopRecord,
+  Observations,
+  StrikeRecord,
+} from "@priime-demo/loop-deploy";
+import type { Journal } from "@priime-demo/journal-schema";
 
 export interface LoopsListResponse {
   loops: LoopRecord[];
@@ -68,9 +74,45 @@ export function fetchLoop(id: string): Promise<LoopDetailResponse> {
   return getJson<LoopDetailResponse>(`/api/loops/${encodeURIComponent(id)}`);
 }
 
-export function fetchLoopJournals(id: string, limit = 20): Promise<LoopJournalsResponse> {
+/**
+ * Wire shape of `/api/loops/:id/journals`. Each entry nests the
+ * schema-valid Journal under `.journal`, with `observations` and `plan`
+ * as SIBLINGS. This mirrors the shape loop-server actually returns
+ * (`packages/loop-deploy/src/journal-source.ts::JournalWireEntry`) so
+ * every emitted `journal` object validates against
+ * `schema/journal.v1.schema.json` with `additionalProperties:false`.
+ */
+interface LoopJournalsWireResponse {
+  journals: JournalWireEntry[];
+  chainStrikeCount: string | null;
+  windowFromBlock: string | null;
+  windowToBlock: string | null;
+  chainQuorum: { threshold: number; total: number; source: "chain" | "fallback" } | null;
+}
+
+/**
+ * Flatten a wire entry into the intersection shape existing UI reads
+ * (`strike.attestation`, `strike.plan.status`, …). The wire STAYS
+ * schema-valid; only the in-memory client shape is flat.
+ */
+function flattenWire(entry: JournalWireEntry): StrikeRecord {
+  const journal: Journal = entry.journal;
+  const observations: Observations = entry.observations;
+  return { ...journal, observations, plan: entry.plan };
+}
+
+export async function fetchLoopJournals(id: string, limit = 20): Promise<LoopJournalsResponse> {
   const suffix = limit === 20 ? "" : `?limit=${String(limit)}`;
-  return getJson<LoopJournalsResponse>(`/api/loops/${encodeURIComponent(id)}/journals${suffix}`);
+  const wire = await getJson<LoopJournalsWireResponse>(
+    `/api/loops/${encodeURIComponent(id)}/journals${suffix}`,
+  );
+  return {
+    journals: wire.journals.map(flattenWire),
+    chainStrikeCount: wire.chainStrikeCount,
+    windowFromBlock: wire.windowFromBlock,
+    windowToBlock: wire.windowToBlock,
+    chainQuorum: wire.chainQuorum,
+  };
 }
 
 

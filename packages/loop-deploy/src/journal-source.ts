@@ -129,6 +129,29 @@ export interface AttestedPlan {
   timestampSecs: number;
 }
 
+/**
+ * Wire shape returned by `readJournals` and served verbatim by
+ * `loop-server` on `GET /loops/:id/journals`. The `journal` field is
+ * schema-compliant against `schema/journal.v1.schema.json` (v1 is
+ * FROZEN with `additionalProperties:false`; `docs/LIVE_DEMO.md` and
+ * `schema/README.md` both promise every emitted record validates
+ * against it). `observations` and `plan` are enrichments the reader
+ * decodes from the strike's calldata; they sit as SIBLING fields so
+ * they never contaminate the schema-valid journal object.
+ */
+export interface JournalWireEntry {
+  journal: Journal;
+  observations: Observations;
+  plan: AttestedPlan;
+}
+
+/**
+ * Flat client-facing view. Kept as a `Journal & { observations, plan }`
+ * intersection so existing UI code that reads `strike.attestation` /
+ * `strike.inputs_block` / `strike.plan.status` in one namespace stays
+ * unchanged. The wire boundary (`apps/replay-ui/lib/vaults/live-source.ts`)
+ * flattens `JournalWireEntry` into this shape on parse.
+ */
 export type StrikeRecord = Journal & {
   observations: Observations;
   plan: AttestedPlan;
@@ -142,7 +165,7 @@ export type StrikeRecord = Journal & {
  * used to render identically as `{ journals: [], attested: null }`.
  */
 export interface JournalScan {
-  strikes: StrikeRecord[];
+  strikes: JournalWireEntry[];
   /**
    * `updateCount` read straight off the vault. `strikes.length` never
    * exceeds `Number(chainStrikeCount)`; if it is strictly less, our
@@ -374,7 +397,7 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
       const picked = logs.slice(-Math.max(1, limit)).reverse();
       const unit = await readNavUnit(vault);
 
-      const strikes: StrikeRecord[] = [];
+      const strikes: JournalWireEntry[] = [];
       for (const log of picked) {
         const args = log.args as { eventId?: Hex; nav?: bigint; inputsBlock?: bigint };
         if (log.transactionHash === null || args.eventId === undefined || args.nav === undefined || args.inputsBlock === undefined) {
@@ -465,7 +488,7 @@ export function makeJournalReader(options: JournalReaderOptions): JournalReader 
           receiptLogs: receipt.logs,
         });
 
-        strikes.push({ ...buildJournal(input), observations, plan });
+        strikes.push({ journal: buildJournal(input), observations, plan });
       }
       return { strikes, chainStrikeCount, windowFromBlock: from, windowToBlock: head, chainQuorum };
     },

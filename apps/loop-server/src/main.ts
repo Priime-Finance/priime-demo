@@ -115,11 +115,11 @@ async function latestAttested(loop: LoopRecord): Promise<
     };
     const [latest] = scan.strikes;
     if (latest === undefined) return { nav: null, ...meta };
-    const { nav_final, tx_hash, timestamp } = latest.attestation;
+    const { nav_final, tx_hash, timestamp } = latest.journal.attestation;
     if (nav_final === null || tx_hash === null || timestamp === null) {
       return { nav: null, ...meta };
     }
-    return { nav: nav_final, inputsBlock: latest.inputs_block, txHash: tx_hash, timestamp, ...meta };
+    return { nav: nav_final, inputsBlock: latest.journal.inputs_block, txHash: tx_hash, timestamp, ...meta };
   } catch {
     return null;
   }

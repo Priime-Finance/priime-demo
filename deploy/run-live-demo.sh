@@ -168,8 +168,19 @@ stop_pidfile "$PIDFILE_UI" "replay-ui"
 
 pushd "$ROOT/apps/replay-ui" >/dev/null
 [ -d node_modules ] || pnpm install >/dev/null 2>&1
+# `PRIIME_RPC_URL` is read by `apps/replay-ui/app/api/rpc/[chainId]/route.ts`
+# to forward /api/rpc/<chainId> to the server-side RPC. Without an explicit
+# export here every deposit/redeem read and every tx from wagmi errors
+# with "PRIIME_RPC_URL not configured". Worse, if the shell environment
+# already carries a mainnet-flavour `PRIIME_RPC_URL` (a stale .env.local
+# from a previous session, or a developer's global export), a fork run
+# would silently forward every /api/rpc/31337 to Base mainnet — the
+# browser would then read state from mainnet while the wallet signs and
+# submits against the fork, and every wagmi write would either bounce or
+# spend real money. Pin the fork's own SERVER_RPC explicitly.
 LOOP_SERVER_URL="http://127.0.0.1:$LS_PORT" \
 LOOP_SERVER_TOKEN="$TOKEN" \
+PRIIME_RPC_URL="$SERVER_RPC" \
 NEXT_PUBLIC_RPC_URL="$PUBLIC_RPC" \
 NEXT_PUBLIC_CHAIN_ID="$CHAIN_ID" \
 NEXT_PUBLIC_SERVICE_MANAGER="$SM" \

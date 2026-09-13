@@ -232,7 +232,10 @@ port = $port
 host = "127.0.0.1"
 dev_endpoints_enabled = false
 signing_mnemonic = "${NODE_MNEMONICS[$i]}"
-mcp_chain_credential = "$K0"
+# `mcp_chain_credential` was written here but the runtime does not
+# define that field, so it was silently dropped on load. Writing the
+# owner key into every node's priime.toml under an unread key was pure
+# on-disk key sprawl. Same drop landed in `deploy/deploy.sh`.
 aggregator_evm_credential = "${K_AGGS[$i]}"
 
 # libp2p peer discovery over the loopback: node 1 is the bootstrap

@@ -138,7 +138,7 @@ export default function ProgressRail({
   if (quoting) status.push("quoting…");
   if (hasLane) {
     if (saveState === "saving") status.push("saving…");
-    else if (saveState === "saved") status.push("draft saved");
+    else if (saveState === "saved") status.push("saved locally");
   }
 
   return (

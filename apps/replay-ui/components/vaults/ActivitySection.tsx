@@ -351,7 +351,7 @@ export default function ActivitySection({
   withdrawals?: WithdrawalRecord[];
   shareValue?: number | null;
 }) {
-  const rows = useMemo<{ rows: LedgerRow[]; hasChain: boolean }>(() => {
+  const built = useMemo<{ vaultRows: LedgerRow[]; handlerRows: LedgerRow[]; hasChain: boolean }>(() => {
     const deposits: LedgerRow[] = positions.map((p) => ({
       action: "Deposit",
       detail: fmtUsdFull(p.amountUsd),
@@ -371,21 +371,28 @@ export default function ActivitySection({
       mine: true,
     }));
 
-    const onchain: LedgerRow[] = executionRows(
+    /* SPLIT LEDGERS on the hero page. `onchainExecutionsFor` returns real
+       Base transactions to the Priime service handler (`SERVICE_HANDLER`
+       in onchain-executions.ts, 0xC3dc…B60f), but the vault address the
+       Attestation panel shows (0x21844A…) is a synthetic fixture from
+       `schema/samples/`. Merging both into one table put "Verify" links
+       under rows a viewer would reasonably read as "this vault's
+       history", when the link actually opens an unrelated contract.
+       Two separate tables under distinct headings makes each row's
+       subject legible: the top table is what THIS record (positions +
+       modeled) reads; the bottom is a captured Priime service-handler
+       ledger the page shows as evidence about the mechanism, not about
+       this vault. */
+    const handlerRows: LedgerRow[] = executionRows(
       onchainExecutionsFor(vault.slug).map((x) => ({ ...x, chainId: EXECUTION_CHAIN_ID })),
     );
-    const hasChain = onchain.length > 0;
+    const hasChain = handlerRows.length > 0;
 
     const earning = vault.modeledApy > 0;
     const modeled: LedgerRow[] = modeledActivity(vault, nowMs, tvlUsd).filter((r) => {
       /* WHERE A REAL LEDGER EXISTS THE MODELED ROWS STAND DOWN (founder,
-         2026-09-07). `router` is the OTHER modeled kind and it stands down
-         too, but structurally rather than here: `modeledActivity` emits only
-         `auto | publish | deposit`, and every router row is built inside the
-         `if (!hasChain)` block below, so adding it to this test would be a
-         comparison TypeScript rejects and a branch nothing reaches. The
-         guard is the block, and `tests/vaults.test.ts` asserts the outcome
-         rather than the branch. */
+         2026-09-07). Applies to modeled `auto` rows on any page whose
+         handler ledger is populated; the split does not change that. */
       if (hasChain && r.kind === "auto") return false;
       if (statesNegativeMoney(r.detail)) return false;
       if (!earning && /compound/i.test(r.action)) return false;
@@ -421,25 +428,29 @@ export default function ActivitySection({
       }
     }
 
-    return { rows: [...deposits, ...exits, ...onchain, ...modeled, ...family].sort((a, b) => b.ms - a.ms), hasChain };
+    const vaultRows = [...deposits, ...exits, ...modeled, ...family].sort((a, b) => b.ms - a.ms);
+    return { vaultRows, handlerRows, hasChain };
   }, [vault, nowMs, tvlUsd, positions, withdrawals, shareValue]);
 
   return (
     <section id="activity" className="vxd-sec">
       <h2 className="vxd-sec-h">Activity</h2>
-      {/* HONEST-LABELING NOTE: on the hero-slug rows the tx hashes point
-          at the Priime service handler (`SERVICE_HANDLER` in
-          onchain-executions.ts). That's a real Base contract with real
-          strikes — but the vault address the Attestation panel shows is
-          a synthetic fixture, so a viewer who clicks Verify does NOT
-          land on this vault's own history. Say so once above the ledger
-          instead of leaving the mismatch as a surprise. */}
-      {rows.hasChain ? (
-        <p className="vxd-note vxd-note--muted" style={{ marginBottom: 12 }}>
-          Verify links open the service handler (0xC3dc…B60f) on Basescan. The vault address in the Attestation panel above is a sample fixture, so these transactions are real but independent of the vault named on this page.
-        </p>
+      <ActivityTable rows={built.vaultRows} nowMs={nowMs} />
+      {built.hasChain ? (
+        <div style={{ marginTop: 24 }}>
+          <h3 className="vxd-sec-h" style={{ fontSize: "0.95em" }}>
+            Priime service-handler ledger (captured Base transactions)
+          </h3>
+          <p className="vxd-note vxd-note--muted" style={{ marginBottom: 12 }}>
+            These rows are real transactions to the Priime service handler
+            (0xC3dc…B60f) — evidence that the mechanism runs on chain. They
+            are NOT this vault's own history: the vault address in the
+            Attestation panel above is a sample fixture, so a Verify click
+            opens the shared service handler, not this record.
+          </p>
+          <ActivityTable rows={built.handlerRows} nowMs={nowMs} />
+        </div>
       ) : null}
-      <ActivityTable rows={rows.rows} nowMs={nowMs} />
     </section>
   );
 }

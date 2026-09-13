@@ -44,6 +44,7 @@ export {
   type JournalReader,
   type JournalReaderOptions,
   type JournalScan,
+  type JournalWireEntry,
   type Observations,
   type StrikeRecord,
 } from "./journal-source.ts";
